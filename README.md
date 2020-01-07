@@ -16,3 +16,6 @@ https://www.lncrna.io/bchm-5631-lectures-info
 
 Class Git==your here
 
+NF-CORE Output documentation
+
+https://nf-co.re/chipseq/docs/output
