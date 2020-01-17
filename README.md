@@ -5,7 +5,7 @@ Class info resources:
 https://www.lncrna.io/teaching
 
 
-Class Sylabus: 
+Class Syllabus: 
 
 https://github.com/boulderrinnlab/CLASS_2020/wiki/Syllabus
 
