@@ -11,7 +11,7 @@
 #SBATCH --error=nextflow.err
 
 pwd; hostname; date
-echo "Nice -- you've requested $SLURM_CPUS_ON_NODE core."
+echo "Booyakasha, Big up Yaself -- you've requested $SLURM_CPUS_ON_NODE core."
 
 module load singularity/3.1.1
 
