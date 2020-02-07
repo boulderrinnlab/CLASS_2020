@@ -22,7 +22,6 @@ nextflow run nf-core/chipseq -r 1.1.0 \
 --gtf /Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf \
 --macs_gsize 2.7e9 \
 --blacklist hg38-blacklist.v2.bed \
---save_reference \
 --email john.rinn@colorado.edu \
 -resume \
 -c nextflow.config
