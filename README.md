@@ -22,6 +22,10 @@ https://nf-co.re/chipseq/docs/output
 
 
 
-
+lncRNAs????
 Michael B was here
+<<<<<<< HEAD
 Daniel A was here
+=======
+Thao
+>>>>>>> 5c83539577921d316a8cfef24ee8b34f38f53319
