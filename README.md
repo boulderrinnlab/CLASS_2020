@@ -2,7 +2,7 @@
 
 ## OUR GROUP SENTENCE
 
-Giraffes
+Sentence: Giraffes
 
 1. first word = by Kristen
 
