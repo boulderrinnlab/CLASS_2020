@@ -24,5 +24,7 @@ https://nf-co.re/chipseq/docs/output
 
 lncRNAs????
 Michael B was here
+Daniel A was here
 Thao
 Savannah was here 
+
