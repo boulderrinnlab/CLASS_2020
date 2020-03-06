@@ -8,7 +8,7 @@ Sentence: Giraffes roll downhill QUICKLY
 2. the word is word = by Soraya
 3. Shelby
 4. BEN
-
+5. Arpan
 Class info resources: 
 
 https://www.lncrna.io/teaching
