@@ -5,6 +5,7 @@
 Sentence: Giraffes
 
 1. first word = by Kristen
+2. the word is word = by Soraya
 
 
 Class info resources: 
@@ -26,4 +27,4 @@ Class Git==your here
 NF-CORE Output documentation
 
 https://nf-co.re/chipseq/docs/output
-mRNA
+
