@@ -24,3 +24,4 @@ https://nf-co.re/chipseq/docs/output
 
 
 Michael B was here
+Daniel A was here
