@@ -2,7 +2,7 @@
 
 ## OUR GROUP SENTENCE
 
-Sentence: Giraffes
+Sentence: Giraffes roll
 
 1. first word = by Kristen
 2. the word is word = by Soraya
