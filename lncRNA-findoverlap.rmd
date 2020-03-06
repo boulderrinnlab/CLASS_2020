@@ -6,7 +6,60 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+```{r}
+library(IRanges)
+library(GenomicRanges)
+library(rtracklayer)
+library(ggplot2)
+library(readr)
+```
 
 ```{r}
+get_grange <-function(filepath){
+  data = read.table(filepath)
+  gr <- GRanges(seqnames = data$V1,
+                    ranges = IRanges(start=data$V2,end=data$V3))
+  return(gr)
+}
+
+filter_grs <-function(gr1,gr2){
+  # take two grs, find the over lap
+  # re turn portions of the GRs that were in the overlap
+  ol <- GenomicRanges::findOverlaps(gr1,gr2)
+  grb <- gr1[unique(ol@from)]
+  # return only 1 because they should be the same from here on
+  return(grb)
+}
+get_common_peaks_in_TF <- function(files,tf){
+  main <- get_grange(files[1])
+  for(i in 2:length(files)){
+    main <- filter_grs(main,get_grange(files[[i]]))
+  }
+  
+  #make a data frame of the info
+  # get the names of the chromosomes / unmapped scaffolds
+  region_names <- as.character(main@seqnames@values)
+  # get the number of repeats of each of the afore found regions
+  region_lengths <- main@seqnames@lengths
+  # make a vector of region names repeated the correct number of times
+  regions <- c()
+  for(i in seq(length(region_lengths))){
+    regions <- c(regions,replicate(region_lengths[i],region_names[i]))
+  }
+  bed <- tibble('chromosome'=regions,
+                        'source'=replicate(length(regions),tf),
+                        'start'=main@ranges@start,
+                      'width'=main@ranges@width,
+                      'end'=(main@ranges@start + main@ranges@width))
+  #write this one to a bed file
+  write_tsv(bed,paste('/scratch/Users/mibr6115/',tf,'.bed',sep=''))
+  return(main)
+}
+files <- c("/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R1_peaks.broadPeak",
+  "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R2_peaks.broadPeak",
+  "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R3_peaks.broadPeak",
+  "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R4_peaks.broadPeak")
+b <- get_common_peaks_in_TF(files,'ZSCAN29')
 ```
+
 
