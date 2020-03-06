@@ -1,5 +1,12 @@
 # BCHM 5631: Statistical and Computational Analysis of the Human Genome
 
+## OUR GROUP SENTENCE
+
+Sentence: Giraffes
+
+1. first word = by Kristen
+
+
 Class info resources: 
 
 https://www.lncrna.io/teaching
