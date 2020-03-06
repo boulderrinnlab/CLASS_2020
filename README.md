@@ -25,3 +25,8 @@ https://nf-co.re/chipseq/docs/output
 ##Giulia added this
 ##Tom added this
 ##Kevin added this
+
+#Here is out plan of attack
+1) Import each .broakPeak file as GRanges object
+2) Getoverlap of all replicates per TF and write to newe bed file 
+3) write bed files to class directory
