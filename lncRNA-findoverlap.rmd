@@ -12,9 +12,11 @@ library(GenomicRanges)
 library(rtracklayer)
 library(ggplot2)
 library(readr)
+library(stringr)
 ```
 
 ```{r}
+# read in a file and make it a GRange object
 get_grange <-function(filepath){
   data = read.table(filepath)
   gr <- GRanges(seqnames = data$V1,
@@ -22,6 +24,7 @@ get_grange <-function(filepath){
   return(gr)
 }
 
+# take 2 GRange objects, find the common peaks, returns the common peaks as a GRanges object
 filter_grs <-function(gr1,gr2){
   # take two grs, find the over lap
   # re turn portions of the GRs that were in the overlap
@@ -30,6 +33,7 @@ filter_grs <-function(gr1,gr2){
   # return only 1 because they should be the same from here on
   return(grb)
 }
+# returns a GRanges object of the common peaks for the given files also writes the common peaks to a bed file
 get_common_peaks_in_TF <- function(files,tf){
   main <- get_grange(files[1])
   for(i in 2:length(files)){
@@ -52,14 +56,47 @@ get_common_peaks_in_TF <- function(files,tf){
                       'width'=main@ranges@width,
                       'end'=(main@ranges@start + main@ranges@width))
   #write this one to a bed file
-  write_tsv(bed,paste('/scratch/Users/mibr6115/',tf,'.bed',sep=''))
+  write_tsv(bed,paste('/scratch/Users/mibr6115/TFS',tf,'.bed',sep=''))
   return(main)
 }
-files <- c("/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R1_peaks.broadPeak",
-  "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R2_peaks.broadPeak",
-  "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R3_peaks.broadPeak",
-  "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/ZSCAN29_R4_peaks.broadPeak")
-b <- get_common_peaks_in_TF(files,'ZSCAN29')
 ```
+
+```{r}
+do_all_tfs <-function(){
+  path <- '/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/'
+  # get all files
+  files <- list.files(path)
+  # get just the broadpeaks ones
+  peakfiles <- c()
+  tfs <- c()
+  # loop over all files
+  for(i in seq(1,length(files))){
+    #check if it is a peak file
+    if(str_detect(files[[i]],'broadPeak')){
+      # add the peak files to the vector of peak files
+      peakfiles <- c(peakfiles,files[[i]])
+      # do some REXEG voodoo to get jus the TF name from the file names
+      tfs <- c(tfs,str_replace(str_extract(files[[i]],'\\w+_R'),'_R',''))
+    }
+  }
+  print(peakfiles)
+  tfs <- unique(tfs)
+  for( i in seq(1,length(tfs))){
+    # get the files relating to this one TF
+    tf_files <- c()
+    for( j in seq(1,length(peakfiles))){
+      if(str_detect(peakfiles[[j]],tfs[[i]])){
+        tf_files <- c(tf_files,paste(path,peakfiles[[j]],sep=''))
+      }
+    }
+    print('-----------------')
+    print(tf_files)
+    # find all peaks in common among replicates of this TF and write them to a bed file
+    get_common_peaks_in_TF(tf_files,tfs[[i]])
+  }
+}
+do_all_tfs()
+```
+
 
 
