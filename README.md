@@ -2,11 +2,11 @@
 
 ## OUR GROUP SENTENCE
 
-Sentence: Giraffes roll
+Sentence: Giraffes roll downhill
 
 1. first word = by Kristen
 2. the word is word = by Soraya
-
+3. Shelby
 
 Class info resources: 
 
