@@ -2,27 +2,51 @@
 title: "peak_clustering_TE"
 output: html_document
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(reticulate)
+use_python("/Users/deta9300/anaconda3/bin/python")
 ```
 
-## R Markdown
+##This program combines each broadPeak file into a single dataframe
+```{python}
+import pandas as pd
+import pyranges as pr
+import os
+import matplotlib.pyplot as pp
+import glob as glob
+import numpy as np
+import pybedtools 
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+#Read in list of TFs
+os.chdir('/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/consensus/')
+names = os.listdir()
+os.chdir('/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/')
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+#Read in each TF
+dfs = []
+for name in names:
+  file_names = list(np.sort(glob.glob(name+'*'+'.broadPeak')))
+  print("TF:", name)
+  print("processing:", file_names)
+  if len(file_names) == 0:
+    pass
+  else:
+    #read in genomic ranges file
+    files = []
+    for file_name in file_names:
+      file = pr.read_bed(file_name)
+      file = file.df
+      files.append(file)
+    df = pd.concat(files, ignore_index=True)
+    dfs.append(df)
+#create one giant DF
+print("len combined DF:", len(dfs))
+DF = pd.concat(dfs)
+print(DF.shape)
+os.chdir('/scratch/Users/deta9300/Rinn_class_repository/CLASS_2020')
+DF=DF.head(n=200)
+DF.to_csv('TF_BP.csv')
 
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
