@@ -53,8 +53,8 @@ write.table(df, file=paste0(TF, ".bed"), quote=F, sep="\t", row.names=F, col.nam
 
 ```{r}
 
-for(tf in TF_list[1:4]){
-  print(tf)
+for(tf in TF_list){
+  #print(tf)
   num_replicates <- 0
   replicates_for_tf <- c()
   
@@ -137,7 +137,7 @@ for(tf in TF_list[1:4]){
       n <- (n - 1)
       
     }
-    write_to_bed(intersection_3, tf)
+    write_to_bed(intersection_3_gr, tf)
   } else{
     write_to_bed(overlap_intersection_gr, tf)
   }
