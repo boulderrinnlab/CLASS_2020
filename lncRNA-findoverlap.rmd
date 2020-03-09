@@ -6,6 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 ```{r}
 library(IRanges)
 library(GenomicRanges)
@@ -13,6 +14,7 @@ library(rtracklayer)
 library(ggplot2)
 library(readr)
 library(stringr)
+library(tibble)
 ```
 
 ```{r}
@@ -35,6 +37,7 @@ filter_grs <-function(gr1,gr2){
 }
 # returns a GRanges object of the common peaks for the given files also writes the common peaks to a bed file
 get_common_peaks_in_TF <- function(files,tf){
+  print(paste('TF:',tf))
   main <- get_grange(files[1])
   for(i in 2:length(files)){
     main <- filter_grs(main,get_grange(files[[i]]))
@@ -47,8 +50,16 @@ get_common_peaks_in_TF <- function(files,tf){
   region_lengths <- main@seqnames@lengths
   # make a vector of region names repeated the correct number of times
   regions <- c()
-  for(i in seq(length(region_lengths))){
-    regions <- c(regions,replicate(region_lengths[i],region_names[i]))
+  print(paste('replicate:',length(region_lengths),length(region_names)))
+  if(length(region_lengths) > 0 & length(region_names) > 0){
+    for(i in seq(length(region_lengths))){
+      regions <- c(regions,replicate(region_lengths[i],region_names[i]))
+    }
+  }else{
+    print(paste('skipping:',tf))
+    # after I ran this it skipped two TFs
+    # MCM2 and TRIM25
+    return(NULL)
   }
   bed <- tibble('chromosome'=regions,
                         'source'=replicate(length(regions),tf),
@@ -56,7 +67,7 @@ get_common_peaks_in_TF <- function(files,tf){
                       'width'=main@ranges@width,
                       'end'=(main@ranges@start + main@ranges@width))
   #write this one to a bed file
-  write_tsv(bed,paste('/scratch/Users/mibr6115/TFS',tf,'.bed',sep=''))
+  write_tsv(bed,paste('/scratch/Users/mibr6115/TFS/',tf,'.bed',sep=''))
   return(main)
 }
 ```
