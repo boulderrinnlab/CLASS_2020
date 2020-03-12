@@ -1,0 +1,135 @@
+---
+title: "plot_chipseq_peaks"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+library(rtracklayer)
+library(ChIPseeker)
+library(GenomicFeatures)
+library(tidyverse)
+library(boot)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+getTagCount <- function(tagMatrix, xlim, conf) {
+    ss <- colSums(tagMatrix)
+    ss <- ss/sum(ss)
+    ## plot(1:length(ss), ss, type="l", xlab=xlab, ylab=ylab)
+    pos <- value <- NULL
+    dd <- data.frame(pos=c(xlim[1]:xlim[2]), value=ss)
+    if (!(missingArg(conf) || is.na(conf))){
+        tagCiMx <- getTagCiMatrix(tagMatrix, conf = conf)
+        dd$Lower <- tagCiMx["Lower", ]
+        dd$Upper <- tagCiMx["Upper", ]
+    }
+    return(dd)
+}
+
+getTagCiMatrix <- function(tagMatrix, conf = 0.95, resample=500){
+    RESAMPLE_TIME <- resample
+    trackLen <- ncol(tagMatrix)
+    if (Sys.info()[1] == "Windows") {
+        tagMxBoot <- boot(data = tagMatrix, statistic = getSgn, R = RESAMPLE_TIME)
+    } else {
+        tagMxBoot <- boot(data = tagMatrix, statistic = getSgn, R = RESAMPLE_TIME,
+                          parallel = "multicore", ncpus = 6)
+    }
+    cat(">> Running bootstrapping for tag matrix...\t\t",
+        format(Sys.time(), "%Y-%m-%d %X"), "\n")
+    tagMxBootCi <- sapply(seq_len(trackLen), function(i) {
+                        bootCiToken <- boot.ci(tagMxBoot, type = "perc", index = i)
+                        ## parse boot.ci results
+                        return(parseBootCiPerc(bootCiToken))
+                        }
+                    )
+    row.names(tagMxBootCi) <- c("Lower", "Upper")
+    return(tagMxBootCi)
+}
+
+getSgn <- function(data, idx){
+    d <- data[idx, ]
+    ss <- colSums(d)
+    ss <- ss / sum(ss)
+    return(ss)
+}
+
+parseBootCiPerc <- function(bootCiPerc){
+    bootCiPerc <- bootCiPerc$percent
+    tmp <- length(bootCiPerc)
+    ciLo <- bootCiPerc[tmp - 1]
+    ciUp <- bootCiPerc[tmp]
+    return(c(ciLo, ciUp))
+}
+
+```
+
+## Load BED to GenomeRanges
+```{r}
+# make a TxDb object (a container for storing transcript annotations) from the .gtf annotation file
+txdb_gencode_v32 <- makeTxDbFromGFF(file = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+## Import genomic features from the file as a GRanges object 
+## Prepare the 'metadata' data frame
+## Make the TxDb object
+## Warning in .get_cds_IDX(type, phase): The "phase" metadata column contains non-NA values for features of type
+##   stop_codon. This information was ignored.
+
+promoters <- getPromoters(TxDb=txdb_gencode_v32, upstream=3000, downstream=3000, by = "gene")
+
+plot_profile <- function(tag_count, tf_name) {
+  p <- ggplot(tag_count, aes(pos))
+  p <- p + geom_ribbon(aes(ymin = Lower, ymax = Upper),
+                       linetype = 0, alpha = 0.2)
+  p <- p + geom_line(aes(y = value))
+  
+  xlim <-c(-3000, 3000)
+  origin_label = "TSS"
+  #### Testing below       
+  p <- p + geom_vline(xintercept=0,
+                      linetype="longdash")
+  p <- p + scale_x_continuous(breaks=c(xlim[1], floor(xlim[1]/2),
+                                       0,
+                                       floor(xlim[2]/2), xlim[2]),
+                              labels=c(xlim[1], floor(xlim[1]/2),
+                                       origin_label, 
+                                       floor(xlim[2]/2), xlim[2]))
+  p <- p+xlab("Genomic Region (5'->3')")+ylab("Peak Count Frequency")
+  p <- p + theme_bw() + theme(legend.title=element_blank())
+  p <- p + theme(legend.position="none")
+  p <- p + ggtitle(tf_name)
+  return(p)
+}
+
+```
+
+## Plotting the Chip Peaks in the “Promoter ranges”
+
+```{r}
+bedpath <-"/scratch/Users/sosh9992/CLASS_2020/ucsc_peak_tracks/"
+fl <- list.files(bedpath)
+for(i in fl){
+  tf_name <- unlist(strsplit(i, "/"))
+  print(tf_name)
+  tag_count_df <- data.frame("pos" = integer(0),
+                           "value" = numeric(0),
+                           "Lower" = numeric(0),
+                           "Upper" = numeric(0),
+                           "tf_name" = character(0))
+  
+  peaks <- rtracklayer::import(paste0(bedpath, i))
+  tag_matrix <- getTagMatrix(peaks, windows=promoters)
+  tag_count <- getTagCount(tag_matrix, xlim=c(-3000, 3000), conf = 0.95)
+    
+    
+  g <- plot_profile(tag_count = tag_count, tf_name = tf_name)
+    
+  tag_count$tf_name <- tf_name
+  tag_count_df <- bind_rows(tag_count_df, tag_count)
+  show(g)
+
+}
+```
+
