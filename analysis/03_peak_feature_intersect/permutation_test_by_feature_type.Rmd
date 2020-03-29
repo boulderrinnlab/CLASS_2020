@@ -1,0 +1,95 @@
+---
+title: "Permutation test by feature type"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
+library(tidyverse)
+library(GenomicRanges)
+library(rslurm)
+library(regioneR)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+```{r import}
+
+peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
+
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+lncrna_promoters <- get_promoter_regions(gencode_gr, biotype = "lncRNA")
+mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
+
+
+rmsk <- import_repeatmasker()
+rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
+names(rmsk_family) <- paste(names(rmsk_family), "family", sep = "_")
+rmsk_class <- subset_rmsk(rmsk, rep_level = "class")
+names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
+
+
+region_list <- c("lncrna_promoters" = list(lncrna_promoters), 
+                 "mrna_promoters" = list(mrna_promoters), 
+                 rmsk_family, rmsk_class)
+
+
+
+canonical_chr <- as.character(unique(seqnames(region_list[[1]])))
+# sanitize region list
+for(i in 1:length(region_list)) {
+  region_list[[i]] <- region_list[[i]][which(seqnames(region_list[[i]]) %in% canonical_chr)]
+}
+
+pars <- expand.grid(1:length(region_list), 1:length(peak_list)) %>% 
+  as.data.frame()
+names(pars) <- c("region_index", "peak_index")
+```
+
+
+
+```{r}
+hg38 <- getGenome("hg38")
+perm_test <- function(region_index, peak_index, npermutations = 1000) {
+  
+  set.seed(12044593)
+  region <- names(region_list)[[region_index]]
+  tf <- names(peak_list)[[peak_index]]
+  
+  cat("Running overlap test for ", region, "  & ", tf, "\n\n")
+  a_regions <- region_list[[region_index]]
+  b_regions <- peak_list[[peak_index]]
+  
+  suppressWarnings(pt <- overlapPermTest(A = a_regions, 
+                        B = b_regions, 
+                        ntimes = npermutations, 
+                        non.overlapping = FALSE, 
+                        verbose = FALSE,
+                        genome = hg38,
+                        alternative =  "auto", 
+                        mc.cores = 1))
+
+  ptdf <- data.frame("region" = region,
+                     "tf" = tf,
+                     "pval" = pt$numOverlaps$pval,
+                     "zscore" = pt$numOverlaps$zscore,
+                     "nperm" = pt$numOverlaps$ntimes,
+                     "alternative" = pt$numOverlaps$alternative,
+                     "observed" = pt$numOverlaps$observed,
+                     "permuted" = paste(pt$numOverlaps$permuted, collapse = ";"))
+  return(ptdf)
+}
+```
+
+```{r}
+sjob <- slurm_apply(perm_test, pars, jobname = 'perm_overlaps',
+                    add_objects = c("region_list", "peak_list", "hg38", "overlapPermTest"),
+                    nodes = 22, cpus_per_node = 30, 
+                    slurm_options = list(time = '30:00:00'),
+                    submit = FALSE)
+```
+
+
