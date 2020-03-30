@@ -1,0 +1,162 @@
+---
+title: "TF Binding vs. RNA-seq expression"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(grDevices)
+library(ggpubr)
+library(GenomicRanges)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+
+The first step is to get a matrix of features by TFs.
+
+```{r}
+peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+promoters <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
+
+gencode_df <- gencode_gr %>% as.data.frame() %>%
+  filter(type == "gene") %>%
+  dplyr::select(gene_id, gene_name, gene_type, seqnames, start, end, strand)
+
+promoter_peak_count <- count_peaks_per_feature(promoters, peak_list)
+
+# Get expression data.
+rnaseq_exp <- read_csv("results/k562_tpm.csv")
+```
+
+
+```{r}
+# Make this binary -- a co-occurence matrix.
+promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0), 
+                           nrow = dim(promoter_peak_count)[1],
+                           ncol = dim(promoter_peak_count)[2])
+rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
+colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
+```
+
+```{r}
+# Make a data frame of binding events per promoter.
+peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
+                                "number_of_tfs" = colSums(promoter_peak_occurence))
+peak_occurence_df <- merge(peak_occurence_df, rnaseq_exp)
+peak_occurence_df <- merge(peak_occurence_df, gencode_df)
+```
+
+
+```{r}
+g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g + geom_point(alpha = 0.2) + 
+  geom_smooth() + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0)) + 
+  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") + 
+  ggtitle("Promoter binding events vs. expression") + 
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/k562_promoter_binding_vs_expression.png")
+ggsave("figures/k562_promoter_binding_vs_expression.pdf")
+
+
+
+# lncRNA density plot
+g <- ggplot(peak_occurence_df %>% filter(gene_type == "lncRNA"), aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g + stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE, n = 500) + 
+  scale_fill_gradientn(colors = colorRampPalette(colors = c("#ffffff", "#a8404c"))(100)) + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0)) + 
+  ggtitle("lncRNA binding vs. expression") + 
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/lncRNA_binding_vs_expression_density.png")
+ggsave("figures/lncRNA_binding_vs_expression_density.pdf")
+
+
+# mRNA density plot
+g <- ggplot(peak_occurence_df %>% filter(gene_type == "protein_coding"), aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g + stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE, n = 500) + 
+  scale_fill_gradientn(colors = colorRampPalette(colors = c("#ffffff", "#a8404c"))(100)) + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0)) + 
+  ggtitle("mRNA binding vs. expression") + 
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/mRNA_binding_vs_expression_density.png")
+ggsave("figures/mRNA_binding_vs_expression_density.pdf")
+
+g <- ggplot(peak_occurence_df, aes(y = log2(tpm), x = number_of_tfs))
+g + geom_hex(bins =60) + facet_grid(~gene_type) + 
+  scale_fill_gradientn(colors = colorRampPalette(colors = c("#ffffff", "#a8404c"))(100)) + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0))
+```
+
+
+```{r}
+## let's try a binned approach
+quantile(peak_occurence_df$tpm)
+peak_occurence_df$expression <- cut(peak_occurence_df$tpm, breaks = c(-1, 0.001, 0.137, 3, 5000),
+                                    labels = c("off", "low", "med", "high"))
+table(peak_occurence_df$expression)
+
+g <- ggplot(peak_occurence_df, aes(x = expression, y = number_of_tfs, color = gene_type))
+g + geom_boxplot() + stat_compare_means() + 
+  scale_color_manual(values = c("#a8404c", "#424242"))  
+```
+
+
+```{r}
+off_genes <- peak_occurence_df %>% filter(tpm < 0.001)
+g <- ggplot(off_genes, aes(x = number_of_tfs, fill = gene_type))
+g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c")) 
+```
+
+```{r}
+ghosts <- off_genes %>% filter(number_of_tfs > 7)
+
+
+ov_proms <- read_csv("../08_overlapping_promoters/results/overlapped_promoter_regions.csv")
+ov_proms_genes <- ov_proms %>% dplyr::select(gene_id, gene_name, num_overlaps, gene_type, gene_strands)
+ov_proms_genes$overlapping_gene_ids <- ov_proms_genes$gene_id
+
+ov_proms_genes <- ov_proms_genes %>% separate_rows(gene_id, sep = ";")
+names(ov_proms_genes) <- c("gene_id", "overlapping_gene_names", "num_overlaps", "overlapping_gene_types", "overlapping_gene_strands", "overlapping_gene_ids")
+
+ov_proms_genes <- ov_proms_genes[!duplicated(ov_proms_genes$gene_id),]
+
+
+ghosts_w_overlaps <- merge(ghosts, ov_proms_genes, all.x = T)
+ghosts_w_overlaps[is.na(ghosts_w_overlaps$num_overlaps), "num_overlaps"] <- 0
+
+
+
+
+
+table(ghosts_w_overlaps$num_overlaps)
+length(which(ghosts_w_overlaps$num_overlaps > 0))
+length(which(ghosts_w_overlaps$num_overlaps > 0)) / nrow(ghosts_w_overlaps)
+
+ghost_promoters <- promoters[which(promoters$gene_id %in% ghosts_w_overlaps$gene_id)]
+ghost_promoters$name <- paste(ghost_promoters$gene_id, "promoter_tss6kb", sep = "_")
+ghost_promoters$score <- 0
+rtracklayer::export(ghost_promoters, "results/k562_ghost_promoters.bed")
+ghost_promoters_df <- ghost_promoters %>% 
+  as.data.frame() %>%
+  dplyr::select(gene_id, seqnames, start, end)
+names(ghost_promoters_df) <- c("gene_id", "promoter_seqnames", "promoter_start", "promoter_end")
+
+
+ghosts_w_overlaps <- merge(ghosts_w_overlaps, ghost_promoters_df)
+write_csv(ghosts_w_overlaps, "results/k562_ghost_promoters_info.csv")
+```
+
+
