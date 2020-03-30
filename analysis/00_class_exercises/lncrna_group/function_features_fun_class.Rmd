@@ -12,6 +12,8 @@ library(tidyverse)
 library(GenomicRanges)
 ```
 
+# Example work
+
 #### Goal: to build functions to import_peaks, intersect them with your favorite genomic feature and turn that into a co-occurance matrix for numerous downstream analyses.
 Wednesday present a cool lncRNA and mRNA promoter and any other intersting results you can find in the feature count matrix. 
 In otherwords we are bringing it all back together with functions we will use often. 
