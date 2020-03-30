@@ -1,0 +1,125 @@
+---
+title: "peak_clustering_TE"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(reticulate)
+use_python("/Users/deta9300/anaconda3/bin/python")
+```
+
+##This program combines each broadPeak file into a single dataframe
+```{python}
+import pandas as pd
+import pyranges as pr
+import os
+import matplotlib.pyplot as pp
+import glob as glob
+import numpy as np
+import pybedtools 
+
+#Read in list of TFs
+os.chdir('/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/consensus/')
+names = os.listdir()
+os.chdir('/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/')
+
+#Read in each TF
+dfs = []
+TF_names = []
+number_of_replicates = []
+for name in names:
+  file_names = list(np.sort(glob.glob(name+'*'+'.broadPeak')))
+  print("TF:", name, "reps:", len(file_names))
+  print("processing:", file_names)
+  TF_name = name
+  TF_names.append(TF_name)
+  number = len(file_names)
+  number_of_replicates.append(number)
+  if len(file_names) == 0:
+    pass
+  else:
+    #read in genomic ranges file
+    files = []
+    for file_name in file_names:
+      file = pr.read_bed(file_name)
+      file = file.df
+      files.append(file)
+    df = pd.concat(files, ignore_index=True)
+    dfs.append(df)
+#create one giant DF
+print("len combined DF:", len(dfs))
+DF = pd.concat(dfs)
+print(DF.shape)
+os.chdir('/scratch/Users/deta9300/Rinn_class_repository/CLASS_2020')
+DF2=DF.head(n=200)
+DF2.to_csv('TF_BP.csv')
+
+#Next is to take each DF from the list and compare overlaps
+for name in TF_names:
+  df = DF.loc[(DF['Name'] == name+'_R*')]
+  print(df.head())
+  break
+```
+## This script takes each TF from the data frame and aquires overlaps
+```{python}
+import pandas as pd
+import pyranges as pr
+import os
+import matplotlib.pyplot as pp
+import glob as glob
+import numpy as np
+import pybedtools 
+
+#Read in list of TFs
+os.chdir('/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/consensus/')
+names = os.listdir()
+os.chdir('/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/')
+
+#Read in each TF
+dfs = []
+TF_names = []
+number_of_replicates = []
+for name in names:
+  file_names = list(np.sort(glob.glob(name+'*'+'.broadPeak')))
+  print("TF:", name, "reps:", len(file_names))
+  print("processing:", file_names)
+  TF_name = name
+  TF_names.append(TF_name)
+  number = len(file_names)
+  number_of_replicates.append(number)
+  if number == 0:
+    pass
+  else:
+    #read in genomic ranges file
+    replicates = []
+    for file_name in file_names:
+      replicate = pr.read_bed(file_name)
+      replicates.append(replicate)
+    #find convergent overlaps
+    rep_len = len(replicates)
+    if rep_len == 2:
+      sub0 = replicates[0].intersect(replicates[1])
+      sub0 = sub0.df
+      dfs.append(sub0)
+    elif rep_len == 3:
+      sub0 = replicates[0].intersect(replicates[1])
+      sub1 = sub0.intersect(replicates[2])
+      sub1 = sub1.df
+      dfs.append(sub1)
+    elif rep_len == 4:
+      sub0 = replicates[0].intersect(replicates[1])
+      sub1 = sub0.intersect(replicates[2])
+      sub2 = sub1.intersect(replicates[3])
+      sub2 = sub2.df
+      dfs.append(sub2)
+    else:
+      pass    
+
+#create one giant DF
+print("len combined DF:", len(dfs))
+DF = pd.concat(dfs)
+os.chdir('/scratch/Users/deta9300/Rinn_class_repository/CLASS_2020')
+DF.to_csv('TF_overlaps.csv')
+
+```
+

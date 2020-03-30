@@ -1,0 +1,148 @@
+---
+title: "true_peaks"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(IRanges)
+library(GenomicRanges)
+library(rtracklayer)
+library(tidyverse)
+```
+
+makes list of all broadPeaks files and finds names of all unique TFs
+
+```{r}
+class_path <- "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/"
+base_path <- "/Shares/rinn_class/data/k562_chip/"
+
+#make list of all broadpeak files
+
+broadPeaks <- list.files(path = class_path, pattern = "*.broadPeak", full.names = T)
+#broadPeaks
+
+# read in TF names
+
+design <- read.csv(file = paste0(base_path, "design.csv")) #so important to read as .csv NOT .table
+design_df <- data.frame("sample_name" = design$group,
+                        "replicate" = design$replicate)
+TF_list <- unique(design_df$sample_name)
+TF_list <- TF_list[-c(33:106, 130, 178)]
+TF_list <- as.character(TF_list)
+
+```
+
+
+## write to bed
+```{r}
+write_to_bed <- function(gr, TF){
+  df <- data.frame(seqnames=seqnames(gr),
+  starts=start(gr)-1,
+  ends=end(gr),
+  names=c(rep(".", length(gr))),
+  scores=c(rep(".", length(gr))),
+  strands=strand(gr))
+write.table(df, file=paste0(TF, ".bed"), quote=F, sep="\t", row.names=F, col.names=F)
+}
+```
+## find true peaks
+1. iterate though each TF
+2. for each TF, look at the list of files and group all the replicates together (replicates for tf)
+3. for eac replicates_for_tf, import the GRanges object and add it to the list <ls_ranges>
+
+```{r}
+
+for(tf in TF_list){
+  #print(tf)
+  num_replicates <- 0
+  replicates_for_tf <- c()
+  
+  for(i in broadPeaks){
+    # loc <- grepl(TF, i)
+    # print(loc)
+    if(grepl(tf, i)==TRUE){
+      num_replicates <- num_replicates + 1
+      replicates_for_tf <- c(replicates_for_tf, i)
+      #print(replicates_for_tf)
+    }
+  }
+
+  # makes list with the GRanges objects for each replicate
+  ls_ranges <- c()
+    for(f in 1:length(replicates_for_tf)){
+    ## 1. call function to make a broadpeaks file into a GRanges Object
+    #print(broadPeaks[f])
+    
+    new_range <- rtracklayer::import(as.character(broadPeaks[f]))
+    ls_ranges <- c(ls_ranges, new_range)
+    ls_ranges_gr <- GRangesList(ls_ranges)
+    }
+  
+  # find overlaps between all the ranges in the list
+  n <- length(ls_ranges)
+  #print(n)
+  j <- 1
+  overlap <- c()
+ 
+  # find overlaps of # replicates/2 
+  while(n > j){
+    r1 <- unlist(ls_ranges_gr[n])
+    r2 <- unlist(ls_ranges_gr[j])
+    fo <- GenomicRanges::findOverlaps(r1, r2)
+    fo_gr <- r1[unique(fo@from)]
+
+    overlap <- c(overlap, fo_gr)
+    overlap_gr <- GRangesList(overlap)
+    
+    #increase counter
+    j <- (j + 1)
+    n <- (n - 1)
+    
+  }
+  
+  #find overlap of overlaps
+  if(length(overlap) > 1){
+  n <- length(overlap)
+  j <- 1
+  overlap_intersection <- c()
+    while(n > j){
+      ov1 <- unlist(overlap_gr[n])
+      ov2 <- unlist(overlap_gr[j])
+      fo2 <- GenomicRanges::findOverlaps(ov1, ov2)
+      fo2_gr <- ov1[unique(fo2@from)]
+      overlap_intersection <- c(overlap_intersection, fo2_gr)
+      overlap_intersection_gr <- GRangesList(overlap_intersection)
+      j <- (j + 1)
+      n <- (n - 1)
+    }
+  } else{
+    write_to_bed(overlap_gr, tf)
+  }
+  
+  # overlaps^3
+  if(length(overlap_intersection) > 1){
+    n <- length(overlap_intersection)
+    j <- 1
+    
+    intersection_3 <- c()
+    while(n > j){
+      int1 <- unlist(overlap_intersection_gr[n])
+      int2 <- unlist(overlap_intersection_gr[j])
+      fo3 <- GenomicRanges::findOverlaps(int1, int2)
+      fo3_gr <- int1[unique(fo3@from)]
+      intersection_3 <- c(intersection_3, fo3_gr)
+      intersection_3_gr <- GRangesList(intersection_3)
+      j <- (j + 1)
+      n <- (n - 1)
+      
+    }
+    write_to_bed(intersection_3_gr, tf)
+  } else{
+    write_to_bed(overlap_intersection_gr, tf)
+  }
+}
+
+
+```
+
