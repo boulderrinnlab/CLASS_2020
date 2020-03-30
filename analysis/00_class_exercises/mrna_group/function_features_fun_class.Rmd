@@ -65,12 +65,15 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
   # Here we want to return the output of the function
   # What do you think we want to return here? It would be written as return( varable_name)
   # return(?)
+  return(peak_list)
 }
 
 
 # Now that you've loaded the function, you still need to call the function.
 # Do that here and assign the output to a variable.
 # Q: Do you need an argument for this function? HINT: What is the default?
+peaks_list <- import_peaks()
+peaks_list
 
 
 
