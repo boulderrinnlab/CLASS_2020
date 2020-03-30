@@ -1,3 +1,5 @@
+# TODO: fill this in with what we've done.
+
 import_repeatmasker <- function(rmsk_file = "/Shares/rinn_class/data/k562_chip/util/rmsk.txt") {
   
   rmsk <- read.table(file = rmsk_file)
