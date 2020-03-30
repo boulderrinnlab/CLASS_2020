@@ -72,7 +72,7 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
 # Do that here and assign the output to a variable.
 # Q: Do you need an argument for this function? HINT: What is the default?
 
-peak_list_variable <- import_peaks()
+peak_list <- import_peaks()
 #I dont think we need an arguement because the consensus file path is the arguement and is part of the file path
 
 
@@ -106,6 +106,10 @@ First let's see the core of the function
 
 # Setting the function 
 # Add in your features
+
+gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+features <- gtf[which(gtf$transcript_type == "lncRNA")]
+
 get_overlapping_peaks <- function(features, peak_list){
 
   overlaps_list <- c()
@@ -119,7 +123,7 @@ get_overlapping_peaks <- function(features, peak_list){
   return(overlaps_list)
 } 
 
-
+overlaps <- get_overlapping_peaks(features, peak_list)
 
 ```
 
@@ -160,17 +164,18 @@ get_overlapping_peaks <- function(features, peak_list){
 #'To add downstream sequence to feature subset
 
 # First we are setting the "get_promoter_regions" function, but one param is up and downstream what should we use here?
-get_promoter_regions <- function(gencode_gr, biotype, upstream = ?, downstream = ?) {
+get_promoter_regions <- function(gtf, biotype, upstream = 2000, downstream = 2000) {
   
   #What would we want the ? to be?  Hint what is in the genocode GRanges so we could find overlaps with mRNA or lncRNA promoters
-  genes <- gencode_gr[gencode_gr$type == "?"]
-  genes <- genes[which(genes$gene_type == ?)]
+  genes <- gtf[gtf$type == "gene"]
+  genes <- genes[which(genes$gene_type == "protein_coding")]
   # What do we want here where the question mark is ? What will it include ?
-  proms <- GenomicRanges::promoters(genes, upstream = ?, downstream = ?)
+  proms <- GenomicRanges::promoters(genes, upstream = 2000, downstream = 2000)
 
   return(proms)
 }
 
+promoters <- get_promoter_regions(gtf)
 ```
 
 Excellent we now have an intersection of all consensus peaks with mRNA and lncRNA promoters and a function that can be used for any subset of "features" in gencode GRanges.
@@ -204,6 +209,7 @@ count_peaks_per_feature <- function(features, peak_list) {
   return(peak_count)
 }
 
+peak_count <- count_peaks_per_feature(features, peak_list)
 ```
 
 
