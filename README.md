@@ -1,5 +1,16 @@
 # BCHM 5631: Statistical and Computational Analysis of the Human Genome
 
+## OUR GROUP SENTENCE
+
+Sentence: Giraffes roll downhill QUICKLY
+
+1. first word = by Kristen
+2. the word is word = by Soraya
+3. Shelby
+4. BEN
+5. Arpan
+
+
 Class info resources: 
 
 https://www.lncrna.io/teaching
@@ -20,13 +31,4 @@ NF-CORE Output documentation
 
 https://nf-co.re/chipseq/docs/output
 
-##Devin added this
-##Alison added this maybe
-##Giulia added this
-##Tom added this
-##Kevin added this
 
-#Here is out plan of attack
-1) Import each .broakPeak file as GRanges object
-2) Getoverlap of all replicates per TF and write to newe bed file 
-3) write bed files to class directory
