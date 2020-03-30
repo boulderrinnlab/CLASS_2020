@@ -64,7 +64,7 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
   }
   # Here we want to return the output of the function
   # What do you think we want to return here? It would be written as return( varable_name)
-  # return(?)
+  return(peak_list)
 }
 
 
@@ -72,6 +72,8 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
 # Do that here and assign the output to a variable.
 # Q: Do you need an argument for this function? HINT: What is the default?
 
+peak_list_variable <- import_peaks()
+#I dont think we need an arguement because the consensus file path is the arguement and is part of the file path
 
 
 # Now we have return a list of all the peaks for each DNA binding protien which is usally our starting point 
