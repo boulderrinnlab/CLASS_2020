@@ -1,3 +1,5 @@
+# We will use this to practice debugging.
+
 count_peaks_per_feature_r <- function(features, peak_list) {
   
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
