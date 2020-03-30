@@ -64,17 +64,19 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
   }
   # Here we want to return the output of the function
   # What do you think we want to return here? It would be written as return( varable_name)
-  # return(?)
+  return(peak_list)
 }
 
 
 # Now that you've loaded the function, you still need to call the function.
 # Do that here and assign the output to a variable.
+peak_list <- import_peaks()
+
 # Q: Do you need an argument for this function? HINT: What is the default?
 
 
 
-# Now we have return a list of all the peaks for each DNA binding protien which is usally our starting point 
+# Now we have return a list of all the peaks for each DNA binding protein which is usally our starting point 
 # Run this and see the contents of the returned GRanges
 # This will be very useful in doing "find overlaps" with genomic features such as promoters described below
 
@@ -101,21 +103,6 @@ First let's see the core of the function
 # Try running this function as a group to intersect your group genomic feature for class purpose -- let's all focus on "promoters" in Gencode 
 ## Hint you will need to make a "features" file that is compatable for findOverlaps with the output above. Double hint: GencodeV32.gtf
 # ? What would "features" look like for promoters and what was the code you used to derive it
-
-# Setting the function 
-# Add in your features
-get_overlapping_peaks <- function(features, peak_list){
-
-  overlaps_list <- c()
-  for(j in 1:length(peak_list)) {
-    ov <- findOverlaps(peak_list[[j]], features)
-    # Q: What is unique doing here? What happens when you run with and with out unique?
-    overlapping_peaks <- peak_list[[j]][unique(ov@from)]
-    overlaps_list <- c(overlaps_list, overlapping_peaks)
-    names(overlaps_list)[length(overlaps_list)] <- names(peak_list)[j]
-  }
-  return(overlaps_list)
-} 
 
 
 
