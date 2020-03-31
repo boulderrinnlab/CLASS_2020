@@ -163,7 +163,7 @@ overlapping_peaks <- get_overlapping_peaks(lncrna_genes,peak_list)
 #'To add downstream sequence to feature subset
 
 # First we are setting the "get_promoter_regions" function, but one param is up and downstream what should we use here?
-get_promoter_regions <- function(gencode_gr, biotype = "lncRNA", upstream = 2000, downstream = 2000) {
+get_promoter_regions <- function(gencode_gr, biotype, upstream = 2000, downstream = 2000) {
   
   #What would we want the ? to be?  Hint what is in the genocode GRanges so we could find overlaps with mRNA or lncRNA promoters
   genes <- gencode_gr[gencode_gr$type == "gene"]
@@ -174,7 +174,7 @@ get_promoter_regions <- function(gencode_gr, biotype = "lncRNA", upstream = 2000
   return(proms)
 }
 
-promoter_regions <- get_promoter_regions(gtf)
+promoter_regions <- get_promoter_regions(gtf,"lncrna")
 
 
 
