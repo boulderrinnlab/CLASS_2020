@@ -106,6 +106,7 @@ First let's see the core of the function
 
 gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 lncrna_genes <- gtf[which(gtf$transcript_type == "lncRNA")]
+lncrna_promoters <- promoter_regions[which(promoter_regions$transcript_type == "lncrna")]
 
 # Setting the function 
 # Add in your features
@@ -122,7 +123,7 @@ get_overlapping_peaks <- function(features, peak_list){
   return(overlaps_list)
 } 
 
-overlapping_peaks <- get_overlapping_peaks(lncrna_genes,peak_list)
+overlapping_peaks <- get_overlapping_peaks(lncrna_promoters,peak_list)
 
 ```
 
@@ -198,7 +199,7 @@ Let's call this function "count_peaks_per_feature"
 #' #list of peaks of dna binding proteins that will be intersected
 
 #? which is a list of GRanges and which is a GRanges object
-count_peaks_per_feature <- function(features, peak_list) {
+count_peaks_per_feature <- function(features, peak_list) {war
 
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
   
