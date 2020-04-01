@@ -205,8 +205,8 @@ count_peaks_per_feature <- function(features, peak_list) {
 }
 
 
-num_overlaps <- count_peaks_per_feature(features, team_peaks)
-
+num_overlaps <- count_peaks_per_feature(promoter_regions, team_peaks)
+table(num_overlaps)
 ```
 
 
