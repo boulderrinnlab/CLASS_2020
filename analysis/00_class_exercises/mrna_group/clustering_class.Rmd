@@ -10,8 +10,8 @@ options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(GenomicRanges)
-source("../../util/intersect_functions.R")
-source("../../util/_setup.R")
+source("/Shares/rinn_class/data/k562_chip/analysis/util/intersect_functions.R")
+source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
 # We suggest that you make two directories in your working directory: results and figures=
 ```
 
@@ -29,8 +29,8 @@ gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode
 # Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA genes
 proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
 
-promoter_peak_count <- count_peaks_per_feature(?, ?)
-
+promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
+table(promoter_peak_count)
 # What did you end up with? Go over the resulting gencode_gr and peak_list
 
 ```
