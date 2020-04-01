@@ -73,10 +73,10 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
 # Q: Do you need an argument for this function? HINT: What is the default?
 
 peak_list <- import_peaks()
-#I dont think we need an arguement because the consensus file path is the arguement and is part of the file path
+#I dont think we need an argument because the consensus file path is the argument and is part of the function
 
 
-# Now we have return a list of all the peaks for each DNA binding protien which is usally our starting point 
+# Now we have returned a list of all the peaks for each DNA binding protein which is usually our starting point 
 # Run this and see the contents of the returned GRanges
 # This will be very useful in doing "find overlaps" with genomic features such as promoters described below
 
@@ -91,7 +91,7 @@ First let's see the core of the function
 #' function finds overlaps between consensus_peaks and genomic features 
 #' 
 #' @description get_overlapping_peaks
-#' this function will intersect the consesus_peaks with gene_body, promoters, mRNA_promoters, lncRNA_promoters, te_family
+#' this function will intersect the consensus_peaks with gene_body, promoters, mRNA_promoters, lncRNA_promoters, te_family
 #' 
 #' @param features
 #'  set of genomic features as a GRanges object
@@ -107,9 +107,18 @@ First let's see the core of the function
 # Setting the function 
 # Add in your features
 
+#import annotated genome as GRanges
 gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-features <- gtf[which(gtf$transcript_type == "lncRNA")]
+#just to see what the transcript types are called in gtf
+unique(gtf$gene_type) 
 
+#GRanges for mRNA:
+#protein_coding_gr <- gtf[which(gtf$gene_type == "protein_coding")]
+
+#create features GRanges with just lncRNAs
+lncRNA_gr <- gtf[which(gtf$transcript_type == "lncRNA")]
+
+#now make the function getting overlaps between whatever feature you defined above and all proteins
 get_overlapping_peaks <- function(features, peak_list){
 
   overlaps_list <- c()
@@ -123,7 +132,8 @@ get_overlapping_peaks <- function(features, peak_list){
   return(overlaps_list)
 } 
 
-overlaps <- get_overlapping_peaks(features, peak_list)
+#to call the function
+overlaps <- get_overlapping_peaks(lncRNA_gr, peak_list)
 
 ```
 
@@ -151,7 +161,7 @@ overlaps <- get_overlapping_peaks(features, peak_list)
 #' @description feature_subset
 #' Take a gencode gtf to subset the biotype of promoters we want as a set of GRanges
 #' 
-#' @param gencode_gr
+#' @param gtf
 #'  set of genomic features as a GRanges object
 #'  
 #' @param biotype
@@ -168,21 +178,21 @@ get_promoter_regions <- function(gtf, biotype, upstream = 2000, downstream = 200
   
   #What would we want the ? to be?  Hint what is in the genocode GRanges so we could find overlaps with mRNA or lncRNA promoters
   genes <- gtf[gtf$type == "gene"]
-  genes <- genes[which(genes$gene_type == "protein_coding")]
+  genes <- genes[which(genes$gene_type == biotype)]
   # What do we want here where the question mark is ? What will it include ?
   proms <- GenomicRanges::promoters(genes, upstream = 2000, downstream = 2000)
 
   return(proms)
 }
 
-promoters <- get_promoter_regions(gtf)
+proms <- get_promoter_regions(gtf, "lncRNA")
 ```
 
 Excellent we now have an intersection of all consensus peaks with mRNA and lncRNA promoters and a function that can be used for any subset of "features" in gencode GRanges.
 Now let's make a function to count the number of times there is overlap of a given DNA binding protien (TF) and an element in features
 Let's call this function "count_peaks_per_feature"
 
-```{r}
+```{r} 
 
 #' count_peaks_per_feature: function to summarize the number of events in features on each individual promoter. 
 #' 
@@ -209,7 +219,11 @@ count_peaks_per_feature <- function(features, peak_list) {
   return(peak_count)
 }
 
-peak_count <- count_peaks_per_feature(features, peak_list)
+peak_count <- count_peaks_per_feature(lncRNA_gr, peak_list)
+
+#trying to see if there's stuff in peak_count
+ncol(peak_count)
+peak_count[130, c(3000, 3005)]
 ```
 
 
@@ -225,6 +239,7 @@ source("temp.R")
 
 Class excercise: use these functions to find the promoter with the most DNA binding proteins that "co-occur" on that promoter? 
 Which mRNA and lncRNA promoter has the most DNA binding events?
+
 >> Present this on wednesday for your group 
 >> advanced use the function below to find the DNA binding protien that is most bound to the TE family or subset of your choosing.
 
@@ -255,6 +270,9 @@ promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0),
 rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
 colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 
+#is there stuff in promoter_peak_occurence?
+ncol(promoter_peak_occurence)
+promoter_peak_occurence[100, c(20, 5000, 12000)]
 ```
 
 
@@ -283,6 +301,9 @@ import_repeatmasker <- function(rmsk_file = "/Shares/rinn_class/data/k562_chip/u
   return(rmsk_gr)
 }
 
+#call this function
+rmsk_gr <- import_repeatmasker()
+
 subset_rmsk <- function(rmsk_gr, rep_level = "family") {
   # rep_level needs to be one of "class", "family", or "name"
   if(!(rep_level %in% c("class", "family", "name"))) {
@@ -300,6 +321,8 @@ subset_rmsk <- function(rmsk_gr, rep_level = "family") {
   return(rmsk_list)
 }
 
+#subset rmsk_gr for TE class:
+rmsk_class <- subset_rmsk(rmsk_gr, "class")
 
 
 ```
