@@ -12,6 +12,8 @@ library(tidyverse)
 library(GenomicRanges)
 ```
 
+# Example work
+
 #### Goal: to build functions to import_peaks, intersect them with your favorite genomic feature and turn that into a co-occurance matrix for numerous downstream analyses.
 Wednesday present a cool lncRNA and mRNA promoter and any other intersting results you can find in the feature count matrix. 
 In otherwords we are bringing it all back together with functions we will use often. 
@@ -64,17 +66,19 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
   }
   # Here we want to return the output of the function
   # What do you think we want to return here? It would be written as return( varable_name)
-  # return(?)
+  return(peak_list)
 }
 
 
 # Now that you've loaded the function, you still need to call the function.
 # Do that here and assign the output to a variable.
+peak_list <- import_peaks()
+
 # Q: Do you need an argument for this function? HINT: What is the default?
 
 
 
-# Now we have return a list of all the peaks for each DNA binding protien which is usally our starting point 
+# Now we have return a list of all the peaks for each DNA binding protein which is usally our starting point 
 # Run this and see the contents of the returned GRanges
 # This will be very useful in doing "find overlaps" with genomic features such as promoters described below
 
@@ -102,6 +106,10 @@ First let's see the core of the function
 ## Hint you will need to make a "features" file that is compatable for findOverlaps with the output above. Double hint: GencodeV32.gtf
 # ? What would "features" look like for promoters and what was the code you used to derive it
 
+gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+lncrna_genes <- gtf[which(gtf$transcript_type == "lncRNA")]
+lncrna_promoters <- promoter_regions[which(promoter_regions$transcript_type == "lncrna")]
+
 # Setting the function 
 # Add in your features
 get_overlapping_peaks <- function(features, peak_list){
@@ -117,7 +125,7 @@ get_overlapping_peaks <- function(features, peak_list){
   return(overlaps_list)
 } 
 
-
+overlapping_peaks <- get_overlapping_peaks(lncrna_promoters,peak_list)
 
 ```
 
@@ -158,16 +166,20 @@ get_overlapping_peaks <- function(features, peak_list){
 #'To add downstream sequence to feature subset
 
 # First we are setting the "get_promoter_regions" function, but one param is up and downstream what should we use here?
-get_promoter_regions <- function(gencode_gr, biotype, upstream = ?, downstream = ?) {
+get_promoter_regions <- function(gencode_gr, biotype, upstream = 2000, downstream = 2000) {
   
   #What would we want the ? to be?  Hint what is in the genocode GRanges so we could find overlaps with mRNA or lncRNA promoters
-  genes <- gencode_gr[gencode_gr$type == "?"]
-  genes <- genes[which(genes$gene_type == ?)]
+  genes <- gencode_gr[gencode_gr$type == "gene"]
+  genes <- genes[which(genes$gene_type == biotype)]
   # What do we want here where the question mark is ? What will it include ?
-  proms <- GenomicRanges::promoters(genes, upstream = ?, downstream = ?)
+  proms <- GenomicRanges::promoters(genes, upstream = 2000, downstream = 2000)
 
   return(proms)
 }
+
+promoter_regions <- get_promoter_regions(gtf,"lncrna")
+
+
 
 ```
 
@@ -189,7 +201,7 @@ Let's call this function "count_peaks_per_feature"
 #' #list of peaks of dna binding proteins that will be intersected
 
 #? which is a list of GRanges and which is a GRanges object
-count_peaks_per_feature <- function(features, peak_list) {
+count_peaks_per_feature <- function(features, peak_list) {war
 
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
   
@@ -201,6 +213,8 @@ count_peaks_per_feature <- function(features, peak_list) {
   }
   return(peak_count)
 }
+
+peak_count <- count_peaks_per_feature(lncrna_genes,peak_list)
 
 ```
 

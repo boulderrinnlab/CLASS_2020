@@ -3,8 +3,10 @@
 
 
 #Functions we need
-# features_genebody_3kb
-# features_te_total
+
+# X features_te_total
+# Xfeatures overlapping promoters
+# >> seperate R file compare gene expression value
 #  X features_promoters
 # X peak_feature_matrix
 
@@ -15,7 +17,7 @@
 #' this function will take consensus peak files and name them by the DNA binding protein and return a list
 #' 
 #' @param consensus_file_path the path to consensus peak files
-#' 
+
 
 import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/") {
   peak_files <- list.files(consensus_file_path, full.names = T)
@@ -179,17 +181,6 @@ subset_rmsk <- function(rmsk_gr, rep_level = "family") {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
 #' function to subset features for promomters. 
 #' 
 #' @description feature_subset
@@ -210,12 +201,60 @@ subset_rmsk <- function(rmsk_gr, rep_level = "family") {
 get_promoter_regions <- function(gencode_gr, biotype, upstream = 3e3, downstream = 3e3) {
   
   genes <- gencode_gr[gencode_gr$type == "gene"]
-  genes <- genes[which(genes$gene_type == biotype)]
+  genes <- genes[genes$gene_type %in% biotype]
   
   proms <- GenomicRanges::promoters(genes, upstream = upstream, downstream = downstream)
   
   return(proms)
   
+}
+
+
+#' function to subset features for overlapping promomters. 
+#' 
+#' @description 
+#' Take a gencode gtf to subset the biotype of overlapping promoters we want as a set of GRanges
+#' 
+#' @param gencode_gr
+#'  set of genomic features as a GRanges object
+
+get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0) {
+  
+  genes <- gencode_gr[gencode_gr$type == "gene"]
+  proms <- GenomicRanges::promoters(genes, upstream = upstream, downstream = downstream)
+  
+  reduced_proms <- GenomicRanges::reduce(proms)
+  ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE)
+  ov_proms <- data.frame("gene_promoters_from" = ov_proms@from,
+                         "reduced_promoters_to" = ov_proms@to)
+  
+  ov_proms_summary <- ov_proms %>% 
+    group_by(reduced_promoters_to) %>%
+    summarize(count = n())
+  ov_proms <- merge(ov_proms, ov_proms_summary)
+  overlapped <- ov_proms %>% filter(count > 1)
+  
+  reduced_promoters_overlapping <- reduced_proms[unique(overlapped$reduced_promoters_to)]
+  
+  overlapped$gene_id <- proms$gene_id[overlapped$gene_promoters_from]
+  overlapped$gene_name <- proms$gene_name[overlapped$gene_promoters_from]
+  overlapped$gene_type <- proms$gene_type[overlapped$gene_promoters_from]
+  overlapped$strand <- strand(proms[overlapped$gene_promoters_from])
+  
+  overlapped_metadata <- overlapped %>% 
+    group_by(reduced_promoters_to, count) %>%
+    summarize(gene_id = paste(gene_id, collapse = ";"),
+              gene_name = paste(gene_name, collapse = ";"),
+              gene_type = paste(gene_type, collapse = ";"),
+              strand = paste(as.character(strand), collapse = ";"))
+  
+  reduced_promoters_overlapping$num_overlaps <- overlapped_metadata$count
+  reduced_promoters_overlapping$gene_id <- overlapped_metadata$gene_id
+  reduced_promoters_overlapping$gene_name <- overlapped_metadata$gene_name
+  reduced_promoters_overlapping$gene_type <- overlapped_metadata$gene_type
+  reduced_promoters_overlapping$gene_type <- overlapped_metadata$gene_type
+  
+  return(reduced_promoters_overlapping) 
 }
 
 
@@ -229,11 +268,15 @@ get_promoter_regions <- function(gencode_gr, biotype, upstream = 3e3, downstream
 #'  
 #' @param peak_list
 #' #list of peaks of dna binding proteins that will be intersected
+#' 
+#' @param type
+#' Return either a matrix of counts over features or a binary occurence matrix
 
-
-count_peaks_per_feature <- function(features, peak_list) {
+count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
-  peak_count_list <- list()
+  if(!(type %in% c("counts", "occurence"))) {
+    stop("Type must be either occurence or counts.")
+  }
   
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
   
@@ -244,12 +287,22 @@ count_peaks_per_feature <- function(features, peak_list) {
     colnames(peak_count) <- features$gene_id
   }
   
-  peak_count_list <- c(peak_count_list, list(peak_count))
-  names(peak_count_list)[i] <- names(feature_sets)[i]
+  peak_matrix <- peak_count
   
-  return(peak_count_list)
+  if(type == "occurence") {
+    peak_occurence <- matrix(as.numeric(peak_count > 0), 
+                             nrow = dim(peak_count)[1],
+                             ncol = dim(peak_count)[2])
+    rownames(peak_occurence) <- rownames(peak_count)
+    colnames(peak_occurence) <- colnames(peak_count)
+    peak_matrix <- peak_occurence
+  }
+  
+  return(peak_matrix)
   
 }
+
+
 
 
 
