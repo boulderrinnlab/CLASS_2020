@@ -10,6 +10,7 @@ options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(GenomicRanges)
+#test
 ```
 
 #### Goal: to build functions to import_peaks, intersect them with your favorite genomic feature and turn that into a co-occurance matrix for numerous downstream analyses.
