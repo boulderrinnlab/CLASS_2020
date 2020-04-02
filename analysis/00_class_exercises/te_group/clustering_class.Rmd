@@ -10,6 +10,7 @@ options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(GenomicRanges)
+library(ggdendro)
 source("../../util/intersect_functions.R")
 source("../../util/_setup.R")
 
@@ -134,12 +135,42 @@ ggsave("erv1_hclust_euc_dist.pdf", height = 26, width = 6)
 
 # import_rmsk and subset_rmsk by family
 rmsk_gr <- import_repeatmasker()
-unique(rmsk_gr$rep_family)
-rmsk_family <- subset_rmsk(rmsk_gr, rep_level = "family")
+TE_family_list <- unique(rmsk_gr$rep_family)
+rmsk_families <- subset_rmsk(rmsk_gr, rep_level = "family")
 
+#for loop through all families or classes:
+family_count <- c()
+for (i in 1:length(TE_family_list)) {
+  #count peaks
+  family_count <- count_peaks_per_feature(rmsk_families[[i]], peak_list)
+  #remove no binding events
+  family_count <- family_count[,which(colSums(family_count) > 0)]
+  family_count <- family_count[which(rowSums(family_count) > 0),]
+  #make it boolean
+  family_bound <- family_count > 0
+  #make it numeric
+  family_occurence <- as.numeric(family_bound)
+  #now make it a matrix
+  family_peak_occurence <- matrix(family_occurence, 
+                           nrow = dim(family_count)[1],
+                           ncol = dim(family_count)[2])
+  #add names
+  rownames(family_peak_occurence) <- rownames(family_count)
+  colnames(family_peak_occurence) <- colnames(family_count)
+  #make a clustered plot
+  bin_hier <- hclust(dist(family_peak_occurence, method = "binary"))
+  ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 2)
+  #save the plot
+  ggsave(paste0("/scratch/Users/alsw5948/bchm_5631/CLASS_2020/analysis/00_class_exercises/te_group/figures/", TE_family_list[i], "_hclust_binary_dist.pdf"), height = 26, width = 6)
+}
+
+
+
+
+#below is for one TE family or class:
 #count peaks of your fave family vs all TFs
-names(rmsk_family[5])
-erv1_count <- count_peaks_per_feature(rmsk_family[[5]], peak_list)
+ names(rmsk_family[5])
+ erv1_count <- count_peaks_per_feature(rmsk_family[[5]], peak_list)
 
 #remove families with no binding
 erv1_count <- erv1_count[,which(colSums(erv1_count) > 0)]
