@@ -2,8 +2,11 @@
 .Rhistory
 .RData
 .Ruserdata
+<<<<<<< HEAD
+=======
 *.Rproj
 *.pdf
 *.png
 *results*
 *figures*
+>>>>>>> 0187ea43c8dc4a74938a96b718d65b4e24d15a79
