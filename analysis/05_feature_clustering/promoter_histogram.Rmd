@@ -11,8 +11,8 @@ options(stringsAsFactors = FALSE)
 library(tidyverse)
 library(GenomicRanges)
 
-source("../../util/intersect_functions.R")
-source("../../util/_setup.R")
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
 ```
 
 ```{r}
@@ -59,6 +59,6 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 
 ```{r}
 #make the histogram
-hist(colSums(promoter_peak_occurence))
+hist(colSums(promoter_peak_occurence)) 
 ```
 
