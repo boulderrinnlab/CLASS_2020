@@ -105,7 +105,7 @@ ggsave("figures/hclust_binary_dist.pdf", height = 26, width = 6)
 # Q: How do the results change when we make this euclidean distance?
 hclust_euc <- hclust(dist(promoter_peak_occurence, method = "euclidean"))
 ggdendro::ggdendrogram(hclust_euc, rotate = TRUE,  size = 2)
-ggsave("figures/hclust_binary_dist.pdf", height = 26, width = 6)
+ggsave("figures/hclust_euc_dist.pdf", height = 26, width = 6)
 ```
 
 # HOMEWORK #1: Cluster by your group's features:
