@@ -1,0 +1,63 @@
+---
+title: "promoter_histogram"
+author: "TE team"
+date: "4/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
+library(tidyverse)
+library(GenomicRanges)
+
+source("../../util/intersect_functions.R")
+source("../../util/_setup.R")
+```
+
+```{r}
+#importing the peak files
+peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
+
+# Making the features (gencode) GRanges that has lots of features annotated
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA genes
+proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
+
+promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
+```
+
+```{r}
+
+#remove any promoters not binding
+promoter_peak_count <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
+
+# Now we want to remove any columns (tfs) where a TF has bound no promoters
+
+promoter_peak_count <- promoter_peak_count[which(rowSums(promoter_peak_count) > 0),]
+
+
+# We're going to make this binary -- make it a co-occurence matrix where any number of
+# peaks in a promoter for a tf is considered "binding" and so we're going to change all the
+# values to zeros and ones.
+promoter_bound <- promoter_peak_count > 0
+
+# Q: How would we make this into a numeric vector (0 or 1) instead of a boolean vector?
+promoter_occurence <- as.numeric(promoter_bound)
+
+# make this into a matrix with the original dimensions
+promoter_peak_occurence <- matrix(promoter_occurence, 
+                           nrow = dim(promoter_peak_count)[1],
+                           ncol = dim(promoter_peak_count)[2])
+
+# Let's transfer the row and column names
+rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
+colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
+
+```
+
+```{r}
+#make the histogram
+hist(colSums(promoter_peak_occurence))
+```
