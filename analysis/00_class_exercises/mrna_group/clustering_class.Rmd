@@ -12,7 +12,7 @@ library(tidyverse)
 library(GenomicRanges)
 source("/Shares/rinn_class/data/k562_chip/analysis/util/intersect_functions.R")
 source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
-# We suggest that you make two directories in your working directory: results and figures=
+# We suggest that you make two directories in your working directory: results and figures
 ```
 
 
@@ -40,7 +40,7 @@ table(promoter_peak_count)
 # Q: Which gene promoters had no TF binding?
 promoter_no_peak <- promoter_peak_count[,which(colSums(promoter_peak_count) < 1)]
 table(promoter_no_peak)
-no_binding <- colnames(promoter_no_peak)
+
 
 ### This is a result for the paper!
 promoter_positive_peaks <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
@@ -50,14 +50,15 @@ yes_binding <- colnames(promoter_positive_peaks)
 
 # Now we want to remove any columns (tfs) where a TF has bound no promoters
 # Q: Which TFs bound no promoters?
-
+no_binding <- colnames(promoter_no_peak)
 ### This is also a paper result!
 
 promoter_positive_peaks <- promoter_positive_peaks[which(rowSums(promoter_positive_peaks) > 0),]
 
 # Q: For any given tf-promoter combo (HINT: one element in this matrix), what is the max number of peaks in a promoter?
 # HINT: ?max, ?table
-
+most_bound <- max(promoter_positive_peaks)
+  
 # We're going to make this binary -- make it a co-occurence matrix where any number of
 # peaks in a promoter for a tf is considered "binding" and so we're going to change all the
 # values to zeros and ones.
@@ -79,6 +80,8 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 # What is the distribution of DNA binding events across promoters that had at least 1 event?
 ### This is a result for the paper.
 # HINT: ?hist, ?colSums
+
+hist(promoter_positive_peaks)
 ```
 
 
@@ -96,7 +99,7 @@ plot(bin_hier)
 # load library for ggdendro for the best trees we could find :) 
 library(ggdendro)
 
-ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 2)
+ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
 ggsave("figures/hclust_binary_dist.pdf", height = 26, width = 6)
 
 # Q: How do the results change when we make this euclidean distance?
@@ -109,6 +112,8 @@ ggsave("figures/hclust_binary_dist.pdf", height = 26, width = 6)
 
 ```{r}
 # Produce a figure for each group.
+
+
 
 ###### For the TE group: you can use
 # import_rmsk and subset_rmsk by family
