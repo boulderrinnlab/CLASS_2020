@@ -1,0 +1,185 @@
+---
+title: "Permutation test by feature type"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
+library(tidyverse)
+library(GenomicRanges)
+#library(rslurm)
+# This is a really cool R "permutation" package : regioneR (read documentation)
+library(regioneR)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+```{r import getting our features squared away}
+
+# Starting with the usual here using the import_peaks function
+peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
+
+# Getting our genocode features together into GRanges
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+lncrna_promoters <- get_promoter_regions(gencode_gr, biotype = "lncRNA")
+mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
+
+# Subsetting for repeats using our handy import_repeatmasker function 
+rmsk <- import_repeatmasker()
+rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
+names(rmsk_family) <- paste(names(rmsk_family), "family", sep = "_")
+rmsk_class <- subset_rmsk(rmsk, rep_level = "class")
+names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
+
+#TODO make this for mRNA and lncRNA permutation not genome wide ?
+# Let's compare mRNA and lncRNA promoters to get a null distribution for each TF. 
+# We will take the same number and window sizes (granges width) for each TF consensus file. 
+# wE will do 1,000 random permutations across lncRNA and mRNA promoter features
+# First we need the lncRNA and mRNA promoters (also throwing in repeats)
+
+region_list <- c("lncrna_promoters" = list(lncrna_promoters), 
+                 "mrna_promoters" = list(mrna_promoters), 
+                 rmsk_family, rmsk_class)
+
+
+# Limiting this to canonical chromosomes by make a list of them and intersecting with featuers.
+canonical_chr <- as.character(unique(seqnames(region_list[[1]])))
+
+
+# Now making a data frame that only includes features from canonical chromosomes
+for(i in 1:length(region_list)) {
+  region_list[[i]] <- region_list[[i]][which(seqnames(region_list[[i]]) %in% canonical_chr)]
+}
+
+#TODO out waht is going on here 
+pars <- expand.grid(1:length(region_list), 1:length(peak_list)) %>% 
+  as.data.frame()
+names(pars) <- c("region_index", "peak_index")
+
+```
+
+
+
+```{r bringing in the genome for random sampling}
+#TODO genome ranges has get genome function?
+# Get genome is a cool R function in "Genome Ranges" that you tell it the species 
+# and it reads in the .fasta file of the entire genome.
+hg38 <- getGenome("hg38")
+perm_test <- function(region_index, peak_index, npermutations = 1000) {
+  
+  # This is key in data reproducibility. We are going to make random permutations.
+  # How can you reproduce random? With seed for the random generation.
+  set.seed(12044593)
+  
+  #TODO where is region index coming from? 
+  
+  region <- names(region_list)[[region_index]]
+  tf <- names(peak_list)[[peak_index]]
+  
+  # adding a header
+  cat("Running overlap test for ", region, "  & ", tf, "\n\n")
+  a_regions <- region_list[[region_index]]
+  b_regions <- peak_list[[peak_index]]
+  
+  # This is where we bring in the regioneR function for permutations.
+  # Do ?regioneR overlapPermTest function and the needed arguments
+  
+  suppressWarnings(pt <- overlapPermTest(A = a_regions, 
+                        B = b_regions, 
+                        ntimes = npermutations, 
+                        non.overlapping = FALSE, 
+                        verbose = FALSE,
+                        genome = hg38,
+                        alternative =  "auto", 
+                        mc.cores = 1))
+
+  # Collecting the permuation data into a data frame, by pulling statistics
+  # from overlapPermTest 
+  # ?regioneR for the meta data outputs from overlapPermTest (e.g. $zscore)
+  ptdf <- data.frame("region" = region,
+                     "tf" = tf,
+                     "pval" = pt$numOverlaps$pval,
+                     "zscore" = pt$numOverlaps$zscore,
+                     "nperm" = pt$numOverlaps$ntimes,
+                     "alternative" = pt$numOverlaps$alternative,
+                     "observed" = pt$numOverlaps$observed,
+                     "permuted" = paste(pt$numOverlaps$permuted, collapse = ";"))
+  return(ptdf)
+}
+```
+
+```{r}
+sjob <- slurm_apply(perm_test, pars, jobname = 'perm_overlaps',
+                    add_objects = c("region_list", "peak_list", "hg38", "overlapPermTest"),
+                    nodes = 22, cpus_per_node = 30, 
+                    slurm_options = list(time = '30:00:00'),
+                    submit = FALSE)
+```
+
+
+```{r}
+
+# TODO getting lost now :) 
+# Let's read in the data and start to interprate it.
+
+# The usual making a list of file paths from the permutations
+res_files <- list.files("_rslurm_perm_overlaps/", full.names = T, pattern = "results")
+
+#TODO not sure was res_files are 
+perm_res <- lapply(res_files, readRDS) %>%
+  unlist(recursive = F) %>%
+  rbind_list()
+
+# Running Benjamin Hochberg FDR function in R on the significance of overlaps expected versus observed. 
+# Excercise read about BH and other FDR methods
+perm_res$padj <- p.adjust(perm_res$pval, method = "BH", n = 88*190)
+
+min(perm_res$padj)
+
+sig_overlaps <- perm_res %>% filter(padj < 0.01)
+```
+
+
+```{r}
+# let's make a heatmap of the zscores
+
+sig_df <- sig_overlaps %>%
+  dplyr::select(region, tf, zscore) %>%
+  pivot_wider(names_from = tf, values_from = zscore, values_fill = list("zscore" = 0))
+
+sig_matrix <- sig_df %>%
+  column_to_rownames("region") %>%
+  as.matrix()
+
+
+region_clust <- hclust(dist(sig_matrix))
+tf_clust <- hclust(dist(t(sig_matrix)))
+
+region_clust$labels
+sig_df_long <- sig_df %>%
+  pivot_longer(2:ncol(.), names_to = "tf", values_to = "zscore")
+sig_df_long$region <- factor(sig_df_long$region, region_clust$labels[region_clust$order])
+sig_df_long$tf <- factor(sig_df_long$tf, tf_clust$labels[tf_clust$order])
+
+g <- ggplot(sig_df_long, aes(x = tf, y = region, fill = zscore))
+g + geom_raster() + scale_fill_gradient2()
+
+
+# Just look at repeat classes
+sig_df_classes <- sig_df_long %>%
+  filter(grepl("class", region))
+g <- ggplot(sig_df_classes, aes(x = tf, y = region, fill = zscore))
+g + geom_raster() + scale_fill_gradient2()
+
+# Just look at repeat families
+sig_df_family <- sig_df_long %>%
+  filter(grepl("family", region))
+g <- ggplot(sig_df_family, aes(x = tf, y = region, fill = zscore))
+g + geom_raster() + scale_fill_gradient2()
+```
+
+
+
