@@ -10,7 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 options(stringsAsFactors = FALSE)
 library(tidyverse)
 library(GenomicRanges)
-#library(rslurm)
 # This is a really cool R "permutation" package : regioneR (read documentation)
 library(regioneR)
 source("../util/intersect_functions.R")
@@ -34,16 +33,16 @@ names(rmsk_family) <- paste(names(rmsk_family), "family", sep = "_")
 rmsk_class <- subset_rmsk(rmsk, rep_level = "class")
 names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
 
-#TODO make this for mRNA and lncRNA permutation not genome wide ?
+
 # Let's compare mRNA and lncRNA promoters to get a null distribution for each TF. 
 # We will take the same number and window sizes (granges width) for each TF consensus file. 
 # wE will do 1,000 random permutations across lncRNA and mRNA promoter features
 # First we need the lncRNA and mRNA promoters (also throwing in repeats)
 
-region_list <- c("lncrna_promoters" = list(lncrna_promoters), 
-                 "mrna_promoters" = list(mrna_promoters), 
-                 rmsk_family, rmsk_class)
-
+region_list <- c("lncrna_promoters" = list(lncrna_promoters),
+                 "mrna_promoters" = list(mrna_promoters))
+# For TE group, do this instead
+region_list <- c(rmsk_family, rmsk_class)
 
 # Limiting this to canonical chromosomes by make a list of them and intersecting with featuers.
 canonical_chr <- as.character(unique(seqnames(region_list[[1]])))
@@ -54,7 +53,7 @@ for(i in 1:length(region_list)) {
   region_list[[i]] <- region_list[[i]][which(seqnames(region_list[[i]]) %in% canonical_chr)]
 }
 
-#TODO out waht is going on here 
+# TODO: Re-write without R slurm
 pars <- expand.grid(1:length(region_list), 1:length(peak_list)) %>% 
   as.data.frame()
 names(pars) <- c("region_index", "peak_index")
@@ -68,13 +67,13 @@ names(pars) <- c("region_index", "peak_index")
 # Get genome is a cool R function in "Genome Ranges" that you tell it the species 
 # and it reads in the .fasta file of the entire genome.
 hg38 <- getGenome("hg38")
+# This is a wrapper function. TODO: explain why
 perm_test <- function(region_index, peak_index, npermutations = 1000) {
   
   # This is key in data reproducibility. We are going to make random permutations.
   # How can you reproduce random? With seed for the random generation.
   set.seed(12044593)
   
-  #TODO where is region index coming from? 
   
   region <- names(region_list)[[region_index]]
   tf <- names(peak_list)[[peak_index]]
@@ -84,6 +83,7 @@ perm_test <- function(region_index, peak_index, npermutations = 1000) {
   a_regions <- region_list[[region_index]]
   b_regions <- peak_list[[peak_index]]
   
+  # TODO: explain permutation test function. 
   # This is where we bring in the regioneR function for permutations.
   # Do ?regioneR overlapPermTest function and the needed arguments
   
@@ -96,6 +96,7 @@ perm_test <- function(region_index, peak_index, npermutations = 1000) {
                         alternative =  "auto", 
                         mc.cores = 1))
 
+  # TODO: custom object. add some exercises relating to extracting the data
   # Collecting the permuation data into a data frame, by pulling statistics
   # from overlapPermTest 
   # ?regioneR for the meta data outputs from overlapPermTest (e.g. $zscore)
@@ -115,7 +116,7 @@ perm_test <- function(region_index, peak_index, npermutations = 1000) {
 sjob <- slurm_apply(perm_test, pars, jobname = 'perm_overlaps',
                     add_objects = c("region_list", "peak_list", "hg38", "overlapPermTest"),
                     nodes = 22, cpus_per_node = 30, 
-                    slurm_options = list(time = '30:00:00'),
+                    slurm_options = list(time = '200:00:00'),
                     submit = FALSE)
 ```
 
@@ -126,12 +127,16 @@ sjob <- slurm_apply(perm_test, pars, jobname = 'perm_overlaps',
 # Let's read in the data and start to interprate it.
 
 # The usual making a list of file paths from the permutations
-res_files <- list.files("_rslurm_perm_overlaps/", full.names = T, pattern = "results")
+res_files <- list.files("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_intersect/_rslurm_perm_overlaps/", full.names = T, pattern = "results")
 
 #TODO not sure was res_files are 
 perm_res <- lapply(res_files, readRDS) %>%
   unlist(recursive = F) %>%
   rbind_list()
+
+# TODO: view and explain benjamini-hochberg.
+# View(p.adjust)
+
 
 # Running Benjamin Hochberg FDR function in R on the significance of overlaps expected versus observed. 
 # Excercise read about BH and other FDR methods
