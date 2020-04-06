@@ -30,7 +30,7 @@ temsprting <- gsub(".plotProfile.tab", "" , tempstring)
 return(tempstring)
 })
 dat$sampnames <- samnames
-dat <- dat %>% select(sampnames, everything())
+dat <- dat %>% dplyr::select(sampnames, everything())
 colnames(dat)
 dat_long <- gather(dat, key = "position", value = "value", 3:702)
 dat_long$position <- gsub("X","",dat_long$position) %>% as.numeric()
@@ -38,9 +38,9 @@ dat_long$bp_position <- dat_long$position * 10
 dat_long$tf_name <- sapply(dat_long$sampnames, function(x) {
   unlist(strsplit(x, "_"))[[1]]
 })
-qplot(x=position, y=value, data=dat_long %>% filter(tf_name == "AFF1"), geom=c("point", "smooth"),
+qplot(x=position, y=value, data=dat_long %>% dplyr::filter(tf_name == "AFF1"), geom=c("point", "smooth"),
       color = sampnames)
-g <- ggplot(dat_long %>% filter(tf_name %in% c("DDX20", "AFF1")), aes(x = bp_position, y = value, color = sampnames))
+g <- ggplot(dat_long %>% dplyr::filter(tf_name %in% c("DDX20", "AFF1")), aes(x = bp_position, y = value, color = sampnames))
 g + geom_line() +
   scale_x_continuous(breaks = seq(0,7000, by = 1000),
                      labels = c("-3000", "-2000", "-1000",
@@ -63,7 +63,7 @@ dat_dist <- dist(dat_sum, method = "euclidean")
 dat_hclust <- hclust(dat_dist)
 plot(dat_hclust)
 # Some example plots
-g <- ggplot(dat_sum_long %>% filter(tf_name %in% c("eGFP-ZNF512", "HDAC3")),
+g <- ggplot(dat_sum_long %>% dplyr::filter(tf_name %in% c("eGFP-ZNF512", "HDAC3")),
             aes(x = bp_position, y = mean_value, color = tf_name))
 g + geom_line() +
   scale_x_continuous(breaks = seq(0,7000, by = 1000),
@@ -88,7 +88,7 @@ dat_dist <- dist(dat_norm, method = "euclidean")
 dat_hclust <- hclust(dat_dist)
 plot(dat_hclust)
 # Some example plots
-g <- ggplot(dat_sum_long %>% filter(tf_name %in% c("eGFP-ZNF512", "HDAC3")),
+g <- ggplot(dat_sum_long %>% dplyr::filter(tf_name %in% c("eGFP-ZNF512", "HDAC3")),
             aes(x = bp_position, y = mean_value, color = tf_name))
 g + geom_line() +
   scale_x_continuous(breaks = seq(0,7000, by = 1000),
