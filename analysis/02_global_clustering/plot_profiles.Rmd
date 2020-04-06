@@ -6,6 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 options(stringsAsFactors = FALSE)
 library(rtracklayer)
+library(GenomicRanges)
 library(ChIPseeker)
 library(GenomicFeatures)
 library(tidyverse)
@@ -75,15 +76,24 @@ parseBootCiPerc <- function(bootCiPerc){
 ```
 
 ```{r}
-txdb_gencode_v32 <- makeTxDbFromGFF(file = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+#txdb_gencode_v32 <- makeTxDbFromGFF(file = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+gtf_gencode_v32 <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
 ```
 
 ```{r}
-promoters <- getPromoters(TxDb=txdb_gencode_v32, upstream=3000, downstream=3000, by = "gene")
+#promoters <- getPromoters(TxDb=txdb_gencode_v32, upstream=3000, downstream=3000, by = "gene")
 
-lncrna_promoters <- promoters[which(promoters$transcript_type == "lncrna")]
-mrna_promoters <- promoters[which(promoters$transcript_type == "protein_coding")]
+get_promoter_regions <- function(gencode_gr, upstream = 3000, downstream = 3000) {
+  genes <- gencode_gr[gencode_gr$type == "gene"]
+  proms <- GenomicRanges::promoters(genes, upstream = 3000, downstream = 3000)
+  return(proms)
+}
+
+gtf_promoters <- get_promoter_regions(gtf_gencode_v32)
+
+lncrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA")]
+mrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "protein_coding")]
 
 
 ```
