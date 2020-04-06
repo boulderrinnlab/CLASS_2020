@@ -76,10 +76,15 @@ parseBootCiPerc <- function(bootCiPerc){
 
 ```{r}
 txdb_gencode_v32 <- makeTxDbFromGFF(file = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
 ```
 
 ```{r}
 promoters <- getPromoters(TxDb=txdb_gencode_v32, upstream=3000, downstream=3000, by = "gene")
+
+lncrna_promoters <- promoters[which(promoters$transcript_type == "lncrna")]
+mrna_promoters <- promoters[which(promoters$transcript_type == "protein_coding")]
+
 
 ```
 
