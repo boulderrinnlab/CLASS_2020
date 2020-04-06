@@ -90,7 +90,7 @@ get_promoter_regions <- function(gencode_gr, upstream = 3000, downstream = 3000)
   return(proms)
 }
 
-gtf_promoters <- get_promoter_regions(gtf_gencode_v32)
+promoters <- get_promoter_regions(gtf_gencode_v32)
 
 lncrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA")]
 mrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "protein_coding")]
