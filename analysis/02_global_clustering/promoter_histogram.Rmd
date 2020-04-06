@@ -62,7 +62,7 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 ```{r}
 #make the histogram
 number_tfs_per_promoter <- colSums(promoter_peak_occurence)
-hist(number_tfs_per_promoter)
+#hist(number_tfs_per_promoter)
 
 hist(number_tfs_per_promoter,
 main="Number of Co-Occurrences",
