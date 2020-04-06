@@ -16,6 +16,8 @@ library(rtracklayer)
 library(ggbio)
 library(ggrepel)
 library(Rsubread)
+source("../../util/intersect_functions.R")
+
 ```
 
 # How do DNA binding events in turn regulate expression at promoters?
@@ -46,7 +48,8 @@ total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR8
 # First we will take the bam file and find the number of reads that align over mRAN and lncRNA gene-bodies (similar to what we used in MACs)
 # Don't worry about the syntax of the following code as it pertains to RNAseq, but maybe worth a google :)
 
-counts <- featureCounts(c("ENCFF625ZBS.bam", "ENCFF630HEX.bam"),
+counts <- featureCounts(c("/Shares/rinn_class/data/k562_chip/analysis/09_expression/ENCFF625ZBS.bam",
+                          "/Shares/rinn_class/data/k562_chip/analysis/09_expression/ENCFF630HEX.bam"),
                         annot.ext = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
                         isGTFAnnotationFile = T,
                         isPairedEnd = TRUE,
@@ -95,15 +98,24 @@ tpm <- expression %>% group_by(gene_id) %>%
 ####
 
 # 1. Read in consensus peaks as a list.
+consensus_peaks <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
 
 # 2. Read in gencode.
+gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf"
+)
 
 # 3. Get the promoter regions of each gene.
+
+proms <- get_promoter_regions(gencode_gr = gtf, biotype = c("lncRNA", "protein_coding"),
+                              upstream =3000, downstream = 3000)
+
 # Q: Which gene types should you grab here? Can you input a list of multiple gene types?
 
 # 4. Count peaks over promoters
 # HINT: You need to name this variable "promoter_peak_count" for it to work with the next
 # bit of code.
+
+promoter_peak_count <- count_peaks_per_feature(features = proms, peak_list = consensus_peaks )
 
 ```
 
@@ -118,10 +130,13 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 
 # Make a data frame of binding events per promoter.
 peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
-                                "number_of_tfs" = colSums(promoter_peak_occurence))
+                                "number_of_tfs" = colSums(promoter_peak_occurence),
+                                "gene_type" =  )
 
 # Merge in the expression data into the data frame you just created.
-# HINT: ?merge
+
+peak_occurence_df <- merge(peak_occurence_df, tpm)
+
 
 ```
 
@@ -136,7 +151,7 @@ g + geom_point(alpha = 0.2) +
   scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
   ggtitle("Promoter binding events vs. expression") +
   xlab(expression('Number of TFs')) +
-  ylab(expression(log[10](TPM)))
+  ylab(expression(log[10](tpm)))
 ggsave("figures/k562_promoter_binding_vs_expression.png")
 ggsave("figures/k562_promoter_binding_vs_expression.pdf")
 ```
