@@ -3,6 +3,8 @@ title: "promoter_histogram"
 author: "TE team"
 date: "4/3/2020"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -61,4 +63,15 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 #make the histogram
 number_tfs_per_promoter <- colSums(promoter_peak_occurence)
 hist(number_tfs_per_promoter)
+
+hist(number_tfs_per_promoter,
+main="Number of Co-Occurrences",
+xlab="Number of TFs per Promoter",
+ylab = "Number of Promoters",
+xlim=c(0,140),
+ylim=c(0,12000),
+col="lightcyan2",
+freq=TRUE
+)
+
 ```
