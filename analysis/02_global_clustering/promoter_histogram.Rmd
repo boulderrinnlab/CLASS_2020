@@ -75,3 +75,18 @@ freq=TRUE
 )
 
 ```
+
+```{r}
+#Another way to make the histogram:
+
+h <- hist(number_tfs_per_promoter, 
+          main = "Co-Occurrence of Transcription Factor Binding at Promoter Regions",
+          xlab = "Number of TFs Bound to a Promoter",
+          ylab = "Number of Promoters",
+          ylim = c(0,10000),
+          xlim = c(0,135),
+          breaks = 25)
+#Adds count labels for each bin
+text(h$mids, h$counts, labels = h$counts, adj = c(-0.2, .5), srt = c(90))
+```
+
