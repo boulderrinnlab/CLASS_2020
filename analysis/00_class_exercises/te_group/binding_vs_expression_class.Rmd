@@ -15,6 +15,7 @@ library(GenomicFeatures)
 library(rtracklayer)
 library(ggbio)
 library(ggrepel)
+BiocManager::install("Rsubread", version = 3.8)
 library(Rsubread)
 ```
 
@@ -46,7 +47,7 @@ total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR8
 # First we will take the bam file and find the number of reads that align over mRAN and lncRNA gene-bodies (similar to what we used in MACs)
 # Don't worry about the syntax of the following code as it pertains to RNAseq, but maybe worth a google :)
 
-counts <- featureCounts(c("/scratch/Users/deta9300/Rinn_class_repository/class_2020/CLASS_2020/analysis/00_class_exercises/te_group/rna_seq_bam/ENCFF625ZBS.bam", "/scratch/Users/deta9300/Rinn_class_repository/class_2020/CLASS_2020/analysis/00_class_exercises/te_group/rna_seq_bam/ENCFF630HEX.bam"),
+counts <- featureCounts(c("/scratch/Users/alsw5948/bchm_5631/CLASS_2020/analysis/00_class_exercises/te_group/rna_seq/ENCFF625ZBS.bam", "/scratch/Users/alsw5948/bchm_5631/CLASS_2020/analysis/00_class_exercises/te_group/rna_seq/ENCFF630HEX.bam"),
                         annot.ext = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
                         isGTFAnnotationFile = T,
                         isPairedEnd = TRUE,
@@ -128,14 +129,14 @@ peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
 
 # Merge in the expression data into the data frame you just created.
 # HINT: ?merge make DF with gene id and gene type and merge to peak occurence
-peaks_and_expression <- merge(peak_occurence_df, gene_type_df)
-peaks_and_expression <- merge(peaks_and_expression, tpm)
+peak_occurence_df <- merge(peak_occurence_df, gene_type_df)
+peak_occurence_df <- merge(peak_occurence_df, tpm)
 ```
 
 
 ```{r}
 # Use what you just made to plot the results.
-g <- ggplot(peaks_and_expression, aes(y = log10(tpm), x = number_of_tfs, color = transcript_type))
+g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = transcript_type))
 g + geom_point(alpha = 0.2) +
   geom_smooth() +
   scale_y_continuous(expand = c(0,0)) +
@@ -144,6 +145,7 @@ g + geom_point(alpha = 0.2) +
   ggtitle("Promoter binding events vs. expression") +
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](TPM)))
+
 ggsave("k562_promoter_binding_vs_expression.png")
 ggsave("k562_promoter_binding_vs_expression.pdf")
 ```
@@ -152,9 +154,11 @@ ggsave("k562_promoter_binding_vs_expression.pdf")
 
 ```{r}
 # 2) What is the distribution of binding events (hint: hist())?
+hist(peak_occurence_df$number_of_tfs)
+
 # At what point would you make a cutoff of "promoters with a lot of TFs vs
 # those with few"?
-
+x <- 5
 
 
 ```
@@ -174,10 +178,11 @@ g + geom_density(alpha = 0.2)
 # 3) Filter your data frame to promoters that have more than X binding events
 #    yet are still not expressed.
 # HINT: ?filter(tpm < 0.001)
-
+low_expression <- filter(peak_occurence_df, tpm < 0.001, peak_occurence_df$number_of_tfs > x)
 # Do these promoters still have TFs bound? How many?
 # Create a plot to illustrate this.
 
+hist(low_expression$number_of_tfs)
 
 ```
 
