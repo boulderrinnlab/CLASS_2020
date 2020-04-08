@@ -122,7 +122,10 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 
 gene_id <- gtf$gene_id
 transcript_type <- gtf$transcript_type
+
 gene_type_df <- data.frame('gene_id' = gene_id, 'transcript_type' = transcript_type)
+gene_type_df <- gene_type_df[which(gene_type_df$transcript_type == c("lncRNA", "protein_coding")),]
+
 # Make a data frame of binding events per promoter.
 peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
                                 "number_of_tfs" = colSums(promoter_peak_occurence))
@@ -141,7 +144,8 @@ g + geom_point(alpha = 0.2) +
   geom_smooth() +
   scale_y_continuous(expand = c(0,0)) +
   scale_x_continuous(expand = c(0,0)) +
-  scale_fill_gradient(low = "yellow", high = "red", name = "Gene type") +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
+  #scale_fill_gradient(low = "yellow", high = "red", name = "Gene type") +
   ggtitle("Promoter binding events vs. expression") +
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](TPM)))
