@@ -141,7 +141,7 @@ g + geom_point(alpha = 0.2) +
   geom_smooth() +
   scale_y_continuous(expand = c(0,0)) +
   scale_x_continuous(expand = c(0,0)) +
-  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
+  scale_fill_gradient(low = "yellow", high = "red", name = "Gene type") +
   ggtitle("Promoter binding events vs. expression") +
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](TPM)))
