@@ -15,7 +15,7 @@ library(GenomicFeatures)
 library(rtracklayer)
 library(ggbio)
 library(ggrepel)
-BiocManager::install("Rsubread", version = 3.8)
+# BiocManager::install("Rsubread", version = 3.8)
 library(Rsubread)
 ```
 
@@ -161,7 +161,7 @@ hist(peak_occurence_df$number_of_tfs)
 
 # At what point would you make a cutoff of "promoters with a lot of TFs vs
 # those with few"?
-x <- 5
+x <- 2
 
 
 ```
@@ -185,7 +185,18 @@ low_expression <- filter(peak_occurence_df, tpm < 0.001, peak_occurence_df$numbe
 # Do these promoters still have TFs bound? How many?
 # Create a plot to illustrate this.
 
-hist(low_expression$number_of_tfs)
+number_of_tfs_ghosts <- low_expression$number_of_tfs
+hist(number_of_tfs_ghosts)
+
+#density plot
+g <- ggplot(low_expression, aes(x = number_of_tfs, color = transcript_type, fill = transcript_type))
+g + geom_density(alpha = 0.2) +
+  xlab("Number of TFs bound") +
+  scale_x_continuous(breaks = c(0, 7, 15, 30, 45, 60, 75, 90, 105, 120)) +
+  theme(legend.title = element_text(size = 5), legend.text = element_text(size = 5), legend.key.size = unit(0.5, "cm"), plot.title = element_text(size = 10), axis.title = element_text(size = 7), axis.text.x = element_text(size = 5), axis.text.y = element_text(size = 5)) +
+  ggtitle("Density of TFs at Ghost Promoters")
+ggsave("density_tfs_ghosts.pdf")
+ggsave("density_tfs_ghosts.png")
 
 ```
 
