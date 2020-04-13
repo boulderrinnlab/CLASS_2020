@@ -22,16 +22,11 @@ library(tidyverse)
 library(GenomicRanges)
 library(GenomicFeatures)
 library(rtracklayer)
-library(ggbio)
+#library(ggbio)
 library(ggrepel)
 library(Rsubread)
-<<<<<<< HEAD
 source("../../util/intersect_functions.R")
 source("../../util/_setup.R")
-=======
-
-BiocManager::install("Rsubread", version = 3.8)
->>>>>>> 7f3e2d05999d44c1d5c3f84ebaf7585eb4f18b79
 ```
 
 # How do DNA binding events in turn regulate expression at promoters?
@@ -70,6 +65,8 @@ counts <- featureCounts(c("ENCFF625ZBS.bam", "ENCFF630HEX.bam"),
 
 # First we will find the number of reads per kilobases of a given gene body (rpkm).
 # Q: Why would we want to normalize to the size of the genebody?
+# A: Because there's more space for stuff to bind in a larger gene body, so one binding event means way less.
+
 rpk <- counts$counts / (counts$annotation$Length/1000)
 expression <- data.frame("rpk" = rpk) %>%
   rownames_to_column("gene_id") %>%
@@ -77,6 +74,8 @@ expression <- data.frame("rpk" = rpk) %>%
 
 # Here we will convert rpkm to transcripts per million of reads (tpm)
 # Q: why would we need to furhter normalize this way?
+# A: to normalize between experiments that maybe get different numbers of reads
+
 expression_summary <- expression %>%
   group_by(sample) %>%
   summarize(total_rpk = sum(rpk, na.rm = T))
@@ -111,11 +110,10 @@ tpm <- expression %>% group_by(gene_id) %>%
 ####
 
 # 1. Read in consensus peaks as a list.
-<<<<<<< HEAD
 peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
 # 2. Read in gencode.
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-=======
+
 
 import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/") {
   #setting object peak_files as a list of file names
@@ -144,10 +142,35 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chi
 # Do that here and assign the output to a variable.
 peak_list <- import_peaks()
 
+import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/") {
+  #setting object peak_files as a list of file names
+  peak_files <- list.files(consensus_file_path, full.names = T)
+  #this pulls out the TF names from the file names
+  file_names <- str_extract(peak_files, "[\\w-]+\\.bed")
+  tf_name <- str_extract(file_names, "^[^_]+(?=_)")
+  
+  # Now we want to make a list of GRanges objects called "peak_list" that is appended to the 
+  peak_list <- c()
+  for(i in 1:length(peak_files)) {
+    # Import peaks
+    peaks <- rtracklayer::import(peak_files[i])
+    # Append this GRanges object to the of the list.
+    peak_list <- c(peak_list, peaks)
+    # Name the list elements by their TF name.
+    names(peak_list)[length(peak_list)] <- tf_name[i]
+  }
+  # Here we want to return the output of the function
+  # What do you think we want to return here? It would be written as return( varable_name)
+  return(peak_list)
+}
+
+peak_list <- import_peaks()
+
 # 2. Read in gencode.
 gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
->>>>>>> 7f3e2d05999d44c1d5c3f84ebaf7585eb4f18b79
+gtf_gencode_v32 <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
 # 3. Get the promoter regions of each gene.
 # Q: Which gene types should you grab here? Can you input a list of multiple gene types?
 proms <- get_promoter_regions(gencode_gr, biotype = c('lncRNA','protein_coding'))
@@ -165,12 +188,40 @@ gtf_promoters <- get_promoter_regions(gtf)
 lncrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA")]
 mrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "protein_coding")]
 
+get_promoter_regions <- function(gencode_gr, upstream = 3000, downstream = 3000) {
+  genes <- gencode_gr[gencode_gr$type == "gene"]
+  proms <- GenomicRanges::promoters(genes, upstream, downstream)
+  return(proms)
+}
+
+gtf_promoters <- get_promoter_regions(gtf_gencode_v32)
+
+lncrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA")]
+mrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "protein_coding")]
+
+
 # 4. Count peaks over promoters
+
+
+count_peaks_per_feature <- function(features, peak_list) {
+
+  peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
+  
+  for(j in 1:length(peak_list)) {
+    ov <- countOverlaps(features, peak_list[[j]])
+    peak_count <- rbind(peak_count, ov)
+    rownames(peak_count)[nrow(peak_count)] <- names(peak_list)[j]
+    colnames(peak_count) <- features$gene_id
+  }
+  return(peak_count)
+}
+
+promoter_peak_count <- count_peaks_per_feature(gtf_promoters,peak_list)
 # HINT: You need to name this variable "promoter_peak_count" for it to work with the next
 # bit of code.
-<<<<<<< HEAD
+
 promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
-=======
+
 count_peaks_per_feature <- function(features, peak_list) {
 
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
@@ -185,7 +236,6 @@ count_peaks_per_feature <- function(features, peak_list) {
 }
 
 promoter_peak_count <- count_peaks_per_feature(lncrna_promoters, peak_list)
->>>>>>> 7f3e2d05999d44c1d5c3f84ebaf7585eb4f18b79
 
 ```
 
@@ -218,11 +268,8 @@ gene_type_df <- merge()
 
 ```{r}
 # Use what you just made to plot the results.
-<<<<<<< HEAD
+
 g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color=gene_type))
-=======
-g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs))
->>>>>>> 7f3e2d05999d44c1d5c3f84ebaf7585eb4f18b79
 g + geom_point(alpha = 0.2) +
   geom_smooth() +
   scale_y_continuous(expand = c(0,0)) +
