@@ -2,6 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+*.bam
+*.pdf
+*.Rproj
 *.Rproj
 *.pdf
 *.png
@@ -9,3 +12,4 @@
 *figures*
 *bam*
 *.tmp
+
