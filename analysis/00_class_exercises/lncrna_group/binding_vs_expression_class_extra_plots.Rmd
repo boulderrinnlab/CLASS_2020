@@ -1,0 +1,221 @@
+---
+title: "DNA-binding versus expression at promoters"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = F)
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(GenomicRanges)
+library(GenomicFeatures)
+library(rtracklayer)
+library(ggrepel)
+library(Rsubread)
+
+source("../../util/intersect_functions.R")
+source("../../util/_setup.R")
+
+```
+
+#### Source for RNA-seq data
+
+total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR885DVH/
+
+system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
+       intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+ system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
+        intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+
+
+```{r converting read counts to TPM}
+
+counts <- featureCounts(c("ENCFF625ZBS.bam", "ENCFF630HEX.bam"),
+                        annot.ext = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
+                        isGTFAnnotationFile = T,
+                        isPairedEnd = TRUE,
+                        nthreads = 16)
+
+rpk <- counts$counts / (counts$annotation$Length/1000)
+expression <- data.frame("rpk" = rpk) %>%
+  rownames_to_column("gene_id") %>%
+  pivot_longer(2:3, names_to = "sample", values_to = "rpk")
+
+expression_summary <- expression %>%
+  group_by(sample) %>%
+  summarize(total_rpk = sum(rpk, na.rm = T))
+expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+expression <- merge(expression, expression_summary)
+expression$tpm <-expression$rpk / expression$rpk_m
+tpm <- expression %>% group_by(gene_id) %>%
+  summarize(tpm = mean(tpm, na.rm = T))
+```
+
+
+```{r getting list of consensus peaks}
+
+#' @description import_peaks
+#' this function will compile .bed files of consensus peaks for multiple DNA-binding proteins into a list
+#' 
+#' @param consensus_file_path
+#'the file path in which the .bed files are located
+
+import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/") {
+  peak_files <- list.files(consensus_file_path, full.names = T)
+  file_names <- str_extract(peak_files, "[\\w-]+\\.bed")
+  tf_name <- str_extract(file_names, "^[^_]+(?=_)")
+  
+  peak_list <- c()
+  for(i in 1:length(peak_files)) {
+    peaks <- rtracklayer::import(peak_files[i])
+    peak_list <- c(peak_list, peaks)
+    names(peak_list)[length(peak_list)] <- tf_name[i]
+  }
+
+  return(peak_list)
+}
+
+peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
+
+```
+
+
+```{r getting promoters from gencode}
+
+gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+#' @description get_promoter_regions
+#' this function will create a Granges object of promoter regions from an annotated reference genome
+#' 
+#' @param gencode_gr
+#'  Granges object containing gencode annotated reference genome
+#'
+#' @param upstream
+#'  number of kilobases upstream of a TSS you'd define as a promoter
+#'
+#' @param downstream
+#'  number of kilobases downstream of a TSS you'd define as a promoter
+
+get_promoter_regions <- function(gencode_gr, upstream = 3000, downstream = 3000) {
+  genes <- gencode_gr[gencode_gr$type == "gene"]
+  proms <- GenomicRanges::promoters(genes, upstream, downstream)
+return(proms)
+}
+
+gtf_promoters <- get_promoter_regions(gtf)
+promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA" | gtf_promoters$gene_type == "protein_coding")]
+
+```
+
+
+```{r determining the number of peaks in each promoter}
+
+#' @description count_peaks_per_feature
+#' this function will create a matrix with counts for all DNA-binding protein peaks in each genomic region
+#' 
+#' @param features
+#'  Granges object containing genomic features of interest
+#'
+#' @param peak_list
+#'  list of consensus peaks
+
+count_peaks_per_feature <- function(features, peak_list) {
+
+  peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
+  
+  for(j in 1:length(peak_list)) {
+    ov <- countOverlaps(features, peak_list[[j]])
+    peak_count <- rbind(peak_count, ov)
+    rownames(peak_count)[nrow(peak_count)] <- names(peak_list)[j]
+    colnames(peak_count) <- features$gene_id
+  }
+  return(peak_count)
+}
+
+promoter_peak_count <- count_peaks_per_feature(promoters, peak_list)
+
+```
+
+
+```{r creating a data frame of genes, peak counts, and gene types}
+
+promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0),
+                           nrow = dim(promoter_peak_count)[1],
+                           ncol = dim(promoter_peak_count)[2])
+rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
+colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
+
+peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
+                                "number_of_tfs" = colSums(promoter_peak_occurence),
+                                'gene_type'=promoters$gene_type)
+
+peak_occurence_df <- merge(peak_occurence_df,tpm)
+
+```
+
+
+```{r plotting expression vs. binding events}
+
+g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+
+g + geom_point(alpha = 0.2) +
+  geom_smooth() +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_continuous(expand = c(0,0)) +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
+  ggtitle("Promoter binding events vs. expression") +
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/k562_promoter_binding_vs_expression.png")
+ggsave("figures/k562_promoter_binding_vs_expression.pdf")
+```
+
+```{r plotting expression vs. binding events, but now there are "ghosts" that have no binding and the messy dot situation is gone}
+
+g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g + 
+  geom_point(data = peak_occurence_df %>% filter(tpm < 0.001), alpha = 0.2) +
+  geom_smooth() + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0)) + 
+  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") + 
+  ggtitle("Promoter binding events vs. expression") + 
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/k562_promoter_binding_vs_expression.png")
+ggsave("figures/k562_promoter_binding_vs_expression.pdf")
+```
+
+
+```{r plotting frequency of promoters with each peak density and histograms for peaks of diffeent biotypes}
+
+peak_occurence_df$expression <- "off"
+peak_occurence_df[which(peak_occurence_df$tpm > 0.001), "expression"] <- "expressed"
+
+g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+g + geom_density(alpha = 0.2, fill = "#424242")  +
+  geom_vline(xintercept = 30, lty = 2) +
+  geom_vline(xintercept = 100, lty = 2)
+
+
+g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+g + geom_histogram(binwidth = 5)  + 
+  xlim(30, 100) +
+  facet_wrap(expression~gene_type, scales = "free_y")
+
+
+```
+
+
+```{r plotting peak occurances for lowly vs. highly bound promoter regions}
+
+peak_occurence_df$tf_binding <- "low"
+peak_occurence_df[which(peak_occurence_df$number_of_tfs > 25), "tf_binding"] <- "high"
+
+g <- ggplot(peak_occurence_df, aes(x = log10(tpm), color = tf_binding))
+g + geom_density(alpha = 0.2)
+```
