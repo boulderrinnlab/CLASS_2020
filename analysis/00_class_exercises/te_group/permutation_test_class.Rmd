@@ -11,8 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 options(stringsAsFactors = FALSE)
 library(tidyverse)
 library(GenomicRanges)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
+source("../../util/intersect_functions.R")
+source("../../util/_setup.R")
 ```
 
 ## Purpose: Determine statistical enrichment depletion of each peak set vs. sets of regions.
@@ -22,15 +22,20 @@ The standard statistical workflow is to determine a reasonable model distributio
 That's what we'll be doing here. In particular, we're going to randomly shuffle the peaks around the genome. We won't be changing the widths of the peaks, we're just going to be changing the locations of the peaks in the genome. For each of those permuted peaks, we'll look at the number of overlaps randomly occuring by chance given the number and widths of each peak set.
 
 ```{r}
-# Q: Is it a reasonable thing to do, placing the peaks randomly around the genome? HINT: Can we expect that ChIP-peaks will map to centromeres?
+# Q: Is it a reasonable thing to do, placing the peaks randomly around the genome? HINT: Can we expect that ChIP-peaks will map to centromeres? 
+#A: Yes it is reasonable, no they probably won't map to centromeres/telomeres etc
 
 # Q: What are some corrections we could apply to make the null distribution more accurate? HINT: What if some TF is enriched on one particular chromosome?
+#A: um not sure...we should ask about this
+
 ## BONUS!! Calculate chromosomal enrichment for the peak sets. Are there some that are statistically significantly enriched on some chromosomes?
 
 
 ## We won't be applying those corrections here since it slows down the calcultation of shuffled peaks, but it's something to be aware of in this analysis!
 
 ## Q: What are some reproduciblity considerations in this analysis given that we're using random number generators to shuffle the peaks?
+#A: we can set where the random number generator starts 
+#   set.seed(4)
 
 
 ```
@@ -74,6 +79,7 @@ for(i in 1:length(peak_list)) {
   tmp_pl <- peak_list[[i]][which(seqnames(peak_list[[i]]) %in% canonical_chr)]
   # Doing this workaround to remove the factors in the seqnames that are not canonical chromosomes.
   tmp_pl <- tmp_pl %>% as.data.frame()
+  
   tmp_pl <- GRanges(seqnames = as.character(tmp_pl$seqnames),
                     ranges = IRanges(start = tmp_pl$start,
                                      end = tmp_pl$end),
@@ -86,11 +92,13 @@ for(i in 1:length(peak_list)) {
 
 ```{r}
 # Q: How many of the peak files have zero consensus peaks?
+sapply(peak_list, length) > 0
 # They can't really be enriched/depleted in any regions...
 # So, I'll leave it up to you to filter these out of the peak list.
+peak_list <- peak_list[sapply(peak_list, length) > 0]
 
-
-# Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run?
+# Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run? 
+#A: 185 TFs x all promoters = a lot of permutation tests
 
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
@@ -108,12 +116,19 @@ chr_len <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_
 # and use the debugger to step through it line by line and look at the objects that are created.
 ## BONUS: Is there a way to speed this up/make it more efficient?
 shuffle_peaks <- function (peak_gr, genome) {
+  #get each chromosome length
   chrLens <- genome[names(seqlengths(peak_gr)),"size"]
+  #make a vector same length as peak_gr with correct chromosome name for each peak
   nn <- as.vector(seqnames(peak_gr))
+  #how many objects are in the vector (how many peaks in peak_gr for this TF)
   ii <- order(nn)
+  #get the width of each peak
   w <- width(peak_gr)
+  #table how many peaks per chromosome
   nnt <- table(nn)
+  #number the chromosomes in nnt
   jj <- order(names(nnt))
+  #why doesn't this do anything? stuck here.
   nnt <- nnt[jj]
   chrLens <- chrLens[jj]
   ss <- unlist(sapply(1:length(nnt), function(i) sample(chrLens[i], 
