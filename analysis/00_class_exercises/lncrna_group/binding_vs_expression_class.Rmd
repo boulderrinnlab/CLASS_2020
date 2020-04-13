@@ -35,10 +35,21 @@ In the end this first set of code will give us a value for the number of reads a
 
 total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR885DVH/
 
-# system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
-#        intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
-# system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
-#        intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+ system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
+       intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
+intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+```{r}
+
+### This is where the data came from total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR885DVH/
+### Make sure your in the right analysis working directory before you run this !
+
+system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
+       intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
+intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+
+```
 
 
 ```{r converting read counts to TPM}
