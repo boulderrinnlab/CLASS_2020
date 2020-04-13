@@ -1,0 +1,336 @@
+---
+title: "Permutation test exercise"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
+library(tidyverse)
+library(GenomicRanges)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+## Purpose: Determine statistical enrichment depletion of each peak set vs. sets of regions.
+
+The standard statistical workflow is to determine a reasonable model distribution that corresponds to a null hypothesis and test your observations against that -- one example that we've discussed in class is a poisson distribution. Another method of performing a statistical test -- especially in cases where you don't have a reasonable theoretically justifiable model for your null -- is to make random permutations of your data to build up an empirical null distribution which you can then compare your observed data to. 
+
+That's what we'll be doing here. In particular, we're going to randomly shuffle the peaks around the genome. We won't be changing the widths of the peaks, we're just going to be changing the locations of the peaks in the genome. For each of those permuted peaks, we'll look at the number of overlaps randomly occuring by chance given the number and widths of each peak set.
+
+```{r}
+# Q: Is it a reasonable thing to do, placing the peaks randomly around the genome? HINT: Can we expect that ChIP-peaks will map to centromeres?
+
+# Q: What are some corrections we could apply to make the null distribution more accurate? HINT: What if some TF is enriched on one particular chromosome?
+## BONUS!! Calculate chromosomal enrichment for the peak sets. Are there some that are statistically significantly enriched on some chromosomes?
+
+
+## We won't be applying those corrections here since it slows down the calcultation of shuffled peaks, but it's something to be aware of in this analysis!
+
+## Q: What are some reproduciblity considerations in this analysis given that we're using random number generators to shuffle the peaks?
+
+
+```
+
+
+```{r import}
+
+# Read in the consensus peak lists as usual
+peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
+
+# Let's load the lncRNA and mRNA promoters separately.
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+lncrna_promoters <- get_promoter_regions(gencode_gr, biotype = "lncRNA")
+mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
+
+# # TE Team, you can use this code to read in the repeat regions
+# # If you want to pull out some particular repeat groups out of curiousity and run them
+# # You're welcome to, but the overall slurm job comparing families and classes took 150 hours to run
+# # Because of that, I don't recommend running it all on fiji-viz!!
+#
+# rmsk <- import_repeatmasker()
+# rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
+# names(rmsk_family) <- paste(names(rmsk_family), "family", sep = "_")
+# rmsk_class <- subset_rmsk(rmsk, rep_level = "class")
+# names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
+
+# Let's add these to one list to make it easy.
+region_list <- c("lncrna_promoters" = list(lncrna_promoters), 
+                 "mrna_promoters" = list(mrna_promoters))
+
+
+# Also, so we don't run into issues down the road, let's sanitize the regions and peaks to just the
+# canonical chromosomes.
+canonical_chr <- c(paste0("chr", 1:22), "chrM", "chrX", "chrY")
+
+for(i in 1:length(region_list)) {
+  region_list[[i]] <- region_list[[i]][which(seqnames(region_list[[i]]) %in% canonical_chr)]
+}
+
+for(i in 1:length(peak_list)) {
+  tmp_pl <- peak_list[[i]][which(seqnames(peak_list[[i]]) %in% canonical_chr)]
+  # Doing this workaround to remove the factors in the seqnames that are not canonical chromosomes.
+  tmp_pl <- tmp_pl %>% as.data.frame()
+  tmp_pl <- GRanges(seqnames = as.character(tmp_pl$seqnames),
+                    ranges = IRanges(start = tmp_pl$start,
+                                     end = tmp_pl$end),
+                    strand = tmp_pl$strand,
+                    name = tmp_pl$name)
+  peak_list[[i]] <- tmp_pl
+}
+```
+
+
+```{r}
+# Q: How many of the peak files have zero consensus peaks?
+# They can't really be enriched/depleted in any regions...
+# So, I'll leave it up to you to filter these out of the peak list.
+
+
+# Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run?
+
+
+###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
+```
+
+
+```{r}
+
+# Import the length of each chromosome, so we know where we can put the peaks.
+chr_len <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_intersect/results/chr_sizes.csv") %>%
+  column_to_rownames("chrom")
+
+# Q: How is this function achieving shuffling? Put comments above lines with what that line is doing?
+# HINT: If you're having trouble understanding what it's doing, you can paste this into a .R file
+# and use the debugger to step through it line by line and look at the objects that are created.
+## BONUS: Is there a way to speed this up/make it more efficient?
+shuffle_peaks <- function (peak_gr, genome) {
+  chrLens <- genome[names(seqlengths(peak_gr)),"size"]
+  nn <- as.vector(seqnames(peak_gr))
+  ii <- order(nn)
+  w <- width(peak_gr)
+  nnt <- table(nn)
+  jj <- order(names(nnt))
+  nnt <- nnt[jj]
+  chrLens <- chrLens[jj]
+  ss <- unlist(sapply(1:length(nnt), function(i) sample(chrLens[i], 
+                                                        nnt[i])))
+  res <- GRanges(seqnames = nn[ii], ranges = IRanges(ss, width = w[ii]), 
+                 strand = "*")
+  return(res)
+}
+
+
+# This is a wrapper funciton which will call shuffle_peaks a number of times
+# and return each permuted peak set as a list.
+make_permutations <- function(region_set, genome, nperms) {
+  perms <- list()
+  for(i in 1:nperms) {
+    shuf <- shuffle_peaks(region_set, genome)
+    perms <- c(perms, list(shuf))
+  }
+  return(perms)
+}
+
+```
+
+```{r}
+# Where is a reasonable place to use set.seed? Set the random seed where you think it should go
+# for maximum reproducibility.
+
+# Q: What's a reasonable number of permutations? How does the minimum achiveable p-value relate to the number of permutations we do?
+# Now let's call the make permutations function
+permuted_peaks <- make_permutations(peak_list[[1]], chr_len, nperms = 1000)
+
+# Q: Estimate the object size when we run it over all peak lists. 
+# BONUS: How much memory is on fiji-viz and how much is fair to use up? When would you consider running something on the 
+# compute nodes via slurm instead?
+# HINT: as.numeric(object.size(peak_list)), to turn bytes in to GB divide by 1e9.
+
+# Inflation rate of one peak list
+as.numeric(object.size(permuted_peaks))/as.numeric(object.size(peak_list[1:4]))
+
+View(p.adjust)
+
+
+
+# Q: Loop over peak sets and create a list of permuted peaks objects. HINT: lapply
+# For time and RAM use, if you'd just like to calculate a subset, you're welcome to.
+# In fact, when you're testing and getting everything working, I HIGHLY reccommend using just a subset of the peaks
+# HINT: peak_list[1:4]
+# We'll permute once and use it as the null distribution for both lncRNA promoters and mRNA promoters.
+
+
+# peak_list_nulls <- ?
+
+
+###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
+```
+
+```{r}
+
+# Now let's calculate the number of overlaps for each of our region sets (mRNA and lncRNA)
+
+# First let's create an empty data frame that we can add to.
+resdf <- tibble(region = character(),
+                tf = character(),
+                observed = integer(),
+                permuted = character())
+
+for(i in 1:length(region_list)) {
+  region_set_name <- names(region_list)[i]
+  region_set <- region_list[[i]]
+
+  # Look at the observed overlaps
+  # This is how many overlaps actually occured with peaks in the data
+  # and lncRNAs and mRNAs
+  res <- lapply(peak_list, function(peaks) { 
+    length(which(countOverlaps(region_set, peaks) > 0)) 
+  }) 
+  # Let's make this into a data frame to match up with our output data frame
+  res <- res %>%
+    as.data.frame() %>%
+    pivot_longer(everything(), names_to = "tf", values_to = "observed")
+  
+  # Expected overlap calculation
+  # Now we'll loop over all of the 1000 permuted peaks to calculate the overlap of our region set with the permuted peaks.
+  perm_ovs <- lapply(peak_list_nulls, function(peak_nulls) {
+    permuted <- c()
+    for(j in 1:length(peak_nulls)) {
+      if(class(peak_nulls[[j]]) != "GRanges") { stop(paste0("Not a Granges object")) }
+      permuted <- c(permuted, length(which(countOverlaps(region_set, peak_nulls[[j]]) > 0)))
+    }
+    # For ease, we'll return this as one string of numbers separated by semicolons.
+    permuted <- paste(permuted, collapse = ";")
+    return(permuted)
+  })
+  
+  perm_ovsdf <- data.frame("tf" = names(unlist(perm_ovs)), 
+                           "permuted" = unlist(perm_ovs))
+  # Now let's merge it into our previous data frame.
+  res <- merge(res, perm_ovsdf)
+  res$region <- region_set_name
+  # And change the order of the columns for readability
+  res <- res %>% dplyr::select(region, everything())
+  resdf <- bind_rows(resdf, res)
+}
+```
+
+```{r}
+# Now that we have the empirical null distribution calculated, let's calculate a zscore and a p-value based on that null distribution.
+
+# First we'll separate out the character numbers and change them back to numeric.
+resdf_long <- resdf %>%
+  separate_rows(permuted, sep = ";") %>%
+  mutate(permuted = as.numeric(permuted))
+
+# Okay, now let's calculate the zscore and pvalue
+# We'll also determine whether the peaks are enriched or depleted based on whether the observed value
+# is greater than or less than the mean from the null distribution.
+# We're calculating the Fisher exact test here, which we discussed in the lecture.
+# Q: What is each line doing?
+resdf_summary <- resdf_long %>% 
+  group_by(region, tf) %>%
+  summarize(observed = unique(observed),
+            mean_permuted = mean(permuted),
+            diff = observed - mean_permuted,
+            alternative = ifelse(unique(observed) < mean(permuted), "less", "greater"),
+            zscore = round((unique(observed) - mean(permuted))/stats::sd(permuted), 4),
+            pval = ifelse(unique(alternative) == "less", (sum(unique(observed) >= permuted, na.rm = TRUE) + 1)/(1000 + 1),
+                          (sum(unique(observed) <= permuted, na.rm = TRUE) + 1)/(1000 + 1)))
+
+# Let's make a histogram of the p-values
+# HINT: hist
+
+# Q: We'll need to apply an adjustment to our p-values since we made multiple hypothesis tests
+# First, what was the number of tests that we made?
+# Second, apply the correction. HINT: p.adjust(method = "bonferroni")
+# resdf_summary$padj <- ?
+
+
+# Q: How many significant overlaps did we find?
+# HINT: filter
+
+
+# Q: How many were significantly enriched vs. significantly depleted?
+# HINT: table
+
+```
+
+### Plotting
+
+Let's visualize some of the null distributions and how the number of observed peaks compares
+
+```{r}
+# Q: Do this for some of the significant associations.
+single_result <- resdf_long %>% filter(tf == "AFF1", region == "lncrna_promoters")
+g <- ggplot(single_result, aes(x = permuted))
+g + geom_bar() + 
+  geom_vline(xintercept = unique(single_result$observed), lty = 2) +
+  theme_paperwhite() + 
+  ggtitle("Permuted overlaps vs. observed",
+    subtitle = paste0("TF: ", unique(single_result$tf), " -- Region: ", unique(single_result$region))) + 
+  xlab("Number of overlaps") + 
+  ylab("Count") 
+ggsave(paste0("figures/permuted_vs_observed_",unique(single_result$tf), "_", unique(single_result$region), ".pdf"))
+
+# A note on plots:
+# As we move closer to preparing figures for publication, it will be increasingly important to have a unified aesthetic to the figures
+# -- this includes having the axes labeled and the plot titled and saved as a pdf so that we can make the figures in Illustrator/ Inkscape.
+# In particular, let's go with these colors where we can: c("#424242","#a8404c")
+```
+
+```{r}
+
+# Let's make a heatmap of our results.
+g <- ggplot(resdf_summary, aes(x = tf, y = region, fill = zscore))
+g + geom_raster() + scale_fill_gradient2() + coord_flip() + 
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+
+
+# Before we do, let's cluster the rows and columns 
+# Right now they're ordered by alphanumeric order
+# The will only be plotted in the order you want if you make the tf and region columns into factors.
+# Here's an example
+resdf_matrix <- resdf_summary %>%
+  dplyr::select(tf, region, zscore) %>%
+  pivot_wider(names_from = tf, values_from = zscore) %>%
+  column_to_rownames("region") %>%
+  as.matrix()
+
+## We only have two region sets, so we don't really need this, but if we had more we would.
+# region_clust <- hclust(dist(resdf_matrix))
+# plot(region_clust)
+tf_clust <- hclust(dist(t(resdf_matrix)))
+plot(tf_clust)
+
+# Now let's factorize these columns according to the order which we specified
+
+## See above. Don't need to do this for two regions...
+# resdf_summary$region <- factor(resdf_summary$region, region_clust$labels[region_clust$order])
+resdf_summary$tf <- factor(resdf_summary$tf, tf_clust$labels[tf_clust$order])
+
+# And then we can plot it again
+g <- ggplot(resdf_summary, aes(x = tf, y = region, fill = zscore))
+g + geom_raster() + scale_fill_gradient2() + coord_flip() + 
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+# Q: Change the height and the width here until it looks good.
+ggsave("figures/lncrna_mrna_promoters_vs_tf_peaks.pdf", height = 5, width = 5)
+
+```
+
+```{r}
+# Q: How does the lncRNA enrichment compare to mRNA enrichment? Does this concord with our previous results?
+
+# Q: Record some other observations and findings. Make some extra plots to satisfy your curiousity!
+```
+
+
+
+
+
+
+
