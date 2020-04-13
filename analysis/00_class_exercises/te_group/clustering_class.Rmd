@@ -10,8 +10,11 @@ options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(GenomicRanges)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
+library(ggdendro)
+source("../../util/intersect_functions.R")
+source("../../util/_setup.R")
+
+# We suggest that you make two directories in your working directory: results and figures=
 ```
 
 
@@ -19,67 +22,222 @@ source("../util/_setup.R")
 
 ```{r}
 # We are going to start out with a function that we use all the time to import files called "import_peaks"
-#? What is it doing and what is the output format? See util folder on github
-
+# Q: What is it doing and what is the output format? See util folder on github
 peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
 
 # Making the features (gencode) GRanges that has lots of features annotated
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
 # Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA genes
-#? What is this funciton doing (see util folder for function file)
-promoters <- get_promoter_regions(gencode_gr, biotype = c("?", "?"))
+proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
 
-# here we are using the function "count_peaks_per_feature
-#? What is it doing (see util folder for function file)
-promoter_peak_count <- count_peaks_per_feature(?, ?)
-# What did you end up with ? Go over the resulting gencode_gr and peak_list
-# What is the distribution of DNA binding events across promoters that had at least 1 event?
-# Todo: Make two plots one for mRNA and one for lncRNA
+promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
 
+
+
+# What did you end up with? Go over the resulting gencode_gr and peak_list
 
 ```
 
 ```{r filtering}
-# Now we want to remove any columns (e.g., promoters) where a TF 
+# Now we want to remove any columns (promoters) where a promoter has no TF binding.
+# Q: Which gene promoters had no TF binding?
+### This is a result for the paper!
+no_binding <- promoter_peak_count[,which(colSums(promoter_peak_count) == 0)]
+
 promoter_peak_count <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
 
-# Remove TFs with no promoter peaks
-no_promoter_binding <- rownames(promoter_peak_count)[which(rowSums(promoter_peak_count) == 0)]
+# Now we want to remove any columns (tfs) where a TF has bound no promoters
+# Q: Which TFs bound no promoters?
+### This is also a paper result!
+no_binding <- no_binding[which(rowSums(no_binding) == 0),]
+
 promoter_peak_count <- promoter_peak_count[which(rowSums(promoter_peak_count) > 0),]
 
-# Make this binary -- make it a co-occurence matrix.
-promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0), 
+# Q: For any given tf-promoter combo (HINT: one element in this matrix), what is the max number of peaks in a promoter?
+# HINT: ?max, ?table
+?table
+table(promoter_peak_count)
+?max
+max(promoter_peak_count)
+
+# We're going to make this binary -- make it a co-occurence matrix where any number of
+# peaks in a promoter for a tf is considered "binding" and so we're going to change all the
+# values to zeros and ones.
+promoter_bound <- promoter_peak_count > 0
+table(promoter_bound)
+
+# Q: How would we make this into a numeric vector (0 or 1) instead of a boolean vector?
+promoter_occurence <- as.numeric(promoter_bound)
+table(promoter_occurence)
+
+
+# Q: Once this is made into a numeric vector, is it still a matrix?
+# Q: How would we make this into a matrix with the original dimensions? 
+# HINT: ?dim, ?matrix
+promoter_peak_occurence <- matrix(promoter_occurence, 
                            nrow = dim(promoter_peak_count)[1],
                            ncol = dim(promoter_peak_count)[2])
+
+promoter_peak_occurence[c(1:10), c(1:10)]
+
+
+# Let's transfer the row and column names
 rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
 colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
+
 ```
+
+```{r}
+# What is the distribution of DNA binding events across promoters that had at least 1 event?
+### This is a result for the paper.
+# HINT: ?hist, ?colSums
+?hist
+?colSums
+colSums(promoter_peak_occurence)
+hist(colSums(promoter_peak_occurence))
+
+
+```
+
 
 # Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense
-# We will spare you the time but on the class wiki there is a manuscript on clustering. Since we are using a binary matrix we will calculate the distance betweeen each sample using "dist(binary" 
+# We will spare you the time but on the class wiki there is a manuscript on clustering. Since we are using a binary matrix we will calculate the distance betweeen each sample using the binary distance metric. 
 # Read through the manual page to see other paramaters of this funciton ?dist
-```{r}
-#TODO clean up 
-# Calculate a distance measure between the rows.
 
+
+```{r}
+
+# Calculate a distance measure between the rows.
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 plot(bin_hier)
+
 # load library for ggdendro for the best trees we could find :) 
+BiocManager::install(ggdendro)
+install.packages("ggdendro")
 library(ggdendro)
 
-hclust_euc <- hclust(dist(promoter_peak_occurence, method = "euclidean"))
-ggdendro::ggdendrogram(hclust_euc, rotate = TRUE,  size = 2)
-ggsave("hclust_binary_dist.pdf", height = 26, width = 6)
-
-
 ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 2)
-ggsave("hclust_binary_dist.pdf", height = 26, width = 6)
+ggsave("erv1_hclust_binary_dist.pdf", height = 26, width = 6)
 
+# Q: How do the results change when we make this euclidean distance?
+hclust_euc <- hclust(dist(erv1_peak_occurence, method = "euclidean"))
+ggdendro::ggdendrogram(hclust_euc, rotate = TRUE,  size = 2)
+ggsave("erv1_hclust_euc_dist.pdf", height = 26, width = 6)
+```
+
+# HOMEWORK #1: Cluster by your group's features:
+
+```{r}
+# Produce a figure for each group.
+
+###### For the TE group:
+
+# import_rmsk and subset_rmsk by family
+rmsk_gr <- import_repeatmasker()
+TE_family_list <- unique(rmsk_gr$rep_family)
+rmsk_families <- subset_rmsk(rmsk_gr, rep_level = "family")
+
+#for loop through all families or classes:
+family_count <- c()
+for (i in 1:length(TE_family_list)) {
+  #count peaks
+  family_count <- count_peaks_per_feature(rmsk_families[[i]], peak_list)
+  #remove no binding events
+  family_count <- family_count[,which(colSums(family_count) > 0)]
+  family_count <- family_count[which(rowSums(family_count) > 0),]
+  #make it boolean
+  family_bound <- family_count > 0
+  #make it numeric
+  family_occurence <- as.numeric(family_bound)
+  #now make it a matrix
+  family_peak_occurence <- matrix(family_occurence, 
+                           nrow = dim(family_count)[1],
+                           ncol = dim(family_count)[2])
+  #add names
+  rownames(family_peak_occurence) <- rownames(family_count)
+  colnames(family_peak_occurence) <- colnames(family_count)
+  #make a clustered plot
+  bin_hier <- hclust(dist(family_peak_occurence, method = "binary"))
+  ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 2)
+  #save the plot
+  ggsave(paste0("/scratch/Users/alsw5948/bchm_5631/CLASS_2020/analysis/00_class_exercises/te_group/figures/", TE_family_list[i], "_hclust_binary_dist.pdf"), height = 26, width = 6)
+}
+
+
+
+
+#below is for one TE family or class:
+#count peaks of your fave family vs all TFs
+ names(rmsk_family[5])
+ erv1_count <- count_peaks_per_feature(rmsk_family[[5]], peak_list)
+
+#remove families with no binding
+erv1_count <- erv1_count[,which(colSums(erv1_count) > 0)]
+
+#remove TFs with no binding
+erv1_count <- erv1_count[which(rowSums(erv1_count) > 0),]
+
+#for any given tf-TE family combo (HINT: one element in this matrix), what is the max number of peaks in a promoter?
+table(erv1_count)
+max(erv1_count)
+erv1_count[c(1:10), c(1:10)]
+
+#make it boolean
+erv1_bound <- erv1_count > 0
+table(erv1_bound)
+
+#make it numeric instead of boolean
+erv1_occurence <- as.numeric(erv1_bound)
+table(erv1_occurence)
+
+#turn it back into a matrix
+erv1_peak_occurence <- matrix(erv1_occurence, 
+                           nrow = dim(erv1_count)[1],
+                           ncol = dim(erv1_count)[2])
+#add row and col names
+rownames(erv1_peak_occurence) <- rownames(erv1_count)
+colnames(erv1_peak_occurence) <- colnames(erv1_count) #actually I think this line doesn't work and maybe we don't need it
+erv1_peak_occurence[c(1:10), c(1:10)]
+
+#make it a histogram
+colSums(erv1_peak_occurence)
+hist(colSums(erv1_peak_occurence))
+
+#make nice plots:
+bin_hier <- hclust(dist(erv1_peak_occurence, method = "binary"))
+plot(bin_hier)
+
+#install if you haven't already
+BiocManager::install(ggdendro)
+install.packages("ggdendro")
+library(ggdendro)
+
+#CHANGE THIS FILE NAME
+ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 2)
+ggsave("figures/erv1_hclust_binary_dist.pdf", height = 26, width = 6)
+
+# Q: How do the results change when we make this euclidean distance?
+#CHANGE FILE NAME
+hclust_euc <- hclust(dist(erv1_peak_occurence, method = "euclidean"))
+ggdendro::ggdendrogram(hclust_euc, rotate = TRUE,  size = 2)
+ggsave("figures/erv1_hclust_euc_dist.pdf", height = 26, width = 6)
+
+
+# If you're up for the challenge re-write this code to look at the overlaps for all families.
+# Otherwise, choose just one family and get that granges object to use for the rest of the script.
+
+# HINT: TE group you'll need a for loop for this if you want to do all the families.
 
 ```
 
-# Class excercise cluster by your group
+# HOMEWORK #2: Get a promoter that has the most binding and show a region in the broswer with this promoter & some tracks:
+
+```{r}
+# Q: Which TF has the most TF binding events?
+
+```
+
 
 
 

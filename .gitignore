@@ -5,3 +5,11 @@
 *.bam
 *.pdf
 *.Rproj
+*.Rproj
+*.pdf
+*.png
+*results*
+*figures*
+*bam*
+*.tmp
+

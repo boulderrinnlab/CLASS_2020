@@ -1,0 +1,164 @@
+---
+title: "profile_plots"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+library(rtracklayer)
+library(GenomicRanges)
+library(ChIPseeker)
+library(GenomicFeatures)
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Don't run for all TFs or you'll get the heck yelled out of you
+# Look at representatives for three different patterns
+# Eventually we'll look for ones that are different between mRNAs and lncRNAs
+
+```{r}
+getTagCount <- function(tagMatrix, xlim, conf, ...) {
+    ss <- colSums(tagMatrix)
+    ss <- ss/sum(ss)
+    ## plot(1:length(ss), ss, type="l", xlab=xlab, ylab=ylab)
+    pos <- value <- NULL
+    dd <- data.frame(pos=c(xlim[1]:xlim[2]), value=ss)
+    if (!(missingArg(conf) || is.na(conf))){
+        tagCiMx <- getTagCiMatrix(tagMatrix, conf = conf, ...)
+        dd$Lower <- tagCiMx["Lower", ]
+        dd$Upper <- tagCiMx["Upper", ]
+    }
+    return(dd)
+}
+```
+
+```{r}
+getTagCiMatrix <- function(tagMatrix, conf = 0.95, resample=500){
+    RESAMPLE_TIME <- resample
+    trackLen <- ncol(tagMatrix)
+    if (Sys.info()[1] == "Windows") {
+        tagMxBoot <- boot(data = tagMatrix, statistic = getSgn, R = RESAMPLE_TIME)
+    } else {
+        tagMxBoot <- boot(data = tagMatrix, statistic = getSgn, R = RESAMPLE_TIME,
+                          parallel = "multicore", ncpus = 6)
+    }
+    cat(">> Running bootstrapping for tag matrix...\t\t",
+        format(Sys.time(), "%Y-%m-%d %X"), "\n")
+    tagMxBootCi <- sapply(seq_len(trackLen), function(i) {
+                        bootCiToken <- boot.ci(tagMxBoot, type = "perc", index = i)
+                        ## parse boot.ci results
+                        return(parseBootCiPerc(bootCiToken))
+                        }
+                    )
+    row.names(tagMxBootCi) <- c("Lower", "Upper")
+    return(tagMxBootCi)
+}
+```
+
+```{r}
+getSgn <- function(data, idx){
+    d <- data[idx, ]
+    ss <- colSums(d)
+    ss <- ss / sum(ss)
+    return(ss)
+}
+```
+
+```{r}
+parseBootCiPerc <- function(bootCiPerc){
+    bootCiPerc <- bootCiPerc$percent
+    tmp <- length(bootCiPerc)
+    ciLo <- bootCiPerc[tmp - 1]
+    ciUp <- bootCiPerc[tmp]
+    return(c(ciLo, ciUp))
+}
+```
+
+```{r}
+#txdb_gencode_v32 <- makeTxDbFromGFF(file = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+gtf_gencode_v32 <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+```
+
+```{r}
+#promoters <- getPromoters(TxDb=txdb_gencode_v32, upstream=3000, downstream=3000, by = "gene")
+
+get_promoter_regions <- function(gencode_gr, upstream = 3000, downstream = 3000) {
+  genes <- gencode_gr[gencode_gr$type == "gene"]
+  proms <- GenomicRanges::promoters(genes, upstream = 3000, downstream = 3000)
+  return(proms)
+}
+
+promoters <- get_promoter_regions(gtf_gencode_v32)
+
+lncrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA")]
+mrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "protein_coding")]
+
+
+```
+
+```{r}
+plot_profile <- function(tag_count, tf_name) {
+  p <- ggplot(tag_count, aes(pos))
+  p <- p + geom_ribbon(aes(ymin = Lower, ymax = Upper),
+                       linetype = 0, alpha = 0.2)
+  p <- p + geom_line(aes(y = value))
+  
+  xlim <-c(-3000, 3000)
+  origin_label = "TSS"
+  #### Testing below       
+  p <- p + geom_vline(xintercept=0,
+                      linetype="longdash")
+  p <- p + scale_x_continuous(breaks=c(xlim[1], floor(xlim[1]/2),
+                                       0,
+                                       floor(xlim[2]/2), xlim[2]),
+                              labels=c(xlim[1], floor(xlim[1]/2),
+                                       origin_label, 
+                                       floor(xlim[2]/2), xlim[2]))
+  p <- p+xlab("Genomic Region (5'->3')")+ylab("Peak Count Frequency")
+  p <- p + theme_bw() + theme(legend.title=element_blank())
+  p <- p + theme(legend.position="none")
+  p <- p + ggtitle(tf_name)
+  return(p)
+}
+
+```
+
+```{r}
+fl <- list.files("~/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/consensus",
+                 recursive = TRUE, full.names=TRUE)
+fl <- fl[grep(".bed", fl)]
+
+
+tag_count_df <- data.frame("pos" = integer(0),
+                           "value" = numeric(0),
+                           "Lower" = numeric(0),
+                           "Upper" = numeric(0),
+                           "tf_name" = character(0))
+for (i in 1:length(fl)) {
+  
+  tf_name <- unlist(strsplit(fl[i], "/"))[[11]]
+  
+  if(i %% 10 == 0) { print(i) }
+  
+  if (file.size(fl[i]) > 0) {
+    
+    peaks <- readPeakFile(fl[i]) 
+    tag_matrix <- getTagMatrix(peaks, windows=promoters)
+   # p <- plotAvgProf(tag_matrix, xlim=c(-3000, 3000), conf = 0.95, resample = 1000)
+    #show(p + ggtitle(tf_name))
+    tag_count <- getTagCount(tag_matrix, xlim=c(-3000, 3000), conf = 0.95)
+    
+    
+    g <- plot_profile(tag_count = tag_count, tf_name = tf_name)
+    
+    tag_count$tf_name <- tf_name
+    tag_count_df <- bind_rows(tag_count_df, tag_count)
+    show(g)
+    
+  
+    }
+}
+```
+
