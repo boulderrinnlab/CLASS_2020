@@ -87,15 +87,17 @@ for(i in 1:length(peak_list)) {
 # They can't really be enriched/depleted in any regions...
 # So, I'll leave it up to you to filter these out of the peak list.
 
-num_peaks <- count_peaks_per_feature(features, peak_list, type = "counts")
-non_zero_peak_list <- peak_list[which(sapply(peak_list, length)) > 0 ]
-peak_list[which(length(peak_list) > 0)]
+non_zero_peak_list <- c()
+for(i in 1:length(peak_list)) {
+  if (length(peak_list[[i]]) > 0) {
+    non_zero_peak_list <- c(non_zero_peak_list, peak_list[i])
+  }
+}
 
-x <- sapply(peak_list, length)
 #How to filter zero consensus peak TFS???
 
 # Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run?
-# A: A lot! 17,000+20,000 promoters x ~190 TFs
+# A: A lot! 17,000+20,000 promoters x ~190 TFs / Also maybe just two? 
 
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
@@ -116,23 +118,30 @@ chr_len <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_
 
 shuffle_peaks <- function (peak_gr, genome) {
   #get lengths of chromosomes
-  #Issue here beause don't have peak_gr
-  chrLens <- genome[names(seqlengths(peak_gr)),"size"]
-  
-  nn <- as.vector(seqnames(peak_gr))
+  #in the line below, I changed peak_gr to region_set so I could run it (with region_set defined as GenomicRanges of the lncrna_promoters)
+  #but now when I run the line below it returns Error in genome[names(seqlengths(region_set)), "size"] :   object of type 'closure' is not subsettable ; WHAT IS GENOME??
+  chrLens <- genome[names(seqlengths(region_set)),"size"]
+  #make a vector of the sequence names (chromosomes) in peak_set
+  nn <- as.vector(seqnames(region_set))
+  #make a vector of the same length of nn and numbered 1-x where x is the length of nn (?)
   ii <- order(nn)
-  
-  w <- width(peak_gr)
-  
+  #make a vector of the same length of region_set where each entry is the width of region_set (?)
+  w <- width(region_set)
+  #make a table of how many counts are on each chromosome in nn
   nnt <- table(nn)
-  
+  #make a vector of the same length of nnt and numbered 1-x where x is the length of nnt (?)
   jj <- order(names(nnt))
+  #? nnt looks the same as it did before, unsure what this did
   nnt <- nnt[jj]
+  #can't figure this one out since can't make chrLens above, but should be similar to line above except applying to chrLens instead of nnt
   chrLens <- chrLens[jj]
+  #this is making the start sites for the peaks that will go into res below, but I'm not sure how
   ss <- unlist(sapply(1:length(nnt), function(i) sample(chrLens[i], 
                                                         nnt[i])))
+  #make a GRanges with as many seqnames (chromosome hits) as there are entries in ii, the peak/ranges start at ss and have a width assigned from the widths in peak_gr 
   res <- GRanges(seqnames = nn[ii], ranges = IRanges(ss, width = w[ii]), 
                  strand = "*")
+  #give bac the GRanges just made
   return(res)
 }
 
