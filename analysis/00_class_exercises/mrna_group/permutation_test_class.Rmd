@@ -94,8 +94,6 @@ for(i in 1:length(peak_list)) {
   }
 }
 
-#How to filter zero consensus peak TFS???
-
 # Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run?
 # A: A lot! 17,000+20,000 promoters x ~190 TFs / Also maybe just two? 
 
@@ -141,7 +139,7 @@ shuffle_peaks <- function (peak_gr, genome) {
   #make a GRanges with as many seqnames (chromosome hits) as there are entries in ii, the peak/ranges start at ss and have a width assigned from the widths in peak_gr 
   res <- GRanges(seqnames = nn[ii], ranges = IRanges(ss, width = w[ii]), 
                  strand = "*")
-  #give bac the GRanges just made
+  #give back the GRanges just made
   return(res)
 }
 
