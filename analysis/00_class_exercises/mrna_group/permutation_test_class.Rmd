@@ -11,8 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 options(stringsAsFactors = FALSE)
 library(tidyverse)
 library(GenomicRanges)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
+source("/Shares/rinn_class/data/k562_chip/analysis/util/intersect_functions.R")
+source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
 ```
 
 ## Purpose: Determine statistical enrichment depletion of each peak set vs. sets of regions.
@@ -23,15 +23,13 @@ That's what we'll be doing here. In particular, we're going to randomly shuffle 
 
 ```{r}
 # Q: Is it a reasonable thing to do, placing the peaks randomly around the genome? HINT: Can we expect that ChIP-peaks will map to centromeres?
-
+# A: We cannot expect that ChIP-peaks will map to centromeres, so we would say that randomly placing peaks around the genome might not be the best decision, but still could reasonably produce interesting results...
 # Q: What are some corrections we could apply to make the null distribution more accurate? HINT: What if some TF is enriched on one particular chromosome?
+# A: Maybe use a unique distribution for each TF.
 ## BONUS!! Calculate chromosomal enrichment for the peak sets. Are there some that are statistically significantly enriched on some chromosomes?
-
-
-## We won't be applying those corrections here since it slows down the calcultation of shuffled peaks, but it's something to be aware of in this analysis!
-
-## Q: What are some reproduciblity considerations in this analysis given that we're using random number generators to shuffle the peaks?
-
+## We won’t be applying those corrections here since it slows down the calcultation of shuffled peaks, but it’s something to be aware of in this analysis!
+# Q: What are some reproduciblity considerations in this analysis given that we’re using random number generators to shuffle the peaks?
+# A: Seed random generator when you start so that it starts at same point each time it’s run.
 
 ```
 
@@ -89,8 +87,15 @@ for(i in 1:length(peak_list)) {
 # They can't really be enriched/depleted in any regions...
 # So, I'll leave it up to you to filter these out of the peak list.
 
+num_peaks <- count_peaks_per_feature(features, peak_list, type = "counts")
+non_zero_peak_list <- peak_list[which(sapply(peak_list, length)) > 0 ]
+peak_list[which(length(peak_list) > 0)]
+
+x <- sapply(peak_list, length)
+#How to filter zero consensus peak TFS???
 
 # Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run?
+# A: A lot! 17,000+20,000 promoters x ~190 TFs
 
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
@@ -107,12 +112,20 @@ chr_len <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_
 # HINT: If you're having trouble understanding what it's doing, you can paste this into a .R file
 # and use the debugger to step through it line by line and look at the objects that are created.
 ## BONUS: Is there a way to speed this up/make it more efficient?
+
+
 shuffle_peaks <- function (peak_gr, genome) {
+  #get lengths of chromosomes
+  #Issue here beause don't have peak_gr
   chrLens <- genome[names(seqlengths(peak_gr)),"size"]
+  
   nn <- as.vector(seqnames(peak_gr))
   ii <- order(nn)
+  
   w <- width(peak_gr)
+  
   nnt <- table(nn)
+  
   jj <- order(names(nnt))
   nnt <- nnt[jj]
   chrLens <- chrLens[jj]
@@ -164,7 +177,9 @@ View(p.adjust)
 # We'll permute once and use it as the null distribution for both lncRNA promoters and mRNA promoters.
 
 
-# peak_list_nulls <- ?
+peak_list_nulls <- ?
+  
+  #What are we trying to make here? A null distribution? How?
 
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
@@ -197,6 +212,8 @@ for(i in 1:length(region_list)) {
   
   # Expected overlap calculation
   # Now we'll loop over all of the 1000 permuted peaks to calculate the overlap of our region set with the permuted peaks.
+  
+  #Having issue here because haven't made peak_list_nulls
   perm_ovs <- lapply(peak_list_nulls, function(peak_nulls) {
     permuted <- c()
     for(j in 1:length(peak_nulls)) {
