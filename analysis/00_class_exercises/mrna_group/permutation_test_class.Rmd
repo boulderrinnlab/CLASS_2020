@@ -87,15 +87,15 @@ for(i in 1:length(peak_list)) {
 # They can't really be enriched/depleted in any regions...
 # So, I'll leave it up to you to filter these out of the peak list.
 
-num_peaks <- count_peaks_per_feature(features, peak_list, type = "counts")
-non_zero_peak_list <- peak_list[which(sapply(peak_list, length)) > 0 ]
-peak_list[which(length(peak_list) > 0)]
-
-x <- sapply(peak_list, length)
-#How to filter zero consensus peak TFS???
+non_zero_peak_list <- c()
+for(i in 1:length(peak_list)) {
+  if (length(peak_list[[i]]) > 0) {
+    non_zero_peak_list <- c(non_zero_peak_list, peak_list[i])
+  }
+}
 
 # Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run?
-# A: A lot! 17,000+20,000 promoters x ~190 TFs
+# A: A lot! 17,000+20,000 promoters x ~190 TFs / Also maybe just two? 
 
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
@@ -116,23 +116,30 @@ chr_len <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_
 
 shuffle_peaks <- function (peak_gr, genome) {
   #get lengths of chromosomes
-  #Issue here beause don't have peak_gr
+  #in the line below, I changed peak_gr to region_set so I could run it (with region_set defined as GenomicRanges of the lncrna_promoters)
+  #but now when I run the line below it returns Error in genome[names(seqlengths(region_set)), "size"] :   object of type 'closure' is not subsettable ; WHAT IS GENOME??
   chrLens <- genome[names(seqlengths(peak_gr)),"size"]
-  
+  #make a vector of the sequence names (chromosomes) in peak_set
   nn <- as.vector(seqnames(peak_gr))
+  #make a vector of the same length of nn and numbered 1-x where x is the length of nn (?)
   ii <- order(nn)
-  
+  #make a vector of the same length of region_set where each entry is the width of region_set (?)
   w <- width(peak_gr)
-  
+  #make a table of how many counts are on each chromosome in nn
   nnt <- table(nn)
-  
+  #make a vector of the same length of nnt and numbered 1-x where x is the length of nnt (?)
   jj <- order(names(nnt))
+  #? nnt looks the same as it did before, unsure what this did
   nnt <- nnt[jj]
+  #can't figure this one out since can't make chrLens above, but should be similar to line above except applying to chrLens instead of nnt
   chrLens <- chrLens[jj]
+  #this is making the start sites for the peaks that will go into res below, but I'm not sure how
   ss <- unlist(sapply(1:length(nnt), function(i) sample(chrLens[i], 
                                                         nnt[i])))
+  #make a GRanges with as many seqnames (chromosome hits) as there are entries in ii, the peak/ranges start at ss and have a width assigned from the widths in peak_gr 
   res <- GRanges(seqnames = nn[ii], ranges = IRanges(ss, width = w[ii]), 
                  strand = "*")
+  #give back the GRanges just made
   return(res)
 }
 
@@ -159,6 +166,7 @@ make_permutations <- function(region_set, genome, nperms) {
 permuted_peaks <- make_permutations(peak_list[[1]], chr_len, nperms = 1000)
 
 # Q: Estimate the object size when we run it over all peak lists. 
+as.numeric(object.size(permuted_peaks))
 # BONUS: How much memory is on fiji-viz and how much is fair to use up? When would you consider running something on the 
 # compute nodes via slurm instead?
 # HINT: as.numeric(object.size(peak_list)), to turn bytes in to GB divide by 1e9.
@@ -171,16 +179,16 @@ View(p.adjust)
 
 
 # Q: Loop over peak sets and create a list of permuted peaks objects. HINT: lapply
+
+
 # For time and RAM use, if you'd just like to calculate a subset, you're welcome to.
 # In fact, when you're testing and getting everything working, I HIGHLY reccommend using just a subset of the peaks
 # HINT: peak_list[1:4]
 # We'll permute once and use it as the null distribution for both lncRNA promoters and mRNA promoters.
 
 
-peak_list_nulls <- ?
+peak_list_nulls <- lapply(peak_list[1:3], make_permutations, genome = chr_len, nperms = 1000)
   
-  #What are we trying to make here? A null distribution? How?
-
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
 ```
@@ -213,7 +221,7 @@ for(i in 1:length(region_list)) {
   # Expected overlap calculation
   # Now we'll loop over all of the 1000 permuted peaks to calculate the overlap of our region set with the permuted peaks.
   
-  #Having issue here because haven't made peak_list_nulls
+
   perm_ovs <- lapply(peak_list_nulls, function(peak_nulls) {
     permuted <- c()
     for(j in 1:length(peak_nulls)) {
@@ -249,11 +257,11 @@ resdf_long <- resdf %>%
 # is greater than or less than the mean from the null distribution.
 # We're calculating the Fisher exact test here, which we discussed in the lecture.
 # Q: What is each line doing?
-resdf_summary <- resdf_long %>% 
-  group_by(region, tf) %>%
-  summarize(observed = unique(observed),
-            mean_permuted = mean(permuted),
-            diff = observed - mean_permuted,
+resdf_summary <- resdf_long %>% # list of permuted peaks in numeric
+  group_by(region, tf) %>% # groups them by promoter type & TF
+  summarize(observed = unique(observed), #only unique obs
+            mean_permuted = mean(permuted), # takes the mean # of permuted peaks for tf
+            diff = observed - mean_permuted, # compares observed to avg permuted
             alternative = ifelse(unique(observed) < mean(permuted), "less", "greater"),
             zscore = round((unique(observed) - mean(permuted))/stats::sd(permuted), 4),
             pval = ifelse(unique(alternative) == "less", (sum(unique(observed) >= permuted, na.rm = TRUE) + 1)/(1000 + 1),
