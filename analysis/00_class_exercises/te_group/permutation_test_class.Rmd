@@ -23,10 +23,10 @@ That's what we'll be doing here. In particular, we're going to randomly shuffle 
 
 ```{r}
 # Q: Is it a reasonable thing to do, placing the peaks randomly around the genome? HINT: Can we expect that ChIP-peaks will map to centromeres? 
-#A: Yes it is reasonable, no they probably won't map to centromeres/telomeres etc
+#A: Yes it is reasonable, no they probably won't map to centromeres/telomeres etc - but maybe we should mask these regions
 
 # Q: What are some corrections we could apply to make the null distribution more accurate? HINT: What if some TF is enriched on one particular chromosome?
-#A: um not sure...we should ask about this
+#A: mask some regions - centromeres, telomeres
 
 ## BONUS!! Calculate chromosomal enrichment for the peak sets. Are there some that are statistically significantly enriched on some chromosomes?
 
@@ -92,13 +92,14 @@ for(i in 1:length(peak_list)) {
 
 ```{r}
 # Q: How many of the peak files have zero consensus peaks?
+#sapply applies a function over a list
 sapply(peak_list, length) > 0
 # They can't really be enriched/depleted in any regions...
 # So, I'll leave it up to you to filter these out of the peak list.
 peak_list <- peak_list[sapply(peak_list, length) > 0]
 
 # Q: If we're just comparing mRNA and lncRNA promoters vs. each peak set, how many permutation tests are we about to run? 
-#A: 185 TFs x all promoters = a lot of permutation tests
+#A: 185 TFs x 2 sets regions = a lot of permutation tests
 
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
@@ -118,7 +119,7 @@ chr_len <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_
 shuffle_peaks <- function (peak_gr, genome) {
   #get each chromosome length
   chrLens <- genome[names(seqlengths(peak_gr)),"size"]
-  #make a vector same length as peak_gr with correct chromosome name for each peak
+  #make a vector same length as peak_gr with correct chromosome for each observed peak
   nn <- as.vector(seqnames(peak_gr))
   #how many objects are in the vector (how many peaks in peak_gr for this TF)
   ii <- order(nn)
@@ -128,11 +129,14 @@ shuffle_peaks <- function (peak_gr, genome) {
   nnt <- table(nn)
   #number the chromosomes in nnt
   jj <- order(names(nnt))
-  #why doesn't this do anything? stuck here.
+  #order nnt in chromosome order (if not already)
   nnt <- nnt[jj]
+  #same for chromosome lengths
   chrLens <- chrLens[jj]
+  #get random start sites for each peak (sample sets random numbers)
   ss <- unlist(sapply(1:length(nnt), function(i) sample(chrLens[i], 
                                                         nnt[i])))
+  #keeps peaks the same but changes the start sites
   res <- GRanges(seqnames = nn[ii], ranges = IRanges(ss, width = w[ii]), 
                  strand = "*")
   return(res)
@@ -155,6 +159,7 @@ make_permutations <- function(region_set, genome, nperms) {
 ```{r}
 # Where is a reasonable place to use set.seed? Set the random seed where you think it should go
 # for maximum reproducibility.
+#A: right before you call the functions that need random numbers
 
 # Q: What's a reasonable number of permutations? How does the minimum achiveable p-value relate to the number of permutations we do?
 # Now let's call the make permutations function
@@ -163,14 +168,15 @@ permuted_peaks <- make_permutations(peak_list[[1]], chr_len, nperms = 1000)
 # Q: Estimate the object size when we run it over all peak lists. 
 # BONUS: How much memory is on fiji-viz and how much is fair to use up? When would you consider running something on the 
 # compute nodes via slurm instead?
+#A: 500 GB maybe - could run on compute nodes instead
 # HINT: as.numeric(object.size(peak_list)), to turn bytes in to GB divide by 1e9.
 
 # Inflation rate of one peak list
-as.numeric(object.size(permuted_peaks))/as.numeric(object.size(peak_list[1:4]))
+as.numeric(object.size(permuted_peaks))/as.numeric(object.size(peak_list[1]))
 
 View(p.adjust)
 
-
+230*(object.size(peak_list))/1e9
 
 # Q: Loop over peak sets and create a list of permuted peaks objects. HINT: lapply
 # For time and RAM use, if you'd just like to calculate a subset, you're welcome to.
@@ -178,8 +184,8 @@ View(p.adjust)
 # HINT: peak_list[1:4]
 # We'll permute once and use it as the null distribution for both lncRNA promoters and mRNA promoters.
 
-
-# peak_list_nulls <- ?
+set.seed(459734)
+peak_list_nulls <- lapply(peak_list[5:7], make_permutations, genome = chr_len, nperms = 1000)
 
 
 ###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
@@ -248,30 +254,40 @@ resdf_long <- resdf %>%
 # We're calculating the Fisher exact test here, which we discussed in the lecture.
 # Q: What is each line doing?
 resdf_summary <- resdf_long %>% 
+  #group resdf_long by region and tf
   group_by(region, tf) %>%
+  #get only unique observed overlaps for each tf
   summarize(observed = unique(observed),
+            #calculate mean permuted overlaps for all tfs
             mean_permuted = mean(permuted),
+            #are there more or less observed peaks than permuted?
             diff = observed - mean_permuted,
+            #call it less or greater if observed is less or more than permuted
             alternative = ifelse(unique(observed) < mean(permuted), "less", "greater"),
+            #calculate zscore
             zscore = round((unique(observed) - mean(permuted))/stats::sd(permuted), 4),
+            #calculate pval
             pval = ifelse(unique(alternative) == "less", (sum(unique(observed) >= permuted, na.rm = TRUE) + 1)/(1000 + 1),
                           (sum(unique(observed) <= permuted, na.rm = TRUE) + 1)/(1000 + 1)))
 
 # Let's make a histogram of the p-values
 # HINT: hist
-
+hist(resdf_summary$pval)
 # Q: We'll need to apply an adjustment to our p-values since we made multiple hypothesis tests
 # First, what was the number of tests that we made?
+#A: not sure, maybe 6
+
 # Second, apply the correction. HINT: p.adjust(method = "bonferroni")
-# resdf_summary$padj <- ?
+resdf_summary$padj <- p.adjust(resdf_summary$pval, method = "bonferroni", 6)
 
 
 # Q: How many significant overlaps did we find?
 # HINT: filter
-
+filter(resdf_summary, padj < 0.05)
 
 # Q: How many were significantly enriched vs. significantly depleted?
 # HINT: table
+table(resdf_summary$alternative)
 
 ```
 
@@ -281,7 +297,7 @@ Let's visualize some of the null distributions and how the number of observed pe
 
 ```{r}
 # Q: Do this for some of the significant associations.
-single_result <- resdf_long %>% filter(tf == "AFF1", region == "lncrna_promoters")
+single_result <- resdf_long %>% filter(tf == "ARNT", region == "lncrna_promoters")
 g <- ggplot(single_result, aes(x = permuted))
 g + geom_bar() + 
   geom_vline(xintercept = unique(single_result$observed), lty = 2) +
@@ -339,6 +355,7 @@ ggsave("figures/lncrna_mrna_promoters_vs_tf_peaks.pdf", height = 5, width = 5)
 
 ```{r}
 # Q: How does the lncRNA enrichment compare to mRNA enrichment? Does this concord with our previous results?
+#A: more enriched in mRNAs, which is consistent with what we saw before
 
 # Q: Record some other observations and findings. Make some extra plots to satisfy your curiousity!
 ```
