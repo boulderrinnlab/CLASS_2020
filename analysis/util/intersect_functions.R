@@ -131,8 +131,6 @@ intersect_peaks <- function(peak_list) {
 
 get_overlapping_peaks <- function(features, peak_list){
   
-  feature_peaks <- c()
-  
   overlaps_list <- c()
   for(j in 1:length(peak_list)) {
     ov <- findOverlaps(peak_list[[j]], features)
@@ -140,11 +138,7 @@ get_overlapping_peaks <- function(features, peak_list){
     overlaps_list <- c(overlaps_list, overlapping_peaks)
     names(overlaps_list)[length(overlaps_list)] <- names(peak_list)[j]
   }
-  
-  feature_peaks <- c(feature_peaks, list(overlaps_list))
-  names(feature_peaks)[length(feature_peaks)] <- names(feature_sets)[i]
-  
-  return(feature_peaks)
+  return(overlaps_list)
 } 
 
 
