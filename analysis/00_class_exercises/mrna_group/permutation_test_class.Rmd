@@ -185,12 +185,11 @@ View(p.adjust)
 # In fact, when you're testing and getting everything working, I HIGHLY reccommend using just a subset of the peaks
 # HINT: peak_list[1:4]
 # We'll permute once and use it as the null distribution for both lncRNA promoters and mRNA promoters.
-
-
-peak_list_nulls <- lapply(peak_list[1:3], make_permutations, genome = chr_len, nperms = 1000)
+peak_list_sub <- peak_list[c("RAD51", "MCM5", "DDX20")]
+names(peak_list_sub)
+peak_list_nulls <- lapply(peak_list[140:143], make_permutations, genome = chr_len, nperms = 1000)
   
 
-###### WHEN YOU GET HERE, SLACK US IN THE #INREALTIME CHANNEL AND WE'LL CHECK IN ######
 ```
 
 ```{r}
