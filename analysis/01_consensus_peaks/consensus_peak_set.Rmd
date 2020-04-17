@@ -73,29 +73,4 @@ g + geom_point() +
   xlab("Number of peaks") + 
   geom_text()
 ```
-
-```{r}
-fl <- list.files("results", full.names = T)
-peak_info <- data.frame("TF" = character(),
-                        "peak_size" = numeric())
-for(i in 1:length(fl)) {
-  peaks <- rtracklayer::import(fl[i])
-  peak_size <- width(peaks)
-  if(length(peak_size) > 0) {
-      peak_info <- bind_rows(peak_info,
-                          data.frame("TF" =unique_tf[[i]],
-                                     "peak_size" = peak_size))
-  }
-}
-```
-
-
-```{r}
-tfs_to_plot <- c("POLR2A", "ARID1B", "SUPT5H", "eGFP-ZNF512")
-g <- ggplot(peak_info %>% filter(TF %in% tfs_to_plot), aes(x = log10(peak_size), fill = TF))
-g + geom_density(alpha = 0.2)
-peak_size_summary <- peak_info %>% group_by(TF) %>%
-  summarize("mean_size" = mean(peak_size), "sd_size" = sd(peak_size))
-g <- ggplot(peak_size_summary, aes(x = log10(mean_size), y = log10(sd_size), label = TF))
-g + geom_point()+geom_text()
-```
+#TODO Make a nice historgram or density plot
