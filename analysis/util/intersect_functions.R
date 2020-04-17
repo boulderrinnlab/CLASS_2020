@@ -19,7 +19,7 @@
 #' @param consensus_file_path the path to consensus peak files
 
 
-import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/") {
+import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks") {
   peak_files <- list.files(consensus_file_path, full.names = T)
   file_names <- str_extract(peak_files, "[\\w-]+\\.bed")
   tf_name <- str_extract(file_names, "^[^_]+(?=_)")
@@ -63,6 +63,7 @@ create_consensus_peaks <- function(broadpeakfilepath = "/Shares/rinn_class/data/
   
   unique_tf <- unique(tf_name)
   
+  consensus_peaks <- list()
   # This for loop will iterate over all dna binding proteins.
   for(i in 1:length(unique_tf)) {
     
@@ -77,14 +78,20 @@ create_consensus_peaks <- function(broadpeakfilepath = "/Shares/rinn_class/data/
       peak_list <- c(peak_list, read_peaks(tf_files[j]))
     }
     
+    canonical_chr <- c(paste0("chr", 1:22), "chrM", "chrX", "chrY")
+    for(i in 1:length(peak_list)) {
+      peak_list[[i]] <-peak_list[[i]][which(seqnames(peak_list[[i]]) %in% canonical_chr)]
+    }
+    
     final_peakset <- intersect_peaks(peak_list = peak_list)
     if(length(final_peakset) > 0) {
       final_peakset$name <- paste0(tf, "_", 1:length(final_peakset))
     }
-    # write out that peakset as a bed file. 
-    #rtracklayer::export(final_peakset, paste0("results/", tf, "_consensus_peaks.bed"))
+    
+    consensus_peaks <- c(consensus_peaks, list(final_peakset))
+    names(consensus_peaks)[length(consensus_peaks)] <- tf
   }
-  return(final_peakset)
+  return(consensus_peaks)
 }
 
 # TODO: refactor

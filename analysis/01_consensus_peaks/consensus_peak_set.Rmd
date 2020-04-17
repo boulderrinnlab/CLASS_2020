@@ -41,6 +41,8 @@ for(i in 1:length(consensus_peaks)) {
 
 ```
 
+
+# making a dataframe of intersected peaks to summarize TF name, numpeaks and peak-length
 ```{r}
 
 
