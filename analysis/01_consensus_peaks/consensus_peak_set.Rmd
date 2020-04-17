@@ -1,5 +1,6 @@
+
 ---
-title: "Robust peak set: Peaks in all replicates"
+title: "Final Consensus Peaks File"
 author: "JR & Michael"
 date: "3/7/2020"
 output: html_document
@@ -10,104 +11,60 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 options(stringsAsFactors = FALSE)
-
-# Note that we're only loading libraries that will be used in the script
-# And all libraries that are used are listed here (except dependencies)
 library(GenomicRanges)
 library(rtracklayer)
 library(tidyverse)
+source("/Shares/rinn_class/data/CLASS_2020/analysis/util/_setup.R")
+source("/Shares/rinn_class/data/CLASS_2020/analysis/util/intersect_functions.R")
 ```
+
 
 # Purpose: Create consensus peak sets
-
-Here we'd just like to take the replicate files per TF and create one peak set per TF with the subset of peaks that had an overlapping peak in all replicates. This is a very conservative approach and we can always loosen the constraints later.
+# Here we'd just like to take the replicate files per TF and create one peak set per TF with the subset of peaks that had an 
+# overlapping peak in all replicates. 
 
 ```{r}
-# The functions used for doing the work are defined above where the function is called
-# So that the function will be available in the environment when it is used later in the script.
-read_peaks <- function(broad_peak_file) {
-  # A broad peak file is just a tab separated file 
-  dat <- read.table(broad_peak_file, sep = "\t")
-  gr <- GRanges(seqnames = dat$V1,
-                ranges = IRanges(start=dat$V2,end=dat$V3))
-  return(gr)
-}
+
+consensus_peaks <- create_consensus_peaks(broadpeakfilepath = "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak")
+
+num_peaks <- sapply(consensus_peaks, length)
 
 
-# This is the function that will be doing the core of the work here. 
-# When two peaks intercept, we will take their outer boundaries to be the new
-# peak -- using the reduce function.
-intersect_peaks <- function(peak_list) {
-  combined_peaks <- peak_list[[1]]
-  for(i in 2:length(peak_list)) {
-    pl_ov <- findOverlaps(combined_peaks, peak_list[[i]])
-    pl1 <- combined_peaks[unique(pl_ov@from)]
-    pl2 <- peak_list[[i]][unique(pl_ov@to)]
-    combined_peaks <- GenomicRanges::reduce(union(pl1, pl2))
-  }
-  return(combined_peaks)
+# We're going toconsensus_peaks apply a cutoff at 250 peaks
+consensus_peaks <- consensus_peaks[num_peaks > 250]
+
+
+# Export the peak lists.
+for(i in 1:length(consensus_peaks)) {
+  rtracklayer::export(consensus_peaks[[i]], paste0("results/", names(consensus_peaks)[i], "_consensus_peaks.bed"))
 }
+
 ```
 
-
 ```{r}
 
-# We're going to iterate over all the files to make it work. 
-fl <- list.files("/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak",
-                  full.names=TRUE)
-fl <- fl[grep("peaks.broadPeak", fl)]
 
-# REGEX voodoo
-tf_name <- sapply(fl, function(x){
-  y <-  unlist(strsplit(x, "/"))[[11]]
-  unlist(strsplit(y, "_"))[[1]]
-})
-unique_tf <- unique(tf_name)
-
-i <- 1
-# This for loop will iterate over all TFs.
-for(i in 1:length(unique_tf)) {
-  # load all the peak files corresponding to this tf
-  tf <- unique_tf[i]
-  tf_index <- grep(tf, tf_name)
-  tf_files <- fl[tf_index]
- 
-  peak_list <- c()
-  for(j in 1:length(tf_files)) {
-    # See the read peaks function to know what subfunctions are called.
-    peak_list <- c(peak_list, read_peaks(tf_files[j]))
-  }
-  # create intersect -- the only peaks left will be peaks in all replicates
-  # function that will take a list of granges objects and return 
-  # one granges object with merged peaks that are in all replicates
-  final_peakset <- intersect_peaks(peak_list = peak_list)
-  if(length(final_peakset) > 0) {
-    final_peakset$name <- paste0(tf, "_", 1:length(final_peakset))
-  }
-  # write out that peakset as a bed file. 
-  rtracklayer::export(final_peakset, paste0("results/", tf, "_consensus_peaks.bed"))
-}
-```
-
-### Plotting and characterizing the new peak sets
-
-
-```{r}
-# Let's load our new peak files into one single data frame to be able to plot them more easily.
-fl <- list.files("results", full.names = T)
+fl <- list.files("results/", full.names = T)
 peak_summary <- data.frame("TF" = character(),
                            "numpeaks" = numeric(), 
                            "peak_length" = numeric())
+tfs <- sapply(fl, function(x) {
+  unlist(strsplit(unlist(strsplit(x,"//"))[[2]], "_"))[[1]]
+})
 for(i in 1:length(fl)) {
 peaks <- rtracklayer::import(fl[i], format = "bed")
 num_peaks <- length(peaks)
 peak_length <- sum(width(peaks))
 peak_summary <- bind_rows(peak_summary,
-                          data.frame("TF" =unique_tf[i],
+                          data.frame("TF" =tfs[i],
                                      "numpeaks" = num_peaks,
                                      "peak_length" = peak_length))
+
+
 }
 ```
+
+
 #Plotting
 ```{r}
 g <- ggplot(peak_summary, aes(x = numpeaks, y = peak_length, label = TF))
