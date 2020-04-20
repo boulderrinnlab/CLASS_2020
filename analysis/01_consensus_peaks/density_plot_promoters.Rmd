@@ -69,7 +69,10 @@ g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
   xlab(expression("Number of TFs")) +
   ylab(expression("Density")) +
   ggtitle("Promoter binding events at all genes")
+```
+Figure 1. Density plot of number of binding events at a given promoter.
 
+```{r}
 ggsave("k562_promoter_binding_density.png")
 ggsave("k562_promoter_binding_density.pdf")
 ```
