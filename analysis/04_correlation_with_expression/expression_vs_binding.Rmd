@@ -32,7 +32,7 @@ source("analysis/util/_setup.R")
 #        intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
 
 
-```{r converting_read_counts_to_TPM}
+```{r read_counts_to_TPM}
 
 counts <- featureCounts(c("ENCFF625ZBS.bam", "ENCFF630HEX.bam"),
                         annot.ext = "../../../Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
@@ -56,7 +56,7 @@ tpm <- expression %>% group_by(gene_id) %>%
 ```
 
 
-```{r getting_list_of_consensus_peaks}
+```{r consensus_peaks}
 
 #' @description import_peaks
 #' this function will compile .bed files of consensus peaks for multiple DNA-binding proteins into a list
@@ -84,7 +84,7 @@ peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consen
 ```
 
 
-```{r getting_promoters_from_gencode}
+```{r promoters_from_gencode}
 
 gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
@@ -112,7 +112,7 @@ promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA" | gtf_promo
 ```
 
 
-```{r determining_the_number_of_peaks_in_each_promoter}
+```{r peaks_per_promoter}
 
 #' @description count_peaks_per_feature
 #' this function will create a matrix with counts for all DNA-binding protein peaks in each genomic region
@@ -141,7 +141,7 @@ promoter_peak_count <- count_peaks_per_feature(promoters, peak_list)
 ```
 
 
-```{r creating_a_data_frame_of_genes_peak_counts_and_gene_types}
+```{r peak_count_data_frame}
 
 promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0),
                            nrow = dim(promoter_peak_count)[1],
@@ -158,7 +158,7 @@ peak_occurence_df <- merge(peak_occurence_df,tpm)
 ```
 
 
-```{r plotting_expression_vs_binding_events}
+```{r plot_expression_vs_binding_events}
 
 g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
 
@@ -174,7 +174,7 @@ g + geom_point(alpha = 0.2) +
 # ggsave("figures/k562_expression_vs_promoter_binding_all_points.pdf")
 ```
 
-```{r plotting_expression_vs_binding_events_but_now_there_are_ghosts_that_have_no_epression_and_the_messy_dot_situation_is_gone}
+```{r plot_expression_v_binding_events_ghosts}
 
 g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
 g + 
@@ -191,7 +191,7 @@ g +
 ```
 
 
-```{r plotting_frequency_of_promoters_with_each_peak_density_and_histograms_for_peaks_of_different_biotypes}
+```{r biotype_histogram}
 
 peak_occurence_df$expression <- "off"
 peak_occurence_df[which(peak_occurence_df$tpm > 0.001), "expression"] <- "expressed"
@@ -211,11 +211,11 @@ g + geom_histogram(binwidth = 5)  +
 ```
 
 
-```{r plotting_peak_occurances_for_lowly_vs_highly_bound_promoter_regions}
+```{r plot_peak_occurrence}
 
 peak_occurence_df$tf_binding <- "low"
 peak_occurence_df[which(peak_occurence_df$number_of_tfs > 25), "tf_binding"] <- "high"
 
 g <- ggplot(peak_occurence_df, aes(x = log10(tpm), color = tf_binding))
-g + geom_density(alpha = 0.2)
+g + geom_density(alpha = 0.2) 
 ```
