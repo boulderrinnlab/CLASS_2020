@@ -26,6 +26,12 @@ lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "oc
 mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurence")
 ```
 
+Subtract promotors from peak list
+```{r}
+prom_overlaps <- get_overlapping_peaks(mrna_promoters, peak_list)
+
+```
+
 ```{r}
 
 # lncrna promoter occupancy 
