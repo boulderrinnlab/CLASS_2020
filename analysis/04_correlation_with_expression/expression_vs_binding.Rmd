@@ -245,29 +245,38 @@ library(tidyverse)
 library(regioneR)
 ```
 
-```{r}
-# Import peaks
-peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
-# Import gencode
-gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-lncrna_promoters <- get_promoter_regions(gencode_gr, biotype = "lncRNA")
-mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
-lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurence")
-mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurence")
-```
-
 ```{r chi_squared}
 
+# Get ghost promoters
 ghosts <- peak_occurence_df %>% filter(tpm < 0.001)
 ghosts <- ghosts[which(ghosts$number_of_tfs >= 7),]
-
 ghost_promoters <- gtf_promoters[gtf_promoters$gene_id %in% ghosts$gene_id,]
 
-peaksa <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2A_consensus_peaks.bed")
-peaksb <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2B_consensus_peaks.bed")
-polii_peak_list <- c(peaksa, peaksb)
+# Get POLII peaks
+poliia <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2A_consensus_peaks.bed")
+poliib <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2B_consensus_peaks.bed")
 
-pol_ghost_overlaps <- findOverlaps(polii_peak_list,ghost_promoters)
+# Get ghosts with and without POLII in them
+pol_ghost_overlaps <- findOverlaps(ghost_promoters, pollii_peaks)
+pol_ghost_proms <- ghost_promoters[unique(pol_ghost_overlaps@from)]
+nn <- c(1:length(ghost_promoters))
+mm <- subset(nn, !(nn %in% pol_ghost_overlaps@from))
+nopol_ghost_proms <- ghost_promoters[mm]
+
+pol_matrix <- count_peaks_per_feature(pol_ghost_proms, peak_list, type = "occurence")
+nopol_matrix <- count_peaks_per_feature(nopol_ghost_proms, peak_list, type = "occurence")
+
+pol_num_overlaps <- rowsums(pol_matrix)
+nopol_matrix <- rowsums(nopol_matrix)
+num_peaks <- sapply(peak_list, length)
+total_pol <- length(pol_ghost_proms)
+total_nopol <- length(nopol_ghost_proms)
+total_ghosts <- length(ghost_promoters)
+chisq_res <- data.frame("tf" =character(),
+                  "pol_peaks_observed" = numeric(),
+                  "chisq_stat" = numeric(),
+                  "chisq_pval" = numeric(),
+                  "pol_peaks_expected" = numeric())
 
 # from here on out is Michael's code
 lncrna_num_overlaps <- rowSums(lncrna_matrix)
