@@ -160,7 +160,7 @@ peak_occurence_df <- merge(peak_occurence_df,tpm)
 
 ```
 
-Figure A: Scatter plot of Number of Transcription factors vs. Expression. 
+Figure A: Scatter plot of Number of Transcription factors vs. Expression. The trend lines are based on the number of Transcription Factors (TFs) binding to a gene versus ChiP Peak expression data.  In red are gene that are protein coding.  In black are genes that encode lncRNAs.  
 ```{r plot_expression_vs_binding_events}
 
 g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
@@ -179,7 +179,7 @@ g + geom_point(alpha = 0.2) +
 # ggsave("figures/k562_expression_vs_promoter_binding_all_points.pdf")
 ```
 
-Figure B: Scattter plot of number of transcription factors bound to a promoter vs. promoter Expression
+Figure B: Scattter plot of number of transcription factors bound to a promoter vs. promoter Expression. The trend lines are based on the number of Transcription Factors (TFs) binding to a gene versus ChiP Peak expression data.  In red are gene that are protein coding.  In black are genes that encode lncRNAs. The data points not fitted to a trendline have TF binding but not ChiP Peak expression.
 ```{r plot_expression_v_binding_events_ghosts}
 
 g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
@@ -196,7 +196,9 @@ g +
 # ggsave("figures/k562_expression_vs_promoter_binding.pdf")
 ```
 
-Figure C: Histogram of the peak occurence over the number_of_tfs vs density of promoters
+Figure C: Boxplot of lncRNA and protein coding genes that are expressed and not expressed and their corresponding number of bound TFs. x-values range from 30-100 TFs based on Figure A,B.
+
+Figure D: Histogram of promoter density occurence vs the number_of_tfs. 
 ```{r biotype_histogram}
 
 peak_occurence_df$expression <- "off"
@@ -219,7 +221,7 @@ g + geom_histogram(binwidth = 5)  +
 
 ```
 
-Figure D: Peak occurence vs number of TFs and density of promoters. 
+Figure E: Peak occurence vs number of TFs and density of promoters. In blue are genes with low TF binding (# of TF < 25). Red histogram shows genes with high number of TFs (# of TF > 25). x-axis shows transcripts per kilobase million. y-axis show promoter density. 
 ```{r plot_peak_occurrence}
 
 peak_occurence_df$tf_binding <- "low"
