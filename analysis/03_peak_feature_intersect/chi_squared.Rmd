@@ -77,18 +77,18 @@ write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
 
 # Plot the difference between number of observed and expected peaks in lncRNA promoters for each TF versus the -log10 of the chi square p-value
 g <- ggplot(chisq_res, aes(x = lncrna_diff, y = -log10(chisq_pval)))
-g + geom_point() + geom_smooth() 
+g + geom_point()
 
 # Zoom in on the above plot to look at just at a few TFs centered around diff = 0, including those with positive values of observed-expected number of peaks in lncRNA promoters, which are labeled by name
 g2 <- ggplot(chisq_res, aes(x = lncrna_diff, y = -log10(chisq_pval) ))
-g2 + geom_point() + geom_smooth()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, lncrna_diff > 0), aes(lncrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
+g2 + geom_point()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, lncrna_diff > 0), aes(lncrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
 
 # Plot the difference between number of observed and expected peaks in mRNA promoters for each TF versus the -log10 of the chi square p-value
 g3 <- ggplot(chisq_res, aes(x = mrna_diff, y = -log10(chisq_pval) ))
-g3 + geom_point() + geom_smooth() 
+g3 + geom_point()
 
 # Zoom in on the above plot to look at just at a few TFs centered around diff = 0; label the TFs with positive diff values by name 
 g4 <- ggplot(chisq_res, aes(x = mrna_diff, y = -log10(chisq_pval) ))
-g4 + geom_point() + geom_smooth()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, mrna_diff > 0), aes(mrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
+g4 + geom_point() + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, mrna_diff > 0), aes(mrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
 
 ```
