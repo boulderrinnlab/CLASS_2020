@@ -1,5 +1,5 @@
 ---
-title: "mRNA vs lncRNA TR binding"
+title: "mRNA vs lncRNA TF binding"
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -12,7 +12,6 @@ source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
 library(GenomicRanges)
 library(tidyverse)
 library(effectsize)
-library(regioneR)
 ```
 
 ```{r}
@@ -28,8 +27,7 @@ mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occure
 
 ```{r}
 
-# lncrna promoter occupancy 
-
+# Look at number of observed versus expected peaks in lncRNA and mRNA promoters for each DNA binding protein (TF); compare to chi square p-value result in plots below
 
 lncrna_num_overlaps <- rowSums(lncrna_matrix)
 mrna_num_overlaps <- rowSums(mrna_matrix)
@@ -41,7 +39,9 @@ chisq_res <- data.frame("tf" =character(),
                         "lncrna_peaks_observed" = numeric(),
                         "chisq_stat" = numeric(),
                         "chisq_pval" = numeric(),
-                        "lncrna_peaks_expected" = numeric())
+                        "lncrna_peaks_expected" = numeric(),
+                        "mrna_peaks_observed" = numeric(),
+                        "mrna_peaks_expected" = numeric())
 for(i in 1:length(num_peaks)) {
   total_peaks <- num_peaks[[i]]
   df1 <- data.frame("gene_type" = c("lncRNA","lncRNA", "mRNA", "mRNA"),
@@ -55,8 +55,6 @@ for(i in 1:length(num_peaks)) {
     as.matrix()
   
   csres <- chisq.test(df1)
-  
-  # TODO add phi calculation; r package effectsize 
   
   phi_coef <- phi(df1)
   
@@ -65,113 +63,32 @@ for(i in 1:length(num_peaks)) {
                     "chisq_stat" = csres$statistic,
                     "chisq_pval" = csres$p.value,
                     "lncrna_peaks_expected" = csres$expected[1,1],
-                    "phi_coefficient" = phi_coef$phi)
+                    "phi_coefficient" = phi_coef$phi,
+                    "mrna_peaks_observed" = mrna_num_overlaps[[i]],
+                    "mrna_peaks_expected" = csres$expected[1,2])
+  # Update chisq_res to include number of observed and expected peaks, chi square value, and     p-value for each TF so that we can use this information to plot
   chisq_res <- bind_rows(chisq_res, tdf)
 }
 
 chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
-chisq_res$diff <- chisq_res$lncrna_peaks_observed - chisq_res$lncrna_peaks_expected
+chisq_res$lncrna_diff <- chisq_res$lncrna_peaks_observed - chisq_res$lncrna_peaks_expected
+chisq_res$mrna_diff <- chisq_res$mrna_peaks_observed - chisq_res$mrna_peaks_expected
 write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
 
-# full lncRNA promoter occupancy plot
-g <- ggplot(chisq_res, aes(x = diff, y = -log10(chisq_pval) ))
+# Plot the difference between number of observed and expected peaks in lncRNA promoters for each TF versus the -log10 of the chi square p-value
+g <- ggplot(chisq_res, aes(x = lncrna_diff, y = -log10(chisq_pval)))
 g + geom_point() + geom_smooth() 
 
+# Zoom in on the above plot to look at just at a few TFs centered around diff = 0, including those with positive values of observed-expected number of peaks in lncRNA promoters, which are labeled by name
+g2 <- ggplot(chisq_res, aes(x = lncrna_diff, y = -log10(chisq_pval) ))
+g2 + geom_point() + geom_smooth()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, lncrna_diff > 0), aes(lncrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
 
-# zoom in plot 
-g2 <- ggplot(chisq_res, aes(x = diff, y = -log10(chisq_pval) ))
-g2 + geom_point() + geom_smooth()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, diff > 0), aes(diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
-
-
-
-
-
-#ggsave("figures/pvalue_vs_phi.png")
-
-# contingency table
-# lncRNA yes lncRNA no
-# tf bound
-# tf not bound
-```
-
-``` {r}
-
-# mrna promoter occupancy chisquared
-
-
-lncrna_num_overlaps <- rowSums(lncrna_matrix)
-mrna_num_overlaps <- rowSums(mrna_matrix)
-num_peaks <- sapply(peak_list, length)
-total_lncrna <- length(lncrna_promoters)
-total_mrna <- length(mrna_promoters)
-total_genes <- total_lncrna + total_mrna
-chisq_res2 <- data.frame("tf" =character(),
-                        "lncrna_peaks_observed" = numeric(),
-                        "chisq_stat" = numeric(),
-                        "chisq_pval" = numeric(),
-                        "lncrna_peaks_expected" = numeric())
-
-for(i in 1:length(num_peaks)) {
-  total_peaks <- num_peaks[[i]]
-  df1 <- data.frame("gene_type" = c("lncRNA","lncRNA", "mRNA", "mRNA"),
-                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
-                    "count" = c(lncrna_num_overlaps[[i]],
-                                total_lncrna - lncrna_num_overlaps[[i]],
-                                mrna_num_overlaps[[i]],
-                                total_mrna - mrna_num_overlaps[[i]])) %>%
-    pivot_wider(names_from = gene_type, values_from = count) %>%
-    column_to_rownames("promoter_bound") %>%
-    as.matrix()
-  
-  csres <- chisq.test(df1)
-  
-  # TODO add phi calculation; r package effectsize 
-  #  phi_coef <- phi(df1)
-  
-  tdf2 <- data.frame("tf" = names(num_peaks[i]),
-                    "lncrna_peaks_observed" = lncrna_num_overlaps[[i]],
-                    "chisq_stat" = csres$statistic,
-                    "chisq_pval" = csres$p.value,
-                    "lncrna_peaks_expected" = csres$expected[1,1],
-                    "mrna_peaks_observed" = mrna_num_overlaps[[i]],
-                    "mrna_peaks_expected" = csres$expected[1,2])
-  chisq_res2 <- bind_rows(chisq_res2, tdf2)
-}
-
-
-chisq_res2$padj <- p.adjust(chisq_res2$chisq_pval, method = "BH")
-chisq_res2$diff <- chisq_res2$mrna_peaks_observed - chisq_res2$mrna_peaks_expected
-# write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
-
-# full mRNA promoter occupancy plot
-g3 <- ggplot(chisq_res2, aes(x = diff, y = -log10(chisq_pval) ))
+# Plot the difference between number of observed and expected peaks in mRNA promoters for each TF versus the -log10 of the chi square p-value
+g3 <- ggplot(chisq_res, aes(x = mrna_diff, y = -log10(chisq_pval) ))
 g3 + geom_point() + geom_smooth() 
 
-
-# zoom in plot 
-g4 <- ggplot(chisq_res2, aes(x = diff, y = -log10(chisq_pval) ))
-g4 + geom_point() + geom_smooth()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res2, diff > 0), aes(diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
-
-
-
-
-
-#ggsave("figures/pvalue_vs_phi.png")
-
-# contingency table
-# lncRNA yes lncRNA no
-# tf bound
-# tf not bound
+# Zoom in on the above plot to look at just at a few TFs centered around diff = 0; label the TFs with positive diff values by name 
+g4 <- ggplot(chisq_res, aes(x = mrna_diff, y = -log10(chisq_pval) ))
+g4 + geom_point() + geom_smooth()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, mrna_diff > 0), aes(mrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
 
 ```
-
-``` {r}
-# plot mrna vs lncrna somehow
-
-# g5 <- ggplot(chisq_res2, aes(x = diff, y = -log10(chisq_pval)))
-# g6 <- ggplot(chisq_res, aes(x = diff, y = -log10(chisq_pval)))
-# g5 <- bind_rows(g5, g6)
-# g5 + g6 + geom_point() + geom_smooth()
-
-```
-
