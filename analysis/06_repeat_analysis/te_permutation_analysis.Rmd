@@ -17,234 +17,144 @@ source("../util/_setup.R")
 
 ## Purpose: Determine statistical enrichment depletion of each peak set vs. sets of regions.
 
-To do this we will make random permutations of your data to build up an empirical null distribution which you can then compare your observed data to. We're going to randomly shuffle the peaks around the genome. We won't be changing the widths of the peaks, we're just going to be changing the locations of the peaks in the genome. For each of those permuted peaks, we'll look at the number of overlaps randomly occuring by chance given the number and widths of each peak set.
+To determine if peaks are significantly enriched or depleted in each TE family/class, we will randomly shuffle the peaks around the genome and calculate the number of overlaps occuring by chance.
+
+We've already done the permutation, which takes a long time to run, so here we are just reading in the permutation results to analyze.
 
 ```{r import}
-# Read in the consensus peak lists
-peak_list <- import_peaks()
-
-# Load the annotated genome
-gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-
-# read in the repeat regions from repeatmasker
-rmsk <- import_repeatmasker()
-
-#subset by TE family
-rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
-names(rmsk_family) <- paste(names(rmsk_family), "family", sep = "_")
-
-#subset by TE class
-rmsk_class <- subset_rmsk(rmsk, rep_level = "class")
-names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
-
-#read in permutation results for TE classes
+#read in permutation results for TE classes and families
 permutation_te_class <- read.csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_intersect/results/permutation_results_repeat_classes.csv")
 
 permutation_te_family <- read.csv("/Shares/rinn_class/data/k562_chip/analysis/11_peak_feature_intersect/results/permutation_results_repeat_families.csv")
 
-
-# # Also, so we don't run into issues down the road, let's sanitize the regions and peaks to just the canonical chromosomes.
-# canonical_chr <- c(paste0("chr", 1:22), "chrM", "chrX", "chrY")
-# 
-# #region_list <- c("te_family" = list(rmsk_family), "te_class" = list(rmsk_class))
-# 
-# #get only repeat family locations on canonical chromosomes
-# for(i in 1:length(rmsk_family)) {
-#   rmsk_family[[i]] <- rmsk_family[[i]][which(seqnames(rmsk_family[[i]]) %in% canonical_chr)]
-# }
-# 
-# #get only repeat class locations on canonical chromosomes
-# for(i in 1:length(rmsk_class)) {
-#   rmsk_class[[i]] <- rmsk_class[[i]][which(seqnames(rmsk_class[[i]]) %in% canonical_chr)]
-# }
-# 
-# # Remove the factors in the seqnames that are not canonical chromosomes.
-# for(i in 1:length(peak_list)) {
-#   tmp_pl <- peak_list[[i]][which(seqnames(peak_list[[i]]) %in% canonical_chr)]
-#   
-#   tmp_pl <- tmp_pl %>% as.data.frame()
-#   
-#   tmp_pl <- GRanges(seqnames = as.character(tmp_pl$seqnames),
-#                     ranges = IRanges(start = tmp_pl$start,
-#                                      end = tmp_pl$end),
-#                     strand = tmp_pl$strand,
-#                     name = tmp_pl$name)
-#   peak_list[[i]] <- tmp_pl
-# }
 ```
 
-
-
-```{r}
-
-# Now let's calculate the number of overlaps for each of our region sets (mRNA and lncRNA)
-
-# First let's create an empty data frame that we can add to.
-resdf <- tibble(region = character(),
-                tf = character(),
-                observed = integer(),
-                permuted = character())
-
-for(i in 1:length(region_list)) {
-  region_set_name <- names(region_list)[i]
-  region_set <- region_list[[i]]
-
-  # Look at the observed overlaps
-  # This is how many overlaps actually occured with peaks in the data
-  # and lncRNAs and mRNAs
-  res <- lapply(peak_list, function(peaks) { 
-    length(which(countOverlaps(region_set, peaks) > 0)) 
-  }) 
-  # Let's make this into a data frame to match up with our output data frame
-  res <- res %>%
-    as.data.frame() %>%
-    pivot_longer(everything(), names_to = "tf", values_to = "observed")
-  
-  # Expected overlap calculation
-  # Now we'll loop over all of the 1000 permuted peaks to calculate the overlap of our region set with the permuted peaks.
-  perm_ovs <- lapply(peak_list_nulls, function(peak_nulls) {
-    permuted <- c()
-    for(j in 1:length(peak_nulls)) {
-      if(class(peak_nulls[[j]]) != "GRanges") { stop(paste0("Not a Granges object")) }
-      permuted <- c(permuted, length(which(countOverlaps(region_set, peak_nulls[[j]]) > 0)))
-    }
-    # For ease, we'll return this as one string of numbers separated by semicolons.
-    permuted <- paste(permuted, collapse = ";")
-    return(permuted)
-  })
-  
-  perm_ovsdf <- data.frame("tf" = names(unlist(perm_ovs)), 
-                           "permuted" = unlist(perm_ovs))
-  # Now let's merge it into our previous data frame.
-  res <- merge(res, perm_ovsdf)
-  res$region <- region_set_name
-  # And change the order of the columns for readability
-  res <- res %>% dplyr::select(region, everything())
-  resdf <- bind_rows(resdf, res)
-}
-```
+Calculate z-score and p-value using the Fischer exact test for TE families:
 
 ```{r}
-# Now that we have the empirical null distribution calculated, let's calculate a zscore and a p-value based on that null distribution.
-
-# First we'll separate out the character numbers and change them back to numeric.
-resdf_long <- resdf %>%
+# First separate out the character numbers and change them back to numeric.
+permutation_te_family_long <- permutation_te_family %>%
   separate_rows(permuted, sep = ";") %>%
   mutate(permuted = as.numeric(permuted))
 
-# Okay, now let's calculate the zscore and pvalue
-# We'll also determine whether the peaks are enriched or depleted based on whether the observed value
-# is greater than or less than the mean from the null distribution.
-# We're calculating the Fisher exact test here, which we discussed in the lecture.
-# Q: What is each line doing?
-resdf_summary <- resdf_long %>% 
-  #group resdf_long by region and tf
+# Okay, now let's calculate the zscore and pvalue.
+# We're calculating the Fisher exact test here. We did 1000 permutations, so we will correct for that.
+permutation_te_family_summary <- permutation_te_family_long %>% 
   group_by(region, tf) %>%
-  #get only unique observed overlaps for each tf
   summarize(observed = unique(observed),
-            #calculate mean permuted overlaps for all tfs
             mean_permuted = mean(permuted),
-            #are there more or less observed peaks than permuted?
             diff = observed - mean_permuted,
-            #call it less or greater if observed is less or more than permuted
             alternative = ifelse(unique(observed) < mean(permuted), "less", "greater"),
-            #calculate zscore
             zscore = round((unique(observed) - mean(permuted))/stats::sd(permuted), 4),
-            #calculate pval
             pval = ifelse(unique(alternative) == "less", (sum(unique(observed) >= permuted, na.rm = TRUE) + 1)/(1000 + 1),
                           (sum(unique(observed) <= permuted, na.rm = TRUE) + 1)/(1000 + 1)))
 
-# Let's make a histogram of the p-values
-# HINT: hist
-hist(resdf_summary$pval)
-# Q: We'll need to apply an adjustment to our p-values since we made multiple hypothesis tests
-# First, what was the number of tests that we made?
-#A: not sure, maybe 6
+# Apply the Benjamini-Hochberg correction.
+permutation_te_family_summary$padj <- p.adjust(permutation_te_family_summary$pval, method = "BH")
 
-# Second, apply the correction. HINT: p.adjust(method = "bonferroni")
-resdf_summary$padj <- p.adjust(resdf_summary$pval, method = "bonferroni", 6)
-
-
-# Q: How many significant overlaps did we find?
-# HINT: filter
-filter(resdf_summary, padj < 0.05)
-
-# Q: How many were significantly enriched vs. significantly depleted?
-# HINT: table
-table(resdf_summary$alternative)
+# Filter out any families with no z-scores.
+permutation_te_family_summary <- filter(permutation_te_family_summary, zscore != "NaN")
 
 ```
 
-### Plotting
-
-Let's visualize some of the null distributions and how the number of observed peaks compares
+Plot a clustered heatmap of overlaps at TE families: 
 
 ```{r}
-# Q: Do this for some of the significant associations.
-single_result <- resdf_long %>% filter(tf == "ARNT", region == "lncrna_promoters")
-g <- ggplot(single_result, aes(x = permuted))
-g + geom_bar() + 
-  geom_vline(xintercept = unique(single_result$observed), lty = 2) +
-  theme_paperwhite() + 
-  ggtitle("Permuted overlaps vs. observed",
-    subtitle = paste0("TF: ", unique(single_result$tf), " -- Region: ", unique(single_result$region))) + 
-  xlab("Number of overlaps") + 
-  ylab("Count") 
-ggsave(paste0("figures/permuted_vs_observed_",unique(single_result$tf), "_", unique(single_result$region), ".pdf"))
-
-# A note on plots:
-# As we move closer to preparing figures for publication, it will be increasingly important to have a unified aesthetic to the figures
-# -- this includes having the axes labeled and the plot titled and saved as a pdf so that we can make the figures in Illustrator/ Inkscape.
-# In particular, let's go with these colors where we can: c("#424242","#a8404c")
-```
-
-```{r}
-
-# Let's make a heatmap of our results.
-g <- ggplot(resdf_summary, aes(x = tf, y = region, fill = zscore))
-g + geom_raster() + scale_fill_gradient2() + coord_flip() + 
-  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
-
-
-# Before we do, let's cluster the rows and columns 
-# Right now they're ordered by alphanumeric order
-# The will only be plotted in the order you want if you make the tf and region columns into factors.
-# Here's an example
-resdf_matrix <- resdf_summary %>%
+# Cluster the rows and columns.
+permutation_te_family_matrix <- permutation_te_family_summary %>%
   dplyr::select(tf, region, zscore) %>%
   pivot_wider(names_from = tf, values_from = zscore) %>%
   column_to_rownames("region") %>%
   as.matrix()
 
-## We only have two region sets, so we don't really need this, but if we had more we would.
-# region_clust <- hclust(dist(resdf_matrix))
-# plot(region_clust)
-tf_clust <- hclust(dist(t(resdf_matrix)))
-plot(tf_clust)
+# Cluster by TE family
+region_clust <- hclust(dist(permutation_te_family_matrix))
 
-# Now let's factorize these columns according to the order which we specified
+# Cluster by TF
+tf_clust <- hclust(dist(t(permutation_te_family_matrix)))
 
-## See above. Don't need to do this for two regions...
-# resdf_summary$region <- factor(resdf_summary$region, region_clust$labels[region_clust$order])
-resdf_summary$tf <- factor(resdf_summary$tf, tf_clust$labels[tf_clust$order])
+# Factorize these columns according to the order which we specified.
+permutation_te_family_summary$region <- factor(permutation_te_family_summary$region, region_clust$labels[region_clust$order])
 
-# And then we can plot it again
-g <- ggplot(resdf_summary, aes(x = tf, y = region, fill = zscore))
-g + geom_raster() + scale_fill_gradient2() + coord_flip() + 
+permutation_te_family_summary$tf <- factor(permutation_te_family_summary$tf, tf_clust$labels[tf_clust$order])
+
+# Make a heatmap of the results.
+g <- ggplot(permutation_te_family_summary, aes(x = region, y = tf, fill = zscore))
+g + geom_tile() + scale_fill_gradient2(limits = c(-100, 100)) + coord_flip() + 
+  xlab("TE family") + ylab("TF") +
   theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
-# Q: Change the height and the width here until it looks good.
-ggsave("figures/lncrna_mrna_promoters_vs_tf_peaks.pdf", height = 5, width = 5)
-
 ```
+
+Figure 1: Heatmap of TF enrichment at TE families.
 
 ```{r}
-# Q: How does the lncRNA enrichment compare to mRNA enrichment? Does this concord with our previous results?
-#A: more enriched in mRNAs, which is consistent with what we saw before
+ggsave("repeat_families_vs_tf_peaks.pdf", height = 10, width = 30)
 
-# Q: Record some other observations and findings. Make some extra plots to satisfy your curiousity!
 ```
 
 
+Now calculate z-score and p-value using the Fischer exact test for TE classes:
+
+```{r}
+# First separate out the character numbers and change them back to numeric.
+permutation_te_class_long <- permutation_te_class %>%
+  separate_rows(permuted, sep = ";") %>%
+  mutate(permuted = as.numeric(permuted))
+
+# Okay, now let's calculate the zscore and pvalue.
+# We're calculating the Fisher exact test here. We did 1000 permutations, so we will correct for that.
+permutation_te_class_summary <- permutation_te_class_long %>% 
+  group_by(region, tf) %>%
+  summarize(observed = unique(observed),
+            mean_permuted = mean(permuted),
+            diff = observed - mean_permuted,
+            alternative = ifelse(unique(observed) < mean(permuted), "less", "greater"),
+            zscore = round((unique(observed) - mean(permuted))/stats::sd(permuted), 4),
+            pval = ifelse(unique(alternative) == "less", (sum(unique(observed) >= permuted, na.rm = TRUE) + 1)/(1000 + 1),
+                          (sum(unique(observed) <= permuted, na.rm = TRUE) + 1)/(1000 + 1)))
+
+# Apply the Benjamini-Hochberg correction.
+permutation_te_class_summary$padj <- p.adjust(permutation_te_class_summary$pval, method = "BH")
+
+# Filter out any classes with no z-scores.
+permutation_te_class_summary <- filter(permutation_te_class_summary, zscore != "NaN")
+
+```
+
+Plot a clustered heatmap of overlaps at TE classes: 
+
+```{r}
+# Cluster the rows and columns.
+permutation_te_class_matrix <- permutation_te_class_summary %>%
+  dplyr::select(tf, region, zscore) %>%
+  pivot_wider(names_from = tf, values_from = zscore) %>%
+  column_to_rownames("region") %>%
+  as.matrix()
+
+# Cluster by TE class
+region_clust <- hclust(dist(permutation_te_class_matrix))
+
+# Cluster by TF
+tf_clust <- hclust(dist(t(permutation_te_class_matrix)))
+
+# Factorize these columns according to the order which we specified.
+permutation_te_class_summary$region <- factor(permutation_te_class_summary$region, region_clust$labels[region_clust$order])
+
+permutation_te_class_summary$tf <- factor(permutation_te_class_summary$tf, tf_clust$labels[tf_clust$order])
+
+# Make a heatmap of the results.
+g <- ggplot(permutation_te_class_summary, aes(x = region, y = tf, fill = zscore))
+g + geom_tile() + scale_fill_gradient2(limits = c(-100, 100)) + coord_flip() + 
+  xlab("TE class") + ylab("TF") +
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+```
+
+Figure 2: Heatmap of TF enrichment at TE classes.
+
+```{r}
+ggsave("repeat_classes_vs_tf_peaks.pdf", height = 8, width = 28)
+
+```
 
 
 
