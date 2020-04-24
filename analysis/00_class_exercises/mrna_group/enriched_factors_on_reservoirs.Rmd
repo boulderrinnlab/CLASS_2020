@@ -13,11 +13,11 @@ library(tidyverse)
 library(GenomicRanges)
 library(GenomicFeatures)
 library(rtracklayer)
-library(ggbio)
+#library(ggbio)
 library(ggrepel)
 library(Rsubread)
 library(effectsize)
-source("../../util/intersect_functions.R")
+source("/Shares/rinn_class/data/k562_chip/analysis/util/intersect_functions.R")
 
 ```
 
@@ -125,21 +125,23 @@ chisq_res <- data.frame("tf" =character(),
                         "chisq_stat" = numeric(),
                         "chisq_pval" = numeric(),
                         "not_ghosts" = numeric())
+
 i <- 1
 ## How do we find expected number of ghosts??
 for(i in 1:length(num_peaks)) {
   total_peaks <- num_peaks[[i]]
   df1 <- data.frame("ghosted" = c("ghost", "not_ghost"),
+                    "promoter_bound" = c("bound", "not_bound"),
                     "counted" = c(ghost_num_overlaps[[i]], not_ghost_num_overlaps[[i]])) %>%
     pivot_wider(names_from = ghosted, values_from = counted) %>%
     as.matrix()
   
   csres <- chisq.test(df1)
+  phi_coef <- phi(df1)
   tdf <- data.frame("tf" = names(num_peaks[i]),
-                    "ghosted" = ghost[[i]],
+                    "ghosted" = ghosts[[i]],
                     "chisq_stat" = csres$statistic,
                     "chisq_pval" = csres$p.value,
-                    "lncrna_peaks_expected" = csres$expected[1,1],
                     "phi_coefficient" = phi_coef$phi)
   chisq_res <- bind_rows(chisq_res, tdf)
 }
