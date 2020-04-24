@@ -49,7 +49,7 @@ ggsave("figures/consensus_peaks_histogram.pdf")
 
 #### No replicate concordance
 
-The proteins with zero consensus peaks are: `cat(paste(num_peaks_df[which(num_peaks_df$num_peaks == 0), "dbp"], collapse = " "))`
+The proteins with zero consensus peaks are: `r paste(num_peaks_df[which(num_peaks_df$num_peaks == 0), "dbp"], collapse = " ")`
 
 #### Peaks cutoff
 
@@ -59,7 +59,7 @@ num_peaks_threshold <- 250
 consensus_peaks <- consensus_peaks[num_peaks_df$num_peaks > num_peaks_threshold]
 ```
 
-Since this captures the majority of DPBs and still provides a reasonable number of peaks to work with, we chose a cutoff of `num_peaks_threshold` peaks. This results in losing the following proteins: `cat(paste(num_peaks_df[which(num_peaks_df$num_peaks <= 250), "dbp"], collapse = " "))`
+Since this captures the majority of DPBs and still provides a reasonable number of peaks to work with, we chose a cutoff of `r num_peaks_threshold` peaks. This results in losing the following proteins: `r paste(num_peaks_df[which(num_peaks_df$num_peaks <= 250), "dbp"], collapse = " ")`
 
 
 ```{r export-peak-lists}
@@ -155,7 +155,7 @@ ggsave("figures/peak_width_distribution_RFX1.pdf")
 max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])
 ```
 
-And it does seem that RFX1 has just `nrow(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),])` peaks which are above 3000 bps which is skewing the distribution. With one peak that has a width of `max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])`.
+And it does seem that RFX1 has just `r nrow(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),])` peaks which are above 3000 bps which is skewing the distribution. With one peak that has a width of `r max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])`.
 
 
 
