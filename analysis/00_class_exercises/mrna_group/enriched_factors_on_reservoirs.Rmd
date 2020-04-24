@@ -130,10 +130,14 @@ i <- 1
 ## How do we find expected number of ghosts??
 for(i in 1:length(num_peaks)) {
   total_peaks <- num_peaks[[i]]
-  df1 <- data.frame("ghosted" = c("ghost", "not_ghost"),
+  df1 <- data.frame("ghosted" = c("ghost", "ghost", "not_ghost", "not_ghost"),
                     "promoter_bound" = c("bound", "not_bound"),
-                    "counted" = c(ghost_num_overlaps[[i]], not_ghost_num_overlaps[[i]])) %>%
+                    "counted" = c(ghost_num_overlaps[[i]],
+                                  total_peaks - ghost_num_overlaps[[i]],
+                                  not_ghost_num_overlaps[[i]], 
+                                  total_peaks - not_ghost_num_overlaps[[i]])) %>%
     pivot_wider(names_from = ghosted, values_from = counted) %>%
+    column_to_rownames("promoter_bound") %>%
     as.matrix()
   
   csres <- chisq.test(df1)
