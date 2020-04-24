@@ -1,0 +1,79 @@
+---
+title: "mRNA vs lncRNA TR binding"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+``` {r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+library(GenomicRanges)
+library(tidyverse)
+library(effectsize)
+library(regioneR)
+```
+
+```{r}
+# Import peaks
+peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
+# Import gencode
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+lncrna_promoters <- get_promoter_regions(gencode_gr, biotype = "lncRNA")
+mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
+lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurence")
+mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurence")
+```
+
+```{r}
+lncrna_num_overlaps <- rowSums(lncrna_matrix)
+mrna_num_overlaps <- rowSums(mrna_matrix)
+num_peaks <- sapply(peak_list, length)
+total_lncrna <- length(lncrna_promoters)
+total_mrna <- length(mrna_promoters)
+total_genes <- total_lncrna + total_mrna
+chisq_res <- data.frame("tf" =character(),
+                        "lncrna_peaks_observed" = numeric(),
+                        "chisq_stat" = numeric(),
+                        "chisq_pval" = numeric(),
+                        "lncrna_peaks_expected" = numeric())
+for(i in 1:length(num_peaks)) {
+  total_peaks <- num_peaks[[i]]
+  df1 <- data.frame("gene_type" = c("lncRNA","lncRNA", "mRNA", "mRNA"),
+                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
+                    "count" = c(lncrna_num_overlaps[[i]],
+                                total_lncrna - lncrna_num_overlaps[[i]],
+                                mrna_num_overlaps[[i]],
+                                total_mrna - mrna_num_overlaps[[i]])) %>%
+    pivot_wider(names_from = gene_type, values_from = count) %>%
+    column_to_rownames("promoter_bound") %>%
+    as.matrix()
+  
+  csres <- chisq.test(df1)
+  
+  # TODO add phi calculation; r package effectsize 
+  
+  phi_coef <- phi(df1)
+  
+  tdf <- data.frame("tf" = names(num_peaks[i]),
+                    "lncrna_peaks_observed" = lncrna_num_overlaps[[i]],
+                    "chisq_stat" = csres$statistic,
+                    "chisq_pval" = csres$p.value,
+                    "lncrna_peaks_expected" = csres$expected[1,1],
+                    "phi_coefficient" = phi_coef$phi)
+  chisq_res <- bind_rows(chisq_res, tdf)
+}
+chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
+chisq_res$diff <- chisq_res$lncrna_peaks_observed - chisq_res$lncrna_peaks_expected
+write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
+
+g <- ggplot(chisq_res, aes(x = diff, y = -log10(chisq_pval) ))
+g + geom_point() + geom_smooth()
+#ggsave("figures/pvalue_vs_phi.png")
+
+# contingency table
+# lncRNA yes lncRNA no
+# tf bound
+# tf not bound
+```
