@@ -18,14 +18,10 @@ library(ggrepel)
 library(Rsubread)
 ```
 
+The purpose of this code is to determine the distribution of DNA-binding proteins (DBPs) at promoters. We will look at the number of DBPs bound at a given promoter as well as whether there are any promoters which are not bound by any DBPs. We will also ask whether any DBPs do not bind to any promoters.
 
-### Goals of this code:
-1) Make a density plot of number of transcription factors bound at a given promoter.
-2) What promoters are never bound by TFs?
-3) Are there any DNA binding proteins that did not overlap at any promoter?
- 
 
-Question #1: Density plot of TFs bound at promoters
+Here we are going to make density plots for the number of DBPs (DNA-binding proteins) at a given promoter.
 ```{r}
 #get functions needed for this code
 source("../util/intersect_functions.R")
@@ -70,25 +66,25 @@ g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
   ylab(expression("Density")) +
   ggtitle("Promoter binding events at all genes")
 ```
-Figure 1. Density plot of number of binding events at a given promoter.
+Figure 1. Density plot showing the number of binding events at a given promoter.
 
 ```{r}
 ggsave("k562_promoter_binding_density.png")
 ggsave("k562_promoter_binding_density.pdf")
 ```
 
-Question #2: Which promoters are never bound?
 
+Here we are going to determine if there are any promoters that are not bound by any DBPs.
 ```{r}
 #set x to 1 
 x <- 1
 #filter peak_occurence_df for promoters with less than 1 TF bound
 not_bound_proms <- filter(peak_occurence_df, peak_occurence_df$number_of_tfs < x)
 
-#see not_bound_proms for list of promoters
+#see not_bound_proms for list of promoters that are not bound
 ```
 
-Questions #3: Which DNA binding proteins did not overlap at any promoter?
+Here we are going to determine if any DBPs did not overlap with any promoters.
 ```{r}
 #get_overlapping_peaks is a function
 tf_promoter_ovl <- get_overlapping_peaks(proms, peak_list)
