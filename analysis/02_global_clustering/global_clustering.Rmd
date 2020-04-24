@@ -20,36 +20,29 @@ source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
 
 ```{r}
 # We are going to start out with a function to import files called "import_peaks"
-# this the filtered peak_list; final list of 161 TFs after filtering
+# this is the filtered peak_list; final list of 161 TFs after filtering
 peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
 
 # Making the features (gencode) GRanges that has lots of features annotated
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
-# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA genes
+# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA promoters
 proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
 
 #counts the number of promoters that each TF binds to
 promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
-#table(promoter_peak_count)
-
 ```
 
 ```{r filtering}
 # Now we want to remove any columns (promoters) where a promoter has no TF binding.
-# no TFs bound to these promoters 
 promoter_no_peak <- promoter_peak_count[,which(colSums(promoter_peak_count) < 1)]
-#table(promoter_no_peak)
-
 
 ### TFs bind to these promoters
 promoter_positive_peaks <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
-#table(promoter_positive_peaks)
-#yes_binding <- colnames(promoter_positive_peaks)
 
 # Now we want to remove any columns (tfs) where a TF has bound no promoters
 # Q: Which TFs bound no promoters?
-# no_binding <- colnames(promoter_no_peak)
+no_binding <- colnames(promoter_no_peak)
 ### This is also a paper result!
 
 promoter_positive_peaks <- promoter_positive_peaks[which(rowSums(promoter_positive_peaks) > 0),]
@@ -76,8 +69,6 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 ```{r}
 # What is the distribution of DNA binding events across promoters that had at least 1 event?
 ### This is a result for the paper.
-# HINT: ?hist, ?colSums
-
 hist(promoter_positive_peaks)
 ```
 
