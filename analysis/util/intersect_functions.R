@@ -108,10 +108,10 @@ read_peaks <- function(broad_peak_file) {
 intersect_peaks <- function(peak_list) {
   combined_peaks <- peak_list[[1]]
   for(i in 2:length(peak_list)) {
-    pl_ov <- findOverlaps(combined_peaks, peak_list[[i]])
+    suppressWarnings(pl_ov <- findOverlaps(combined_peaks, peak_list[[i]]))
     pl1 <- combined_peaks[unique(pl_ov@from)]
     pl2 <- peak_list[[i]][unique(pl_ov@to)]
-    combined_peaks <- GenomicRanges::reduce(union(pl1, pl2))
+    suppressWarnings(combined_peaks <- GenomicRanges::reduce(union(pl1, pl2)))
   }
   return(combined_peaks)
 }
