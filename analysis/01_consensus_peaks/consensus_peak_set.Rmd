@@ -59,7 +59,7 @@ num_peaks_threshold <- 250
 consensus_peaks <- consensus_peaks[num_peaks_df$num_peaks > num_peaks_threshold]
 ```
 
-Since this captures the majority of DPBs and still provides a reasonable number of peaks to work with, we chose a cutoff of `r num_peaks_threshold` peaks. This results in losing the following proteins: `r paste(num_peaks_df[which(num_peaks_df$num_peaks <= 250), "dbp"], collapse = " ")`
+Since this captures the majority of DPBs and still provides a reasonable number of peaks to work with, we chose a cutoff of `r num_peaks_threshold` peaks. This corresponds to a cutoff at the `r round(ecdf(num_peaks_df$num_peaks)(250)*100,1)`th percentil and results in losing the following proteins: `r paste(num_peaks_df[which(num_peaks_df$num_peaks <= 250), "dbp"], collapse = " ")`
 
 
 ```{r export-peak-lists}
