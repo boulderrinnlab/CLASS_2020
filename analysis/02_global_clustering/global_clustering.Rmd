@@ -68,7 +68,7 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 
 ```{r}
 # What is the distribution of DNA binding events across promoters that had at least 1 event?
-### This is a result for the paper.
+
 hist(promoter_positive_peaks)
 ```
 
