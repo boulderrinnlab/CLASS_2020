@@ -18,7 +18,7 @@ source("../util/_setup.R")
 
 The purpose of this code is to plot the correlation between the number of peaks for each TF and the number of peaks within lncRNA/mRNA promoters.
 
-# Get a matrix of features by TFs.
+Get a matrix of features by TFs.
 
 ```{r}
 # Import the consensus peaks
@@ -41,6 +41,7 @@ mRNA_promoter_peak_count <- count_peaks_per_feature(mRNA_proms, peak_list)
 
 ```{r filtering}
 # Make a binary co-occurence matrix where any number of peaks in a promoter for a tf is considered binding.
+# This makes it so that each promoter is classified as bound or not bound
 lncRNA_promoter_bound <- lncRNA_promoter_peak_count > 0
 mRNA_promoter_bound <- mRNA_promoter_peak_count > 0
 
@@ -76,24 +77,43 @@ num_peaks <- sapply(peak_list, length)
 lncRNA_num_prom_overlap <- rowSums(lncRNA_promoter_peak_count)
 mRNA_num_prom_overlap <- rowSums(mRNA_promoter_peak_count)
 
+#Make list of TF names
+consensus_file_path <- "/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results"
+peak_files <- list.files(consensus_file_path, full.names = T)
+file_names <- str_extract(peak_files, "[\\w-]+\\.bed")
+tf_name <- str_extract(file_names, "^[^_]+(?=_)")
+
 # Make a data frame of promoter overlaps
-lncRNA_prom_overlap_df <- data.frame("peaks_overlapping_promoters" = lncRNA_num_prom_overlap,
-                              "peaks_per_TF" = num_peaks)
-mRNA_prom_overlap_df <- data.frame("peaks_overlapping_promoters" = mRNA_num_prom_overlap,
-                              "peaks_per_TF" = num_peaks)
+lncRNA_prom_overlap_df <- data.frame("TF"= tf_name, "peaks_overlapping_promoters" = lncRNA_num_prom_overlap,
+                                     "peaks_per_TF" = num_peaks, "promoter_type" = "lncRNA")
+mRNA_prom_overlap_df <- data.frame("TF"= tf_name, "peaks_overlapping_promoters" = mRNA_num_prom_overlap,
+                              "peaks_per_TF" = num_peaks, "promoter_type" = "mRNA")
+
+#Make a combined data frame for plotting below
+all_prom_overlaps <- bind_rows(lncRNA_prom_overlap_df, mRNA_prom_overlap_df)
 ```
 
 Plot the correlation between the number of peaks per TF and the number of peaks in mRNA and lncRNA promoters.
 
 ```{r}
 
-ggplot(mRNA_prom_overlap_df,
-       aes(x = peaks_per_TF, y = peaks_overlapping_promoters)) +
-  geom_point() + 
-  geom_smooth(method = "lm")
+ggplot(all_prom_overlaps,
+       aes(x = peaks_per_TF, y = peaks_overlapping_promoters, color = promoter_type)) +
+  scale_color_manual(values = c("#424242", "#a8404c"))+
+  xlab("Peaks per TF") +
+  ylab("Peaks Overlapping Promoters") +
+  ggtitle("Relationship Between Number of TF Peaks and Promoter Overlaps")+
+  geom_point() +
+  geom_abline(slope = 1, linetype="dashed") +
+  geom_smooth(method = "lm", se=FALSE)
 ```
 
-Figure 1. ...
+Figure 1. Plot showing the number of peaks overlapping promoters compared to the total number of peaks per transcription factor
+
+```{r}
+ggsave("peaks_overlaps_relationship.png", height = 5, width = 8)
+ggsave("peaks_overlaps_relationship.pdf", height = 5, width = 8)
+```
 
 
 
