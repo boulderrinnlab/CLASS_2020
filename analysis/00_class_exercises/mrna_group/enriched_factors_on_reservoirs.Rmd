@@ -115,13 +115,13 @@ not_ghost_peak_occurence <- promoter_peak_occurence[,colnames(promoter_peak_occu
 ```{r}
 ghost_num_overlaps <- rowSums(ghost_peak_occurence)
 not_ghost_num_overlaps <- rowSums(not_ghost_peak_occurence)
-num_peaks <- sapply(consensus_peaks, length)
+num_peaks <- rowSums(promoter_peak_occurence[,colnames(promoter_peak_occurence)%in% c(colnames(ghost_peak_occurence), colnames(not_ghost_peak_occurence))])
 total_ghosts <- length(ghosts)
 total_not_ghosts <- length(not_ghosts)
 total <- total_ghosts + total_not_ghosts
 
 chisq_res <- data.frame("tf" =character(),
-                        "ghosts" = numeric(),
+                        "ghosted" = numeric(),
                         "chisq_stat" = numeric(),
                         "chisq_pval" = numeric(),
                         "not_ghosts" = numeric())
@@ -143,10 +143,12 @@ for(i in 1:length(num_peaks)) {
   csres <- chisq.test(df1)
   phi_coef <- phi(df1)
   tdf <- data.frame("tf" = names(num_peaks[i]),
-                    "ghosted" = ghosts[[i]],
+                    "ghosted" = ghost_num_overlaps[[i]],
+                    "not_ghosts" = not_ghost_num_overlaps[[i]],
                     "chisq_stat" = csres$statistic,
                     "chisq_pval" = csres$p.value,
                     "phi_coefficient" = phi_coef$phi)
+  
   chisq_res <- bind_rows(chisq_res, tdf)
 }
 ```
@@ -154,12 +156,19 @@ for(i in 1:length(num_peaks)) {
 
 ```{r}
 # Use what you just made to plot the results.
-g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+
+# heat map for tf and ghosts
+# g <- ggplot(chisq_res)
+# g + geom_tile(aes(x = ghosted, y = tf, fill = ghosted), color = "black", size = 0.1) +
+#   theme(axis.text = element_text(size = 5)) +
+#   scale_fill_gradientn(colors = c("white", "red", "orange", "yellow", "green","turquoise", "blue", "purple"))
+
+g <- ggplot(chisq_res, aes(y = tf, x = ghosted))
 g + geom_point(alpha = 0.2) +
   geom_smooth() +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
+  # scale_y_continuous(expand = c(0,0)) +
+  # scale_x_continuous(expand = c(0,0)) +
+  # scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
   ggtitle("Promoter binding events vs. expression") +
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](tpm)))
