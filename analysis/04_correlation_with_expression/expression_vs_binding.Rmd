@@ -177,7 +177,6 @@ write_csv(peak_occurrence_df, "results/k562_expression_binding.csv")
 
 ```
 
-<<<<<<< HEAD
 
 ### Chi-square statistics for reservoir promoters with POLII binding vs. without POLII binding
 
@@ -277,9 +276,6 @@ write_csv(chisq_res, "results/k562_polII_reservoirs_chisquare.csv")
 ### Make plots for figures
 
 Figure A: Scatter plot of Number of Transcription factors vs. Expression. 
-=======
-Figure A: Scatter plot of Number of Transcription factors vs. Expression. The trend lines are based on the number of Transcription Factors (TFs) binding to a gene versus ChiP Peak expression data.  In red are gene that are protein coding.  In black are genes that encode lncRNAs.  
->>>>>>> 0d28a6e3914a243b7a10e607c91484090ab05953
 ```{r plot_expression_vs_binding_events}
 
 g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
@@ -297,12 +293,8 @@ ggsave("figures/k562_expression_vs_promoter_binding_all_points.png")
 ggsave("figures/k562_expression_vs_promoter_binding_all_points.pdf")
 ```
 
-<<<<<<< HEAD
 
 Figure B: Scatter plot of expression vs. number of DNA-binding factors bound for lncRNA and protein-coding promoters
-=======
-Figure B: Scattter plot of number of transcription factors bound to a promoter vs. promoter Expression. The trend lines are based on the number of Transcription Factors (TFs) binding to a gene versus ChiP Peak expression data.  In red are gene that are protein coding.  In black are genes that encode lncRNAs. The data points not fitted to a trendline have TF binding but not ChiP Peak expression.
->>>>>>> 0d28a6e3914a243b7a10e607c91484090ab05953
 ```{r plot_expression_v_binding_events_ghosts}
 
 g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
@@ -320,13 +312,6 @@ ggsave("figures/k562_expression_vs_promoter_binding.png")
 ggsave("figures/k562_expression_vs_promoter_binding.pdf")
 ```
 
-<<<<<<< HEAD
-=======
-Figure C: Boxplot of lncRNA and protein coding genes that are expressed and not expressed and their corresponding number of bound TFs. x-values range from 30-100 TFs based on Figure A,B.
-
-Figure D: Histogram of promoter density occurence vs the number_of_tfs. 
-```{r biotype_histogram}
->>>>>>> 0d28a6e3914a243b7a10e607c91484090ab05953
 
 Figure C: Histogram of promoters by number of DNA-binding factors bound
 ```{r binding_histogram}
@@ -359,12 +344,8 @@ ggsave("figures/k562_binding_histogram_expression.pdf")
 
 ```
 
-<<<<<<< HEAD
 
 Figure E: Histogram of promoters by gene expression for different DNA-binding factor densities
-=======
-Figure E: Peak occurence vs number of TFs and density of promoters. In blue are genes with low TF binding (# of TF < 25). Red histogram shows genes with high number of TFs (# of TF > 25). x-axis shows transcripts per kilobase million. y-axis show promoter density. 
->>>>>>> 0d28a6e3914a243b7a10e607c91484090ab05953
 ```{r plot_peak_occurrence}
 
 peak_occurrence_df$tf_binding <- "low"
