@@ -275,7 +275,7 @@ write_csv(chisq_res, "results/k562_polII_reservoirs_chisquare.csv")
 
 ### Make plots for figures
 
-Figure A: Scatter plot of Number of Transcription factors vs. Expression. 
+Figure A: Scatter plot of expression vs. number of DNA-binding factors bound for lncRNA and protein-coding promoters 
 ```{r plot_expression_vs_binding_events}
 
 g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
@@ -294,7 +294,7 @@ ggsave("figures/k562_expression_vs_promoter_binding_all_points.pdf")
 ```
 
 
-Figure B: Scatter plot of expression vs. number of DNA-binding factors bound for lncRNA and protein-coding promoters
+Figure B: Scatter plot of expression vs. number of DNA-binding factors bound for lncRNA and protein-coding promoters. Promoters with >7 factors bound but no expression are shown as dots.
 ```{r plot_expression_v_binding_events_ghosts}
 
 g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
@@ -345,7 +345,7 @@ ggsave("figures/k562_binding_histogram_expression.pdf")
 ```
 
 
-Figure E: Histogram of promoters by gene expression for different DNA-binding factor densities
+Figure E: Histogram of promoters by gene expression for different DNA-binding factor densities. In red are prommoters with fewer than 25 factors bound). In black are promomters with 25 or more factors bound.
 ```{r plot_peak_occurrence}
 
 peak_occurrence_df$tf_binding <- "low"
