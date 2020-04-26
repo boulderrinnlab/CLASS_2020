@@ -4,9 +4,6 @@ output: html_document
 editor_options:
   chunk_output_type: console
 ---
-```{r}
-BiocManager::install("regioneR")
-```
 
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
@@ -20,25 +17,36 @@ library(ggrepel)
 library(Rsubread)
 library(regioneR)
 
-source("analysis/util/intersect_functions.R")
-source("analysis/util/_setup.R")
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
 
 ```
 
-#### Source for RNA-seq data
 
-# total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR885DVH/
+# Purpose: Compare expression of genes to binding in promoter regions
 
-# system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
-#       intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
-# system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
-#        intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+This script extracts expression counts from K562 RNA-seq data and identifies DNA-binding events at promoters from the K562 ChIP-seq consensus peak dataset. We have included further analysis on promoters that contain ≥7 DNA-binding events but are not expressed.
 
+
+### Note: this script should be run with "CLASS2020/" as the working directory
+
+
+### Source for RNA-seq data
+
+total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR885DVH/
+
+system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
+      intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
+       intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+
+
+### Analysis of RNA-seq data
 
 ```{r read_counts_to_TPM}
 
 counts <- featureCounts(c("ENCFF625ZBS.bam", "ENCFF630HEX.bam"),
-                        annot.ext = "../../../Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
+                        annot.ext = "../../../../../Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
                         isGTFAnnotationFile = T,
                         isPairedEnd = TRUE,
                         nthreads = 16)
@@ -58,6 +66,10 @@ tpm <- expression %>% group_by(gene_id) %>%
   summarize(tpm = mean(tpm, na.rm = T))
 ```
 
+
+### Import consensus peak set
+
+For details on how the consensus peak set was determined, see "CLASS_2020/analysis/01_consensus_peaks/consensus_peak_set.Rmd"
 
 ```{r consensus_peaks}
 
@@ -82,10 +94,11 @@ import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/CLASS_20
   return(peak_list)
 }
 
-peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results")
+peak_list <- import_peaks()
 
 ```
 
+### Import promoter regions from Gencode for lncRNA- and mRNA-coding genes
 
 ```{r promoters_from_gencode}
 
@@ -114,6 +127,8 @@ promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA" | gtf_promo
 
 ```
 
+
+### Count consensus peaks in each promoter region
 
 ```{r peaks_per_promoter}
 
@@ -146,24 +161,124 @@ promoter_peak_count <- count_peaks_per_feature(promoters, peak_list)
 
 ```{r peak_count_data_frame}
 
-promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0),
+promoter_peak_occurrence <- matrix(as.numeric(promoter_peak_count > 0),
                            nrow = dim(promoter_peak_count)[1],
                            ncol = dim(promoter_peak_count)[2])
-rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
-colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
+rownames(promoter_peak_occurrence) <- rownames(promoter_peak_count)
+colnames(promoter_peak_occurrence) <- colnames(promoter_peak_count)
 
-peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
-                                "number_of_tfs" = colSums(promoter_peak_occurence),
+peak_occurrence_df <- data.frame("gene_id" = colnames(promoter_peak_occurrence),
+                                "number_of_tfs" = colSums(promoter_peak_occurrence),
                                 'gene_type'=promoters$gene_type)
 
-peak_occurence_df <- merge(peak_occurence_df,tpm)
+peak_occurrence_df <- merge(peak_occurrence_df,tpm)
+
+write_csv(peak_occurrence_df, "results/k562_expression_binding.csv")
 
 ```
+
+
+### Chi-square statistics for reservoir promoters with POLII binding vs. without POLII binding
+
+```{r chi_squared}
+
+# Get ghost promoters
+ghosts <- peak_occurrence_df %>% filter(tpm < 0.001)
+ghosts <- ghosts[which(ghosts$number_of_tfs >= 7),]
+ghost_promoters <- gtf_promoters[gtf_promoters$gene_id %in% ghosts$gene_id,]
+
+# Get peaks
+poliia <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2A_consensus_peaks.bed")
+poliib <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2B_consensus_peaks.bed")
+polii_peaks <- c(poliia, poliib)
+
+# Get ghosts with and without POLII in them
+pol_ghost_overlaps <- findOverlaps(ghost_promoters, polii_peaks)
+pol_ghost_proms <- ghost_promoters[unique(pol_ghost_overlaps@from)]
+nn <- c(1:length(ghost_promoters))
+mm <- subset(nn, !(nn %in% pol_ghost_overlaps@from))
+nopol_ghost_proms <- ghost_promoters[mm]
+
+# This is a rehash of the count_peaks_per_feature function so it will work with the "occurrence" option.
+
+count_peaks_per_feature <- function(features, peak_list, type) {
+  
+  if(!(type %in% c("counts", "occurrence"))) {
+    stop("Type must be either occurrence or counts.")
+  }
+  
+  peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
+  
+  for(j in 1:length(peak_list)) {
+    ov <- countOverlaps(features, peak_list[[j]])
+    peak_count <- rbind(peak_count, ov)
+    rownames(peak_count)[nrow(peak_count)] <- names(peak_list)[j]
+    colnames(peak_count) <- features$gene_id
+  }
+  
+  peak_matrix <- peak_count
+  
+  if(type == "occurrence") {
+    peak_occurrence <- matrix(as.numeric(peak_count > 0), 
+                             nrow = dim(peak_count)[1],
+                             ncol = dim(peak_count)[2])
+    rownames(peak_occurrence) <- rownames(peak_count)
+    colnames(peak_occurrence) <- colnames(peak_count)
+    peak_matrix <- peak_occurrence
+  }
+  
+  return(peak_matrix)
+  
+}
+pol_matrix <- count_peaks_per_feature(pol_ghost_proms, peak_list, type = "occurrence")
+nopol_matrix <- count_peaks_per_feature(nopol_ghost_proms, peak_list, type = "occurrence")
+
+pol_num_overlaps <- rowSums(pol_matrix)
+nopol_num_overlaps <- rowSums(nopol_matrix)
+num_peaks <- sapply(peak_list, length)
+total_pol <- length(pol_ghost_proms)
+total_nopol <- length(nopol_ghost_proms)
+total_ghosts <- length(ghost_promoters)
+
+chisq_res <- data.frame("tf" =character(),
+                  "polii_peaks_observed" = numeric(),
+                  "chisq_stat" = numeric(),
+                  "chisq_pval" = numeric(),
+                  "polii_peaks_expected" = numeric())
+
+for(i in 1:length(num_peaks)) {
+  total_peaks <- num_peaks[[i]]
+  df1 <- data.frame("gene_type" = c("pol","pol", "nopol", "nopol"),
+                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
+                    "count" = c(pol_num_overlaps[[i]],
+                                total_pol - pol_num_overlaps[[i]],
+                                nopol_num_overlaps[[i]],
+                                total_nopol - nopol_num_overlaps[[i]])) %>%
+    pivot_wider(names_from = gene_type, values_from = count) %>%
+    column_to_rownames("promoter_bound") %>%
+    as.matrix()
+  csres <- chisq.test(df1)
+  tdf <- data.frame("tf" = names(num_peaks[i]),
+                    "polii_peaks_observed" = pol_num_overlaps[[i]],
+                    "chisq_stat" = csres$statistic,
+                    "chisq_pval" = csres$p.value,
+                    "polii_peaks_expected" = csres$expected[1,1])
+  chisq_res <- bind_rows(chisq_res, tdf)
+}
+chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
+chisq_res$diff <- chisq_res$polii_peaks_observed - chisq_res$polii_peaks_expected
+
+write_csv(chisq_res, "results/k562_polII_reservoirs_chisquare.csv")
+
+```
+
+
+### Make plots for figures
 
 Figure A: Scatter plot of Number of Transcription factors vs. Expression. 
 ```{r plot_expression_vs_binding_events}
 
-g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
 
 g + geom_point(alpha = 0.2) +
   geom_smooth() +
@@ -173,18 +288,18 @@ g + geom_point(alpha = 0.2) +
   ggtitle("Expression vs. promoter binding events") +
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](TPM))) 
-  
 
-# ggsave("figures/k562_expression_vs_promoter_binding_all_points.png")
-# ggsave("figures/k562_expression_vs_promoter_binding_all_points.pdf")
+ggsave("figures/k562_expression_vs_promoter_binding_all_points.png")
+ggsave("figures/k562_expression_vs_promoter_binding_all_points.pdf")
 ```
 
-Figure B: Scattter plot of number of transcription factors bound to a promoter vs. promoter Expression
+
+Figure B: Scatter plot of expression vs. number of DNA-binding factors bound for lncRNA and protein-coding promoters
 ```{r plot_expression_v_binding_events_ghosts}
 
-g <- ggplot(peak_occurence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
 g + 
-  geom_point(data = peak_occurence_df %>% filter(tpm < 0.001), alpha = 0.2) +
+  geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), alpha = 0.2) +
   geom_smooth() + 
   scale_y_continuous(expand = c(0,0)) + 
   scale_x_continuous(expand = c(0,0)) + 
@@ -192,130 +307,74 @@ g +
   ggtitle("Expression vs. promoter binding events") + 
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](TPM)))
-# ggsave("figures/k562_expression_vs_promoter_binding.png")
-# ggsave("figures/k562_expression_vs_promoter_binding.pdf")
+
+ggsave("figures/k562_expression_vs_promoter_binding.png")
+ggsave("figures/k562_expression_vs_promoter_binding.pdf")
 ```
 
-Figure C: Histogram of the peak occurence over the number_of_tfs vs density of promoters
-```{r biotype_histogram}
 
-peak_occurence_df$expression <- "off"
-peak_occurence_df[which(peak_occurence_df$tpm > 0.001), "expression"] <- "expressed"
+Figure C: Histogram of promoters by number of DNA-binding factors bound
+```{r binding_histogram}
 
-g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+peak_occurrence_df$expression <- "off"
+peak_occurrence_df[which(peak_occurrence_df$tpm > 0.001), "expression"] <- "expressed"
+
+g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs))
 g + geom_density(alpha = 0.2, fill = "#424242")  +
   geom_vline(xintercept = 30, lty = 2) +
   geom_vline(xintercept = 100, lty = 2)+
   ggtitle("Promoter Density vs Number of TFs")
 
+ggsave("figures/k562_binding_histogram.png")
+ggsave("figures/k562_binding_histogram.pdf")
+
+```
 
 
-g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+Figure D: Histogram of promoters by number of DNA-binding factors bound for different biotypes and expression levels
+```{r expression_histogram}
+
+g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs))
 g + geom_histogram(binwidth = 5)  + 
   xlim(30, 100) +
-  facet_wrap(expression~gene_type, scales = "free_y") 
+  facet_wrap(expression~gene_type, scales = "free_y")
   
-
+ggsave("figures/k562_binding_histogram_expression.png")
+ggsave("figures/k562_binding_histogram_expression.pdf")
 
 ```
 
-Figure D: Peak occurence vs number of TFs and density of promoters. 
+
+Figure E: Histogram of promoters by gene expression for different DNA-binding factor densities
 ```{r plot_peak_occurrence}
 
-peak_occurence_df$tf_binding <- "low"
-peak_occurence_df[which(peak_occurence_df$number_of_tfs > 25), "tf_binding"] <- "high"
+peak_occurrence_df$tf_binding <- "low"
+peak_occurrence_df[which(peak_occurrence_df$number_of_tfs > 25), "tf_binding"] <- "high"
 
-g <- ggplot(peak_occurence_df, aes(x = log10(tpm), color = tf_binding))
-g + geom_density(alpha = 0.2) 
-```
- 
-###Chi-square
-title: "mRNA vs lncRNA TR binding"
-output: html_document
-editor_options: 
-  chunk_output_type: console
----
-```{r setup, include=FALSE}
-options(stringsAsFactors = FALSE)
-knitr::opts_chunk$set(echo = TRUE)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
-library(GenomicRanges)
-library(tidyverse)
-library(regioneR)
+g <- ggplot(peak_occurrence_df, aes(x = log10(tpm), color = tf_binding))
+g + geom_density(alpha = 0.2) +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "tf_binding")
+
+ggsave("figures/k562_expression_histogram.png")
+ggsave("figures/k562_expression_histogram.pdf")
+
 ```
 
-```{r chi_squared}
 
-# Get ghost promoters
-ghosts <- peak_occurence_df %>% filter(tpm < 0.001)
-ghosts <- ghosts[which(ghosts$number_of_tfs >= 7),]
-ghost_promoters <- gtf_promoters[gtf_promoters$gene_id %in% ghosts$gene_id,]
+Figure F: Chi-square values vs. difference in expected and observed binding for DNA-binding factors at promoters with or without POLII bound
+```{r plot_chi_square}
 
-# Get POLII peaks
-poliia <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2A_consensus_peaks.bed")
-poliib <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2B_consensus_peaks.bed")
+g <- ggplot(chisq_res, aes(x = diff, y = -log10(padj)))
+g + geom_point() +
+    geom_text_repel(
+    data = subset(chisq_res, padj < 10^-38),
+    aes(label = tf),
+    size = 3,
+    box.padding = unit(0.35, "lines"),
+    point.padding = unit(0.3, "lines"))
 
-# Get ghosts with and without POLII in them
-pol_ghost_overlaps <- findOverlaps(ghost_promoters, pollii_peaks)
-pol_ghost_proms <- ghost_promoters[unique(pol_ghost_overlaps@from)]
-nn <- c(1:length(ghost_promoters))
-mm <- subset(nn, !(nn %in% pol_ghost_overlaps@from))
-nopol_ghost_proms <- ghost_promoters[mm]
+ggsave("figures/k562_polII_reservoirs_chisquare.png")
+ggsave("figures/k562_polII_reservoirs_chisquare.pdf")
 
-pol_matrix <- count_peaks_per_feature(pol_ghost_proms, peak_list, type = "occurence")
-nopol_matrix <- count_peaks_per_feature(nopol_ghost_proms, peak_list, type = "occurence")
-
-pol_num_overlaps <- rowsums(pol_matrix)
-nopol_matrix <- rowsums(nopol_matrix)
-num_peaks <- sapply(peak_list, length)
-total_pol <- length(pol_ghost_proms)
-total_nopol <- length(nopol_ghost_proms)
-total_ghosts <- length(ghost_promoters)
-chisq_res <- data.frame("tf" =character(),
-                  "pol_peaks_observed" = numeric(),
-                  "chisq_stat" = numeric(),
-                  "chisq_pval" = numeric(),
-                  "pol_peaks_expected" = numeric())
-
-# from here on out is Michael's code
-lncrna_num_overlaps <- rowSums(lncrna_matrix)
-mrna_num_overlaps <- rowSums(mrna_matrix)
-num_peaks <- sapply(peak_list, length)
-total_lncrna <- length(lncrna_promoters)
-total_mrna <- length(mrna_promoters)
-total_genes <- total_lncrna + total_mrna
-chisq_res <- data.frame("tf" =character(),
-                  "lncrna_peaks_observed" = numeric(),
-                  "chisq_stat" = numeric(),
-                  "chisq_pval" = numeric(),
-                  "lncrna_peaks_expected" = numeric())
-for(i in 1:length(num_peaks)) {
-  total_peaks <- num_peaks[[i]]
-  df1 <- data.frame("gene_type" = c("lncRNA","lncRNA", "mRNA", "mRNA"),
-                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
-                    "count" = c(lncrna_num_overlaps[[i]],
-                                total_lncrna - lncrna_num_overlaps[[i]],
-                                mrna_num_overlaps[[i]],
-                                total_mrna - mrna_num_overlaps[[i]])) %>%
-    pivot_wider(names_from = gene_type, values_from = count) %>%
-    column_to_rownames("promoter_bound") %>%
-    as.matrix()
-  
-  csres <- chisq.test(df1)
-  tdf <- data.frame("tf" = names(num_peaks[i]),
-                    "lncrna_peaks_observed" = lncrna_num_overlaps[[i]],
-                    "chisq_stat" = csres$statistic,
-                    "chisq_pval" = csres$p.value,
-                    "lncrna_peaks_expected" = csres$expected[1,1])
-  chisq_res <- bind_rows(chisq_res, tdf)
-}
-chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
-chisq_res$diff <- chisq_res$lncrna_peaks_observed - chisq_res$lncrna_peaks_expected
-write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
-# contingency table
-# lncRNA yes lncRNA no
-# tf bound
-# tf not bound
 ```
 
