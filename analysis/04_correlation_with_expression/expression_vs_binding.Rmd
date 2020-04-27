@@ -28,9 +28,6 @@ source("../util/_setup.R")
 This script extracts expression counts from K562 RNA-seq data and identifies DNA-binding events at promoters from the K562 ChIP-seq consensus peak dataset. We have included further analysis on promoters that contain ≥7 DNA-binding events but are not expressed.
 
 
-### Note: this script should be run with "CLASS2020/" as the working directory
-
-
 ### Source for RNA-seq data
 
 total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR885DVH/
