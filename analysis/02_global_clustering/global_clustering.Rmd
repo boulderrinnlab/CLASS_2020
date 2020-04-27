@@ -84,11 +84,3 @@ ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
 ggsave("figures/hclust_binary_dist.pdf", height = 26, width = 6)
 
 ```
-
-
-
-
-
-
-
-
