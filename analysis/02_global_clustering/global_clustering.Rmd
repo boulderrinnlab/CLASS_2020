@@ -12,62 +12,48 @@ library(tidyverse)
 library(GenomicRanges)
 source("/Shares/rinn_class/data/k562_chip/analysis/util/intersect_functions.R")
 source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
-# We suggest that you make two directories in your working directory: results and figures
-```
 
+```
 
 # The first step is to get a matrix of features by TFs.
 
 ```{r}
-# We are going to start out with a function that we use all the time to import files called "import_peaks"
-# Q: What is it doing and what is the output format? See util folder on github
-peak_list <- import_peaks("/Shares/rinn_class/data/k562_chip/analysis/00_consensus_peaks/results/")
+# We are going to start out with a function to import files called "import_peaks"
+# This the filtered peak_list; final list of 161 TFs after filtering
+peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
 
 # Making the features (gencode) GRanges that has lots of features annotated
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
-# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA genes
+# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA promoters
 proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
 
+# Counts the number of promoters that each TF binds to
 promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
-table(promoter_peak_count)
-# What did you end up with? Go over the resulting gencode_gr and peak_list
-
 ```
 
 ```{r filtering}
 # Now we want to remove any columns (promoters) where a promoter has no TF binding.
-# Q: Which gene promoters had no TF binding?
 promoter_no_peak <- promoter_peak_count[,which(colSums(promoter_peak_count) < 1)]
-table(promoter_no_peak)
 
-
-### This is a result for the paper!
+### TFs bind to these promoters
 promoter_positive_peaks <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
-table(promoter_positive_peaks)
 
-yes_binding <- colnames(promoter_positive_peaks)
+#yes_binding <- colnames(promoter_positive_peaks)
 
 # Now we want to remove any columns (tfs) where a TF has bound no promoters
-# Q: Which TFs bound no promoters?
-no_binding <- colnames(promoter_no_peak)
-### This is also a paper result!
+# no_binding <- colnames(promoter_no_peak)
 
 promoter_positive_peaks <- promoter_positive_peaks[which(rowSums(promoter_positive_peaks) > 0),]
 
-# Q: For any given tf-promoter combo (HINT: one element in this matrix), what is the max number of peaks in a promoter?
-# HINT: ?max, ?table
-most_bound <- max(promoter_positive_peaks)
-  
 # We're going to make this binary -- make it a co-occurence matrix where any number of
 # peaks in a promoter for a tf is considered "binding" and so we're going to change all the
 # values to zeros and ones.
 promoter_bound <- promoter_peak_count > 0
-# Q: How would we make this into a numeric vector (0 or 1) instead of a boolean vector?
+## Make this into a numeric vector (0 or 1) instead of a boolean vector
 promoter_occurence <- as.numeric(promoter_bound)
-# Q: Once this is made into a numeric vector, is it still a matrix? no
-# Q: How would we make this into a matrix with the original dimensions? 
-# HINT: ?dim, ?matrix
+
+# We make this into a matrix with the original dimensions
 promoter_peak_occurence <- matrix(promoter_occurence, 
                            nrow = dim(promoter_peak_count)[1],
                            ncol = dim(promoter_peak_count)[2])
@@ -77,18 +63,13 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 ```
 
 ```{r}
-# What is the distribution of DNA binding events across promoters that had at least 1 event?
-### This is a result for the paper.
-# HINT: ?hist, ?colSums
+# Find the distribution of DNA binding events across promoters that had at least 1 event
 
 hist(promoter_positive_peaks)
 ```
 
-
 # Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense
-# We will spare you the time but on the class wiki there is a manuscript on clustering. Since we are using a binary matrix we will calculate the distance betweeen each sample using the binary distance metric. 
-# Read through the manual page to see other paramaters of this funciton ?dist
-
+# We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
 
 ```{r}
 
@@ -96,48 +77,10 @@ hist(promoter_positive_peaks)
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 plot(bin_hier)
 
-# load library for ggdendro for the best trees we could find :) 
+# load library for ggdendro for the best trees we could find 
 library(ggdendro)
 
 ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
 ggsave("figures/hclust_binary_dist.pdf", height = 26, width = 6)
 
-# Q: How do the results change when we make this euclidean distance?
-hclust_euc <- hclust(dist(promoter_peak_occurence, method = "euclidean"))
-ggdendro::ggdendrogram(hclust_euc, rotate = TRUE,  size = 2)
-ggsave("figures/hclust_euc_dist.pdf", height = 26, width = 6)
 ```
-
-# HOMEWORK #1: Cluster by your group's features:
-
-```{r}
-# Produce a figure for each group.
-
-
-
-###### For the TE group: you can use
-# import_rmsk and subset_rmsk by family
-# If you're up for the challenge re-write this code to look at the overlaps for all families.
-# Otherwise, choose just one family and get that granges object to use for the rest of the script.
-
-# HINT: TE group you'll need a for loop for this if you want to do all the families.
-
-```
-
-# HOMEWORK #2: Get a promoter that has the most binding and show a region in the broswer with this promoter & some tracks:
-
-```{r}
-# Q: Which TF has the most TF binding events?
-
-```
-
-
-
-
-
-
-
-
-
-
-
