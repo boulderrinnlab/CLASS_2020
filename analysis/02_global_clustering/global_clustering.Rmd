@@ -15,12 +15,11 @@ source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
 
 ```
 
-
 # The first step is to get a matrix of features by TFs.
 
 ```{r}
 # We are going to start out with a function to import files called "import_peaks"
-# this is the filtered peak_list; final list of 161 TFs after filtering
+# This the filtered peak_list; final list of 161 TFs after filtering
 peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
 
 # Making the features (gencode) GRanges that has lots of features annotated
@@ -29,7 +28,7 @@ gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode
 # Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA promoters
 proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
 
-#counts the number of promoters that each TF binds to
+# Counts the number of promoters that each TF binds to
 promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
 ```
 
@@ -40,24 +39,21 @@ promoter_no_peak <- promoter_peak_count[,which(colSums(promoter_peak_count) < 1)
 ### TFs bind to these promoters
 promoter_positive_peaks <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
 
+#yes_binding <- colnames(promoter_positive_peaks)
+
 # Now we want to remove any columns (tfs) where a TF has bound no promoters
-# Q: Which TFs bound no promoters?
-no_binding <- colnames(promoter_no_peak)
-### This is also a paper result!
+# no_binding <- colnames(promoter_no_peak)
 
 promoter_positive_peaks <- promoter_positive_peaks[which(rowSums(promoter_positive_peaks) > 0),]
 
-#For any given tf-promoter combo what is the max number of peaks in a promoter?
-most_bound <- max(promoter_positive_peaks)
-  
 # We're going to make this binary -- make it a co-occurence matrix where any number of
 # peaks in a promoter for a tf is considered "binding" and so we're going to change all the
 # values to zeros and ones.
 promoter_bound <- promoter_peak_count > 0
-## make this into a numeric vector (0 or 1) instead of a boolean vector
+## Make this into a numeric vector (0 or 1) instead of a boolean vector
 promoter_occurence <- as.numeric(promoter_bound)
 
-# we make this into a matrix with the original dimensions
+# We make this into a matrix with the original dimensions
 promoter_peak_occurence <- matrix(promoter_occurence, 
                            nrow = dim(promoter_peak_count)[1],
                            ncol = dim(promoter_peak_count)[2])
@@ -67,16 +63,13 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 ```
 
 ```{r}
-# What is the distribution of DNA binding events across promoters that had at least 1 event?
+# Find the distribution of DNA binding events across promoters that had at least 1 event
 
 hist(promoter_positive_peaks)
 ```
 
-
 # Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense
 # We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
-# Read through the manual page to see other paramaters of this funciton ?dist
-
 
 ```{r}
 
@@ -84,7 +77,7 @@ hist(promoter_positive_peaks)
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 plot(bin_hier)
 
-# load library for ggdendro for the best trees we could find :) 
+# load library for ggdendro for the best trees we could find 
 library(ggdendro)
 
 ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
