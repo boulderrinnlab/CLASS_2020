@@ -18,7 +18,6 @@ library(ggrepel)
 library(Rsubread)
 library(effectsize)
 source("/Shares/rinn_class/data/k562_chip/analysis/util/intersect_functions.R")
-
 ```
 
 
@@ -34,8 +33,7 @@ total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR8
 
 ```{r converting read counts to TPM}
 
-# First we will take the bam file and find the number of reads that align over mRAN and lncRNA gene-bodies (similar to what we used in MACs)
-# Don't worry about the syntax of the following code as it pertains to RNAseq, but maybe worth a google :)
+# First we will take the bam file and find the number of reads that align over mRNA and lncRNA gene-bodies 
 
 counts <- featureCounts(c("/Shares/rinn_class/data/k562_chip/analysis/09_expression/ENCFF625ZBS.bam",
                           "/Shares/rinn_class/data/k562_chip/analysis/09_expression/ENCFF630HEX.bam"),
@@ -45,14 +43,14 @@ counts <- featureCounts(c("/Shares/rinn_class/data/k562_chip/analysis/09_express
                         nthreads = 16)
 
 # First we will find the number of reads per kilobases of a given gene body (rpkm).
-# Q: Why would we want to normalize to the size of the genebody?
+
 rpk <- counts$counts / (counts$annotation$Length/1000)
 expression <- data.frame("rpk" = rpk) %>%
   rownames_to_column("gene_id") %>%
   pivot_longer(2:3, names_to = "sample", values_to = "rpk")
 
 # Here we will convert rpkm to transcripts per million of reads (tpm)
-# Q: why would we need to furhter normalize this way?
+
 expression_summary <- expression %>%
   group_by(sample) %>%
   summarize(total_rpk = sum(rpk, na.rm = T))
@@ -63,58 +61,58 @@ tpm <- expression %>% group_by(gene_id) %>%
   summarize(tpm = mean(tpm, na.rm = T))
 ```
 
+Calling peaks and counting overlaps with promoters for lncRNAs and mRNAs
 
 ```{r}
-
-# 1. Read in consensus peaks as a list.
+# Read in consensus peaks as a list.
 consensus_peaks <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
 
-# 2. Read in gencode.
-gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf"
-)
+# Read in gencode.
+gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
-# 3. Get the promoter regions of each gene.
+# Get the promoter regions of each lncRNA and mRNA.
 
 proms <- get_promoter_regions(gencode_gr = gtf, biotype = c("lncRNA", "protein_coding"),
                               upstream =3000, downstream = 3000)
 
-
-# 4. Count peaks over promoters
+# Count peaks over promoters
 
 promoter_peak_count <- count_peaks_per_feature(features = proms, peak_list = consensus_peaks )
-
 ```
 
+Finding ghosts
+Reservoirs/Ghost promoters: Promoters with TFs binding but without expression (Note: Here in the script we are using the term "ghosts" and they are same as the reservoirs)
 ```{r}
-# Make this binary -- a co-occurence matrix.
+# Make this binary -- a co-occurence matrix (the promoters bound by TFs).
 promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0),
                            nrow = dim(promoter_peak_count)[1],
                            ncol = dim(promoter_peak_count)[2])
 rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
 colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 
-
-
 # Make a data frame of binding events per promoter.
 peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
                                 "number_of_tfs" = colSums(promoter_peak_occurence))
 
-# Merge in the expression data into the data frame you just created.
-
+# Merge in the expression data into the data frame we just created.
 peak_occurence_df <- merge(peak_occurence_df, tpm)
 
+# Defining ghosts here
 ghosts <- peak_occurence_df %>% filter(number_of_tfs > 7, tpm < 0.001)
 ## subset columns that correspond to ghosts
 ghost_peak_occurence <- promoter_peak_occurence[, colnames(promoter_peak_occurence) %in% ghosts$gene_id]
 
+# not_ghosts: everything else
 not_ghosts <- peak_occurence_df %>% filter(number_of_tfs > 7, tpm > 0.001)
 not_ghost_peak_occurence <- promoter_peak_occurence[,colnames(promoter_peak_occurence) %in% not_ghosts$gene_id]
-
 ```
 
+Making a contingency table here
 ```{r}
+# No. of ghost promoters bound by each TF
 ghost_num_overlaps <- rowSums(ghost_peak_occurence)
 not_ghost_num_overlaps <- rowSums(not_ghost_peak_occurence)
+
 num_peaks <- rowSums(promoter_peak_occurence[,colnames(promoter_peak_occurence)%in% c(colnames(ghost_peak_occurence), colnames(not_ghost_peak_occurence))])
 total_ghosts <- length(ghosts)
 total_not_ghosts <- length(not_ghosts)
@@ -126,8 +124,7 @@ chisq_res <- data.frame("tf" =character(),
                         "chisq_pval" = numeric(),
                         "not_ghosts" = numeric())
 
-i <- 1
-## How do we find expected number of ghosts??
+# Making a conntingency table for each trancription factor (in num_peaks list)
 for(i in 1:length(num_peaks)) {
   total_peaks <- num_peaks[[i]]
   df1 <- data.frame("ghosted" = c("ghost", "ghost", "not_ghost", "not_ghost"),
@@ -139,7 +136,7 @@ for(i in 1:length(num_peaks)) {
     pivot_wider(names_from = ghosted, values_from = counted) %>%
     column_to_rownames("promoter_bound") %>%
     as.matrix()
-  
+  # Performing Chi-squared test for ghost vs not_ghost
   csres <- chisq.test(df1)
   phi_coef <- phi(df1)
   tdf <- data.frame("tf" = names(num_peaks[i]),
@@ -153,8 +150,9 @@ for(i in 1:length(num_peaks)) {
 }
 ```
 
-
+Revisit this chunk once the manuscript is ready
 ```{r}
+# TODO revisit this chu
 # Use what you just made to plot the results.
 
 # heat map for tf and ghosts
@@ -175,32 +173,3 @@ g + geom_point(alpha = 0.2) +
 ggsave("figures/k562_promoter_binding_vs_expression.png")
 ggsave("figures/k562_promoter_binding_vs_expression.pdf")
 ```
-
-
-
-```{r}
-# With this data.frame, plot the distribution of expression across those two groups.
-
-# For example...
-# X should be your cutoff from above.
-peak_occurence_df$tf_binding <- "low"
-peak_occurence_df[which(peak_occurence_df$number_of_tfs > x), "tf_binding"] <- "high"
-
-g <- ggplot(peak_occurence_df, aes(x = log10(tpm), color = tf_binding))
-g + geom_density(alpha = 0.2)
-```
-
-
-```{r}
-# Here's an example of a binned approach.
-## Are these reasonable break points? How would consider changing them?
-quantile(peak_occurence_df$tpm)
-peak_occurence_df$expression <- cut(peak_occurence_df$tpm, breaks = c(-1, 0.001, 0.137, 3, 5000),
-                                    labels = c("off", "low", "med", "high"))
-table(peak_occurence_df$expression)
-
-g <- ggplot(peak_occurence_df, aes(x = expression, y = number_of_tfs, color = gene_type))
-g + geom_boxplot() + stat_compare_means() +
-  scale_color_manual(values = c("#a8404c", "#424242"))
-```
-
