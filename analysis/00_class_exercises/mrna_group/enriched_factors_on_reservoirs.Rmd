@@ -163,15 +163,15 @@ for(i in 1:length(num_peaks)) {
 #   theme(axis.text = element_text(size = 5)) +
 #   scale_fill_gradientn(colors = c("white", "red", "orange", "yellow", "green","turquoise", "blue", "purple"))
 
-g <- ggplot(chisq_res, aes(y = tf, x = ghosted))
+g <- ggplot(chisq_res, aes(y = ghosted, x = tf))
 g + geom_point(alpha = 0.2) +
   geom_smooth() +
   # scale_y_continuous(expand = c(0,0)) +
   # scale_x_continuous(expand = c(0,0)) +
   # scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
-  ggtitle("Promoter binding events vs. expression") +
+  ggtitle("Number of ghosts per TF") +
   xlab(expression('Number of TFs')) +
-  ylab(expression(log[10](tpm)))
+  ylab(expression(ghosted))
 ggsave("figures/k562_promoter_binding_vs_expression.png")
 ggsave("figures/k562_promoter_binding_vs_expression.pdf")
 ```
