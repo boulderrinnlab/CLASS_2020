@@ -15,35 +15,21 @@ source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
 
 ```
 
-
 # The first step is to get a matrix of features by TFs.
 
 ```{r}
 # We are going to start out with a function to import files called "import_peaks"
-<<<<<<< HEAD
 # This the filtered peak_list; final list of 161 TFs after filtering
-=======
-# this is the filtered peak_list; final list of 161 TFs after filtering
->>>>>>> 8f2e6f58d0ac5b922c7a589be865197fc4de85ae
 peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
 
 # Making the features (gencode) GRanges that has lots of features annotated
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
-<<<<<<< HEAD
-# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA gene # promoters
-=======
 # Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA promoters
->>>>>>> 8f2e6f58d0ac5b922c7a589be865197fc4de85ae
 proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
 
 # Counts the number of promoters that each TF binds to
 promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 8f2e6f58d0ac5b922c7a589be865197fc4de85ae
 ```
 
 ```{r filtering}
@@ -52,19 +38,11 @@ promoter_no_peak <- promoter_peak_count[,which(colSums(promoter_peak_count) < 1)
 
 ### TFs bind to these promoters
 promoter_positive_peaks <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
-<<<<<<< HEAD
 
 #yes_binding <- colnames(promoter_positive_peaks)
 
 # Now we want to remove any columns (tfs) where a TF has bound no promoters
 # no_binding <- colnames(promoter_no_peak)
-=======
-
-# Now we want to remove any columns (tfs) where a TF has bound no promoters
-# Q: Which TFs bound no promoters?
-no_binding <- colnames(promoter_no_peak)
-### This is also a paper result!
->>>>>>> 8f2e6f58d0ac5b922c7a589be865197fc4de85ae
 
 promoter_positive_peaks <- promoter_positive_peaks[which(rowSums(promoter_positive_peaks) > 0),]
 
@@ -85,11 +63,7 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 ```
 
 ```{r}
-<<<<<<< HEAD
 # Find the distribution of DNA binding events across promoters that had at least 1 event
-=======
-# What is the distribution of DNA binding events across promoters that had at least 1 event?
->>>>>>> 8f2e6f58d0ac5b922c7a589be865197fc4de85ae
 
 hist(promoter_positive_peaks)
 ```
