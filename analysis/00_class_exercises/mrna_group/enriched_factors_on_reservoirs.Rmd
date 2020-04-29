@@ -107,6 +107,29 @@ not_ghosts <- peak_occurence_df %>% filter(number_of_tfs > 7, tpm > 0.001)
 not_ghost_peak_occurence <- promoter_peak_occurence[,colnames(promoter_peak_occurence) %in% not_ghosts$gene_id]
 ```
 
+What sort of RNAs are reservoirs/ghosts?
+```{r}
+ghost_names <- ghosts$gene_id
+ghost_df <- data.frame("ghost_transcript_name" = character(),
+                       "ghost_gene_type" = character()
+                       )
+
+i<-5
+for(i in 1:length(ghost_names)){
+  gtf_ghost <- gtf[gtf$gene_id == ghost_names[i]]
+  gtf_ghost_type <- gtf_ghost$gene_type
+  gdf <- data.frame("ghost_transcript_name" = gtf_ghost$gene_id,
+                    "ghost_gene_type" = gtf_ghost_type )
+  
+  ghost_df <- bind_rows(ghost_df, gdf)
+}
+
+
+
+```
+
+
+
 Making a contingency table here
 ```{r}
 # No. of ghost promoters bound by each TF
