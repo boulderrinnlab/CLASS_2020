@@ -181,7 +181,7 @@ write_csv(peak_occurrence_df, "results/k562_expression_binding.csv")
 
 # Get ghost promoters
 ghosts <- peak_occurrence_df %>% filter(tpm < 0.001)
-ghosts <- ghosts[which(ghosts$number_of_tfs >= 7),]
+ghosts <- ghosts[which(ghosts$number_of_tfs > 7),]
 ghost_promoters <- gtf_promoters[gtf_promoters$gene_id %in% ghosts$gene_id,]
 
 # Get peaks
@@ -362,11 +362,12 @@ Figure F: Chi-square values vs. difference in expected and observed binding for 
 ```{r plot_chi_square}
 
 g <- ggplot(chisq_res, aes(x = diff, y = -log10(padj)))
-g + geom_point() +
+g + geom_point(colour = "#424242") +
     geom_text_repel(
-    data = subset(chisq_res, padj < 10^-38),
+    data = subset(chisq_res, diff > 100 | diff < -10),
     aes(label = tf),
     size = 3,
+    color ="#a8404c",
     box.padding = unit(0.35, "lines"),
     point.padding = unit(0.3, "lines"))
 
