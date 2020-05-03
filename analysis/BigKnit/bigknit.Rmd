@@ -1,0 +1,473 @@
+---
+title: "Consensus Peak Set"
+author: "JR & Michael"
+date: "5/2/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
+library(GenomicRanges)
+library(rtracklayer)
+library(tidyverse)
+source("analysis/util/_setup.R")
+source("analysis/util/intersect_functions.R")
+```
+
+
+# Purpose: Create consensus peak sets
+
+To be conservative in our peak calls and be sure that we're dealing with replicatable peaks in the following analyses, here will will create a consensus peak .bed file for each DNA binding protein by taking only those peaks which overlap in all replicate experiments. 
+
+The resulting peaks will consist of peaks which overlapped by at least on base pair in each replicate and will use the `GenomicRanges::reduce` function to merge the peaks by taking the outer boundaries of overlapping peaks. This strategy may widen some peaks, but will ensure that each peak in the resulting peak set has evidence in all experiments performed for that DNA binding protein. 
+
+
+```{r create-consensus-peaks, warnings=FALSE, message=FALSE}
+# For details on this function, see intersect_functions.R
+# In this process we also filter to only the peaks on canonical chromosomes.
+consensus_peaks <- create_consensus_peaks(broadpeakfilepath = "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak")
+```
+
+## Number of peaks threshold
+
+Since we want to study robust DNA binding proteins in K562 cells, we will implement a cutoff for the minimum number of peaks a DBP must have in order to be considered in the following analyses. There are some DBPs have have no replicate concordant peaks. 
+
+```{r dist-num-peaks}
+num_peaks_df <- data.frame("dbp" = names(consensus_peaks),
+                           "num_peaks" = sapply(consensus_peaks, length))
+g <- ggplot(num_peaks_df, aes(x = num_peaks))
+g + geom_histogram(bins = 70) +
+  xlab("Number of consensus peaks") +
+  ylab("Count") +
+  ggtitle("Distribution of number of consensus peaks")
+ggsave("figures/consensus_peaks_histogram.pdf")
+
+```
+# Resulting summary of peak sizes: `r paste(summary(num_peaks_df$num_peaks)`
+
+#### No replicate concordance 
+
+The proteins with zero consensus peaks are: `r paste(num_peaks_df[which(num_peaks_df$num_peaks == 0), "dbp"], collapse = " ")`
+
+#Filtering to DBPs with at least 250 consensus peaks
+```{r min-peaks-cutoff}
+# We're going to apply a cut off to consensus_peaks at 250 peaks
+num_peaks_threshold <- 250
+consensus_peaks <- consensus_peaks[num_peaks_df$num_peaks > num_peaks_threshold]
+```
+
+Since this captures the majority of DPBs and still provides a reasonable number of peaks to work with, we chose a cutoff of `r num_peaks_threshold` peaks. This results in losing the following proteins: `r paste(num_peaks_df[which(num_peaks_df$num_peaks <= 250), "dbp"], collapse = " ")`
+
+
+```{r export-peak-lists}
+# Export the peak lists.
+for(i in 1:length(consensus_peaks)) {
+  rtracklayer::export(consensus_peaks[[i]], paste0("results/", names(consensus_peaks)[i], "_consensus_peaks.bed"))
+}
+```
+
+## Summary of consensus peaks
+
+Here we'll look at a few characteristics of the remaining peaksets.
+
+#### Total peak length
+
+```{r total-peak-length}
+# Subset to remaining peaks
+num_peaks_df <- num_peaks_df %>% filter(dbp %in% names(consensus_peaks))
+
+# Calculate the total peak width (bp bound by all peaks)
+num_peaks_df$total_peak_length <- sapply(consensus_peaks, function(peaks) sum(width(peaks)))
+
+g <- ggplot(num_peaks_df, aes(x = num_peaks, y = total_peak_length, label = dbp))
+g + geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, color = "black", lty = 2) +
+  geom_text() +
+  ylab("BP covered") +
+  xlab("Number of peaks") +
+  ggtitle("Peak count vs. total bases covered")
+ggsave("figures/peak_count_vs_peak_length.pdf")
+```
+
+#### Peak width distributions
+
+```{r peak-width-distribution}
+# Let's grab the peak widths for all peak sets
+peak_widths_df <- lapply(consensus_peaks, 
+                      function(peaks) paste(width(peaks), collapse = ";")) %>%
+  as.data.frame() %>%
+  pivot_longer(cols = everything(),
+               names_to = "dbp",
+               values_to = "peak_width") %>%
+  separate_rows("peak_width", sep = ";", convert = T)
+
+peak_widths_summary <- peak_widths_df %>% 
+  group_by(dbp) %>%
+  summarize("mean_width" = mean(peak_width),
+            "median_width" = median(peak_width),
+            "sd_width" = sd(peak_width),
+            "cv_width" = (sd_width/mean_width)*100)
+
+g <- ggplot(peak_widths_summary, aes(x = mean_width))
+g + geom_histogram(bins = 60) + 
+  xlab("Mean peak width") +
+  ylab("Count") +
+  ggtitle("Peak width distribution")
+ggsave("figures/peak_width_distribution.pdf")
+
+g <- ggplot(peak_widths_summary, aes(x = mean_width, y = cv_width, label = dbp))
+g + geom_point() + 
+  geom_text() + 
+  xlab("Mean peak width") +
+  ylab("CV peak width") +
+  ggtitle("Peak width: mean vs. coefficient of variation")
+ggsave("figures/peak_width_vs_cv.pdf")
+```
+
+It seems that most DBPs have a relatively small peak width ~ 1000bp +/- 500bp and relatively small CV ~100bp. However, a few including POLII subunits have wider peaks widths. RFX1 is unique in that it has a typical mean peak width, but a very large CV. Indicating that while most peaks are in the typical range, it may have some very large peaks. 
+
+```{r polII-peak-widths}
+# Let's look at PolII in particular
+g <- ggplot(peak_widths_df %>% filter(dbp %in% c("POLR2A", "POLR2B", "SUPT5H")), aes(x = log10(peak_width)))
+g + geom_histogram(bins = 100) + 
+  facet_grid(dbp~., scales = "free_y") + 
+  xlab("log10(Peak width)") +
+  ylab("Count") +
+  ggtitle("Peak width distribution: POLII")
+ggsave("figures/peak_width_distribution_polII.pdf")
+```
+
+So interestingly it seems that there are two peaks in POLR2A's binding, but not for the other subunits. This may indicate two binding modes for POLR2A.
+
+```{r rfx1-peak-widths}
+# Also RFX1 which had a very high CV.
+g <- ggplot(peak_widths_df %>% filter(dbp %in% c("RFX1")), aes(x = log10(peak_width)))
+g + geom_histogram(bins = 100) + 
+  facet_grid(dbp~., scales = "free_y") + 
+  xlab("log10(Peak width)") +
+  ylab("Count") +
+  ggtitle("Peak width distribution: RFX1")
+ggsave("figures/peak_width_distribution_RFX1.pdf")
+
+max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])
+```
+
+And it does seem that RFX1 has just `r nrow(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),])` peaks which are above 3000 bps which is skewing the distribution. With one peak that has a width of `r max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])`.
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# 02_global_clustering
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# Purpose: to determine if there were underlying similarities and differences of 161 DBPs that passed filtering, we first performed binary clustering on a vector of 36,814 lncRNA and mRNA promoters defined in GENCODE 32 where 1 = bound, 0 = not bound for each promoter and DBP. 
+
+# The first step is to get a matrix of features (promoters) by DBPs.
+
+```{r}
+# We are going to start out with a function to import files called "import_peaks"
+# This the filtered peak_list; final list of 161 DBPs after filtering
+peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
+
+# Making the features (gencode) GRanges comprised of all Gencode v32 features (e.g. promters)
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA promoters (see intersect_functions.R in /util)
+
+proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
+
+# Counts the number of promoters that each DBP binds to using the function promoter_peak_count (see intersect_functions.R in /util)
+promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
+
+```
+
+# Filtering out those promoters with no DBPs bound and then binary clustering of bound unbound vectors.
+```{r filtering and clustering}
+#TODO Make sure about some of this -- i think it is only clustering the bound DBPs (161)
+
+# Remove columns with no DBPs bound to a given promoter
+promoter_peak_count <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
+
+# Remove DBPs with no promoter peaks
+no_promoter_binding <- rownames(promoter_peak_count)[which(rowSums(promoter_peak_count) == 0)]
+
+promoter_peak_count <- promoter_peak_count[which(rowSums(promoter_peak_count) > 0),]
+
+# Make this binary -- make it a co-occurence matrix.
+promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0), 
+                           nrow = dim(promoter_peak_count)[1],
+                           ncol = dim(promoter_peak_count)[2])
+rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
+colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
+
+bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
+plot(bin_hier)
+
+# load library for ggdendro for the best trees we could find 
+library(ggdendro)
+
+ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+```
+
+
+
+```{r}
+UMAP and other reductionality (PCA and print PCA?)
+```
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# 03_peak_feature_intersect
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# Goal: look at the number of peak overlaps at lncRNA and mRNA promoters as a function of total peaks called per DBP
+
+```{r Intersect lncRNA and mRNA events into a matrix}
+
+# Make a list of lncRNA and mRNA promoters seperately
+# get_promoter_regions is a function (see intersect_functions.R in /util)
+lncRNA_proms <- get_promoter_regions(gencode_gr, biotype = ("lncRNA"))
+mRNA_proms <- get_promoter_regions(gencode_gr, biotype = ("protein_coding"))
+
+# Count the number of peaks in lncRNA and mRNA promoters
+# count_peaks_per_feature is a function (see intersect_functions.R in /util)
+lncRNA_promoter_peak_count <- count_peaks_per_feature(lncRNA_proms, peak_list)
+mRNA_promoter_peak_count <- count_peaks_per_feature(mRNA_proms, peak_list)
+
+
+# Make a binary co-occurence matrix where any number of peaks in a promoter for a tf is considered binding.
+# This makes it so that each promoter is classified as bound or not bound
+lncRNA_promoter_bound <- lncRNA_promoter_peak_count > 0
+mRNA_promoter_bound <- mRNA_promoter_peak_count > 0
+
+# Make this into a numeric vector (0 or 1)
+lncRNA_promoter_occurence <- as.numeric(lncRNA_promoter_bound)
+mRNA_promoter_occurence <- as.numeric(mRNA_promoter_bound)
+
+# Make back into a matrix
+lncRNA_promoter_peak_occurence <- matrix(lncRNA_promoter_occurence, 
+                           nrow = dim(lncRNA_promoter_peak_count)[1],
+                           ncol = dim(lncRNA_promoter_peak_count)[2])
+
+mRNA_promoter_peak_occurence <- matrix(mRNA_promoter_occurence, 
+                           nrow = dim(mRNA_promoter_peak_count)[1],
+                           ncol = dim(mRNA_promoter_peak_count)[2])
+
+# Let's transfer the row and column names
+rownames(lncRNA_promoter_peak_occurence) <- rownames(lncRNA_promoter_peak_count)
+colnames(lncRNA_promoter_peak_occurence) <- colnames(lncRNA_promoter_peak_count)
+
+rownames(mRNA_promoter_peak_occurence) <- rownames(mRNA_promoter_peak_count)
+colnames(mRNA_promoter_peak_occurence) <- colnames(mRNA_promoter_peak_count)
+```
+
+# Extracting information for the number of overlaps at mRNA and lncRNA promoters by number of consensus peaks each DBP has in total
+```{r Extracting information for the number of overlaps at mRNA and lncRNA promoters by number of consensus peaks each DBP has in total}
+
+# Get the number of peaks per DBP
+num_peaks <- sapply(peak_list, length)
+
+# Get the number peaks that overlap promoters per DBP
+lncRNA_num_prom_overlap <- rowSums(lncRNA_promoter_peak_count)
+mRNA_num_prom_overlap <- rowSums(mRNA_promoter_peak_count)
+
+#TODO make this a function -- simplify??
+#Make list of DBP names
+consensus_file_path <- "/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results"
+peak_files <- list.files(consensus_file_path, full.names = T)
+file_names <- str_extract(peak_files, "[\\w-]+\\.bed")
+tf_name <- str_extract(file_names, "^[^_]+(?=_)")
+
+# Make a data frame of promoter overlaps
+lncRNA_prom_overlap_df <- data.frame("TF"= tf_name, "peaks_overlapping_promoters" = lncRNA_num_prom_overlap,
+                                     "peaks_per_TF" = num_peaks, "promoter_type" = "lncRNA")
+mRNA_prom_overlap_df <- data.frame("TF"= tf_name, "peaks_overlapping_promoters" = mRNA_num_prom_overlap,
+                              "peaks_per_TF" = num_peaks, "promoter_type" = "mRNA")
+
+#Make a combined data frame for plotting below
+all_prom_overlaps <- bind_rows(lncRNA_prom_overlap_df, mRNA_prom_overlap_df)
+```
+
+# Goal:plot of promoter overlaps per number of total peaks per DBP for mRNA and lncRNA seperatel
+```{r Plotting }
+#TODO better plot :) 
+# Plotting the number of overlaps at mRNA and lncRNA promoters by number of peaks each DBP has
+
+ggplot(all_prom_overlaps,
+       aes(x = peaks_per_TF, y = peaks_overlapping_promoters, color = promoter_type)) +
+  scale_color_manual(values = c("#424242", "#a8404c"))+
+  xlab("Peaks per TF") +
+  ylab("Peaks Overlapping Promoters") +
+  ggtitle("Relationship Between Number of TF Peaks and Promoter Overlaps") +
+  geom_abline(slope = 1, linetype="dashed") +
+  geom_smooth(method = "lm", se=FALSE)
+
+
+```
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# 03_peak_feature_intersect / Permutation Tests for Empirical Null of feature overlaps
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# Goal: since observed a linear overlapping trend based on number of peaks we wanted to derive an empircal null distribution of feature overlaps of 1,000 permutations of each DBPs peak profile across the genome. Thus we can compared our observed feature overlaps with those of an empircally derived null distribution using a chi-squared test.
+
+# Permutation test of each DBP peak profile for overlap with promoters (lncRNA and mRNA) as well as other features in gencode GR such as repeat class and family
+```{r}
+# note we defined lncRNA_proms above and now we are calling them lncRNA_promoters and mRNA promtoers
+# loading in and setting variables to be permuted
+lncrna_promoters <- get_promoter_regions(gencode_gr, biotype = "lncRNA")
+mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
+rmsk <- import_repeatmasker()
+rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
+names(rmsk_family) <- paste(names(rmsk_family), "family", sep = "_")
+rmsk_class <- subset_rmsk(rmsk, rep_level = "class")
+names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
+region_list <- c("lncrna_promoters" = list(lncrna_promoters), 
+                 "mrna_promoters" = list(mrna_promoters), 
+                 rmsk_family, rmsk_class)
+canonical_chr <- as.character(unique(seqnames(region_list[[1]])))
+# sanitize region list to only canonical chromosomes
+for(i in 1:length(region_list)) {
+  region_list[[i]] <- region_list[[i]][which(seqnames(region_list[[i]]) %in% canonical_chr)]
+}
+pars <- expand.grid(1:length(region_list), 1:length(peak_list)) %>% 
+  as.data.frame()
+names(pars) <- c("region_index", "peak_index")
+```
+
+
+# Setting seed and other paramaters for permutations as a function called permtest
+```{r Setting up the permutation loops for 1,000 randomizations}
+
+#load genome
+hg38 <- getGenome("hg38")
+
+#Setting function perm_test to then send to SLURM in next chunk
+perm_test <- function(region_index, peak_index, npermutations = 1000) {
+  
+#TODO I see peak_list in my envrionment (161 obs), but I don't see region_list but I believe it was set above on line 325
+  
+  set.seed(12044593)
+  region <- names(region_list)[[region_index]]
+  tf <- names(peak_list)[[peak_index]]
+  
+  cat("Running overlap test for ", region, "  & ", tf, "\n\n")
+  a_regions <- region_list[[region_index]]
+  b_regions <- peak_list[[peak_index]]
+  
+  suppressWarnings(pt <- overlapPermTest(A = a_regions, 
+                        B = b_regions, 
+                        ntimes = npermutations, 
+                        non.overlapping = FALSE, 
+                        verbose = FALSE,
+                        genome = hg38,
+                        alternative =  "auto", 
+                        mc.cores = 1))
+  ptdf <- data.frame("region" = region,
+                     "tf" = tf,
+                     "pval" = pt$numOverlaps$pval,
+                     "zscore" = pt$numOverlaps$zscore,
+                     "nperm" = pt$numOverlaps$ntimes,
+                     "alternative" = pt$numOverlaps$alternative,
+                     "observed" = pt$numOverlaps$observed,
+                     "permuted" = paste(pt$numOverlaps$permuted, collapse = ";"))
+  return(ptdf)
+}
+```
+
+# Now have a permtest function and now will have it run in SLURM
+```{r sending the permtest function to slurm }
+sjob <- slurm_apply(perm_test, pars, jobname = 'perm_overlaps',
+                    add_objects = c("region_list", "peak_list", "hg38", "overlapPermTest"),
+                    nodes = 22, cpus_per_node = 30, 
+                    slurm_options = list(time = '30:00:00'),
+                    submit = FALSE)
+```
+
+# Goal: Peform chi-squared test on observed versus expected from emperical null generated above
+```{r Chi-squared of observed and expected feature overlaps"}
+#TODO we sapply a lot to peak_list and num_peaks -- is that an issue?
+# Using count_peaks_per_feature to find intersection in permutations
+lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurence")
+mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurence")
+
+# Look at number of observed versus expected peaks in lncRNA and mRNA promoters for each DBP
+lncrna_num_overlaps <- rowSums(lncrna_matrix)
+mrna_num_overlaps <- rowSums(mrna_matrix)
+num_peaks <- sapply(peak_list, length)
+total_lncrna <- length(lncrna_promoters)
+total_mrna <- length(mrna_promoters)
+total_genes <- total_lncrna + total_mrna
+chisq_res <- data.frame("tf" =character(),
+                        "lncrna_peaks_observed" = numeric(),
+                        "chisq_stat" = numeric(),
+                        "chisq_pval" = numeric(),
+                        "lncrna_peaks_expected" = numeric(),
+                        "mrna_peaks_observed" = numeric(),
+                        "mrna_peaks_expected" = numeric())
+for(i in 1:length(num_peaks)) {
+  total_peaks <- num_peaks[[i]]
+  df1 <- data.frame("gene_type" = c("lncRNA","lncRNA", "mRNA", "mRNA"),
+                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
+                    "count" = c(lncrna_num_overlaps[[i]],
+                                total_lncrna - lncrna_num_overlaps[[i]],
+                                mrna_num_overlaps[[i]],
+                                total_mrna - mrna_num_overlaps[[i]])) %>%
+    pivot_wider(names_from = gene_type, values_from = count) %>%
+    column_to_rownames("promoter_bound") %>%
+    as.matrix()
+  
+  csres <- chisq.test(df1)
+  
+  phi_coef <- phi(df1)
+  
+  tdf <- data.frame("tf" = names(num_peaks[i]),
+                    "lncrna_peaks_observed" = lncrna_num_overlaps[[i]],
+                    "chisq_stat" = csres$statistic,
+                    "chisq_pval" = csres$p.value,
+                    "lncrna_peaks_expected" = csres$expected[1,1],
+                    "phi_coefficient" = phi_coef$phi,
+                    "mrna_peaks_observed" = mrna_num_overlaps[[i]],
+                    "mrna_peaks_expected" = csres$expected[1,2])
+  # adding 
+  chisq_res <- bind_rows(chisq_res, tdf)
+}
+
+```
+
+# Setting up to make the plots of chi-squared analysis for different features e.g. lncRNA promoters
+
+```{r plotting chi-squared results}
+
+chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
+chisq_res$lncrna_diff <- chisq_res$lncrna_peaks_observed - chisq_res$lncrna_peaks_expected
+chisq_res$mrna_diff <- chisq_res$mrna_peaks_observed - chisq_res$mrna_peaks_expected
+write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
+# Plot the difference between number of observed and expected peaks in lncRNA promoters for each TF versus the -log10 of the chi square p-value
+g <- ggplot(chisq_res, aes(x = lncrna_diff, y = -log10(chisq_pval)))
+g + geom_point()
+# Zoom in on the above plot to look at just at a few TFs centered around diff = 0, including those with positive values of observed-expected number of peaks in lncRNA promoters, which are labeled by name
+g2 <- ggplot(chisq_res, aes(x = lncrna_diff, y = -log10(chisq_pval) ))
+g2 + geom_point()  + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, lncrna_diff > 0), aes(lncrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
+# Plot the difference between number of observed and expected peaks in mRNA promoters for each TF versus the -log10 of the chi square p-value
+g3 <- ggplot(chisq_res, aes(x = mrna_diff, y = -log10(chisq_pval) ))
+g3 + geom_point()
+# Zoom in on the above plot to look at just at a few TFs centered around diff = 0; label the TFs with positive diff values by name 
+g4 <- ggplot(chisq_res, aes(x = mrna_diff, y = -log10(chisq_pval) ))
+g4 + geom_point() + xlim(-35, 35) + ylim(0, 5)  + geom_text(data = subset(chisq_res, mrna_diff > 0), aes(mrna_diff, -log10(chisq_pval), label = tf, check_overlap = TRUE))
+```
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# 04_binding_versus_expression
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+
+
+
+
+
+
