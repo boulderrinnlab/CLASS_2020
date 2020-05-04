@@ -72,7 +72,8 @@ gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/ge
 
 # Get the promoter regions of each lncRNA and mRNA.
 
-proms <- get_promoter_regions(gencode_gr = gtf, biotype = c("lncRNA", "protein_coding"),
+promoter_type <- c("lncRNA", "protein_coding", "miRNA", "snRNA", "snoRNA")
+proms <- get_promoter_regions(gencode_gr = gtf, biotype = promoter_type,
                               upstream =3000, downstream = 3000)
 
 # Count peaks over promoters
@@ -106,6 +107,46 @@ ghost_peak_occurence <- promoter_peak_occurence[, colnames(promoter_peak_occuren
 not_ghosts <- peak_occurence_df %>% filter(number_of_tfs > 7, tpm > 0.001)
 not_ghost_peak_occurence <- promoter_peak_occurence[,colnames(promoter_peak_occurence) %in% not_ghosts$gene_id]
 ```
+
+What sort of RNAs are reservoirs/ghosts?
+```{r}
+ghost_names <- ghosts$gene_id
+ghost_df <- data.frame("ghost_transcript_name" = character(),
+                       "ghost_gene_type" = character()
+                       )
+
+for(i in 1:length(ghost_names)){
+  gtf_ghost <- unique(gtf[gtf$gene_id == ghost_names[i]])
+  gtf_ghost_type <- gtf_ghost$gene_type %>% unique()
+  gdf <- data.frame("ghost_transcript_name" = unique(gtf_ghost$gene_id),
+                    "ghost_gene_type" = gtf_ghost_type )
+  
+  ghost_df <- bind_rows(ghost_df, gdf)
+}
+
+## separate out transcripts by gene type
+total_ghost_transcript <- length(ghost_df$ghost_transcript_name)
+
+ghost_df_lengths <- data.frame("transcript_type" = character(),
+                               "number_of_ghosts" = integer())
+for(i in 1:length(promoter_type)){
+  transcript_type <- promoter_type[i]
+  number_of_ghosts <- length(which(ghost_df$ghost_gene_type == promoter_type[i]))
+  pdff <- data.frame("transcript_type" = transcript_type,
+                     "number_of_ghosts" = number_of_ghosts)
+  ghost_df_lengths <- bind_rows(pdff, ghost_df_lengths)
+}
+
+ghost_gencode <- gencode_gr[gencode_gr$gene_id %in% ghost_df$ghost_transcript_name & gencode_gr$type == "gene"] %>% 
+  as.data.frame()
+ghost_
+
+g <- ggplot(ghost_df_lengths, aes(x = transcript_type, y = number_of_ghosts))
+g + geom_bar(stat = "identity")
+
+```
+
+
 
 Making a contingency table here
 ```{r}
