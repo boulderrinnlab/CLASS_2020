@@ -70,6 +70,7 @@ num_peaks_df <- num_peaks_df %>% filter(dbp %in% names(consensus_peaks))
 
 # Calculate the total peak width (bp bound by all peaks)
 num_peaks_df$total_peak_length <- sapply(consensus_peaks, function(peaks) sum(width(peaks)))
+write_csv(num_peaks_df, "results/number_of_peaks_per_dbp.csv")
 
 g <- ggplot(num_peaks_df, aes(x = num_peaks, y = total_peak_length, label = dbp))
 g + geom_point() + 
@@ -186,6 +187,12 @@ g + geom_histogram(bins = 100) +
 
 ``` r
 ggsave("figures/peak_width_distribution_polII.pdf")
+```
+
+    ## Saving 7 x 5 in image
+
+``` r
+ggsave("figures/peak_width_distribution_polII.png")
 ```
 
     ## Saving 7 x 5 in image
@@ -311,3 +318,29 @@ num_ovl <- sapply(tf_promoter_ovl, length)
 ```
 
 There are no proteins that don't overlap any promoters and the least number of promoters bound is eGFP-TSC22D4 which overlapped 46
+
+``` r
+promoter_peak_counts <- count_peaks_per_feature(lncrna_mrna_promoters, consensus_peaks,                                               type = "counts")
+
+num_peaks_df$peaks_overlapping_lncrna_promoters <- rowSums(promoter_peak_counts[,lncrna_promoters$gene_id])
+num_peaks_df$peaks_overlapping_mrna_promoters <- rowSums(promoter_peak_counts[,mrna_promoters$gene_id])
+num_peaks_dfl <- num_peaks_df %>% pivot_longer(4:5, names_to = "promoter_type",
+                                               values_to = "peaks_overlapping_promoters")
+
+ggplot(num_peaks_dfl,
+       aes(x = num_peaks, y = peaks_overlapping_promoters, color = promoter_type)) +
+  scale_color_manual(values = c("#424242", "#a8404c"))+
+  xlab("Peaks per TF") +
+  ylab("Peaks Overlapping Promoters") +
+  ggtitle("Relationship Between Number of TF Peaks and Promoter Overlaps")+
+  geom_point() +
+  geom_abline(slope = 1, linetype="dashed") +
+  geom_smooth(method = "lm", se=FALSE)
+```
+
+![](consensus_peak_set_files/figure-markdown_github/unnamed-chunk-2-1.png)
+
+``` r
+ggsave("figures/peaks_overlaps_relationship.png", height = 5, width = 8)
+ggsave("figures/peaks_overlaps_relationship.pdf", height = 5, width = 8)
+```
