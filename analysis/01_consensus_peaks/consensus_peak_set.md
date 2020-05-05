@@ -51,7 +51,9 @@ Since this captures the majority of DPBs and still provides a reasonable number 
 ``` r
 # Export the peak lists.
 for(i in 1:length(consensus_peaks)) {
-  rtracklayer::export(consensus_peaks[[i]], paste0("results/", names(consensus_peaks)[i], "_consensus_peaks.bed"))
+  rtracklayer::export(consensus_peaks[[i]], paste0("results/consensus_peaks/",
+                                                   names(consensus_peaks)[i], 
+                                                   "_consensus_peaks.bed"))
 }
 ```
 
@@ -255,7 +257,7 @@ g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
           subtitle = "mRNA and lncRNA genes")
 ```
 
-![](consensus_peak_set_files/figure-markdown_github/unnamed-chunk-3-1.png)
+![](consensus_peak_set_files/figure-markdown_github/promoter-peak-distribution-1.png)
 
 ``` r
 ggsave("figures/k562_promoter_binding_density.png")
@@ -268,6 +270,35 @@ ggsave("figures/k562_promoter_binding_density.pdf")
 ```
 
     ## Saving 7 x 5 in image
+
+``` r
+g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+g + geom_histogram(color = "#424242", fill = "#424242") +
+  theme_paperwhite() +
+  xlab(expression("Number of TFs")) +
+  ylab(expression("Count")) +
+  ggtitle("Promoter binding events",
+          subtitle = "mRNA and lncRNA genes")
+```
+
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+
+![](consensus_peak_set_files/figure-markdown_github/promoter-peak-distribution-2.png)
+
+``` r
+ggsave("figures/k562_promoter_binding_histogram.png")
+```
+
+    ## Saving 7 x 5 in image
+
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+
+``` r
+ggsave("figures/k562_promoter_binding_histogram.pdf")
+```
+
+    ## Saving 7 x 5 in image
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
 ``` r
 unbound_promoters <- peak_occurence_df %>% filter(peak_occurence_df$number_of_tfs < 1)

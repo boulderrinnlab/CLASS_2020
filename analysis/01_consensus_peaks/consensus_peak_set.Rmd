@@ -65,7 +65,9 @@ Since this captures the majority of DPBs and still provides a reasonable number 
 ```{r export-peak-lists}
 # Export the peak lists.
 for(i in 1:length(consensus_peaks)) {
-  rtracklayer::export(consensus_peaks[[i]], paste0("results/", names(consensus_peaks)[i], "_consensus_peaks.bed"))
+  rtracklayer::export(consensus_peaks[[i]], paste0("results/consensus_peaks/",
+                                                   names(consensus_peaks)[i], 
+                                                   "_consensus_peaks.bed"))
 }
 ```
 
@@ -207,7 +209,7 @@ peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
 write_csv(peak_occurence_df, "results/lncrna_mrna_promoter_peak_counts.csv")
 ```
 
-```{r}
+```{r promoter-peak-distribution}
 # Make a density plot of all promoter binding events per goal #1.
 g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
 g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
@@ -218,7 +220,19 @@ g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
           subtitle = "mRNA and lncRNA genes")
 ggsave("figures/k562_promoter_binding_density.png")
 ggsave("figures/k562_promoter_binding_density.pdf")
+
+g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+g + geom_histogram(color = "#424242", fill = "#424242") +
+  theme_paperwhite() +
+  xlab(expression("Number of TFs")) +
+  ylab(expression("Count")) +
+  ggtitle("Promoter binding events",
+          subtitle = "mRNA and lncRNA genes")
+ggsave("figures/k562_promoter_binding_histogram.png")
+ggsave("figures/k562_promoter_binding_histogram.pdf")
 ```
+
+
 
 ```{r unbound-promoters}
 unbound_promoters <- peak_occurence_df %>% filter(peak_occurence_df$number_of_tfs < 1)
