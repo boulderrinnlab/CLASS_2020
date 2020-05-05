@@ -92,6 +92,27 @@ g + geom_point() +
 ggsave("figures/peak_count_vs_peak_length.pdf")
 ```
 
+
+#### eGFP peak count distribution
+
+```{r egfp-peaks, warning=FALSE}
+num_peaks_df$egfp_labeled <- FALSE
+num_peaks_df[grep("eGFP", num_peaks_df$dbp), "egfp_labeled"] <- TRUE
+
+g <- ggplot(num_peaks_df, aes(x = num_peaks, color = egfp_labeled))
+g + stat_ecdf() + 
+  scale_color_manual(values = c("#424242","#a8404c")) +
+  ylab("Cumulative density") +
+  xlab("Consensus peaks") + 
+  ggtitle("eGFP vs. non-eGFP peak count")
+
+# Test whether the distribution of peak counts is the same for eGFP labeled proteins
+ks.test(x = num_peaks_df[which(num_peaks_df$egfp_labeled),"num_peaks"],
+        y = num_peaks_df[which(!num_peaks_df$egfp_labeled),"num_peaks"])
+```
+
+There is not a difference in peak counts for eGFP labelled proteins.
+
 #### Peak width distributions
 
 ```{r peak-width-distribution}
@@ -156,6 +177,61 @@ max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_widt
 ```
 
 And it does seem that RFX1 has just `r nrow(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),])` peaks which are above 3000 bps which is skewing the distribution. With one peak that has a width of `r max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])`.
+
+
+#### DNA binding protein distribution at promoters
+
+The purpose of this code is to determine the distribution of DNA-binding proteins (DBPs) at promoters. We will look at the number of DBPs bound at a given promoter as well as whether there are any promoters which are not bound by any DBPs. We will also ask whether any DBPs do not bind to any promoters.
+
+```{r gencode-import}
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+# For convenience, we'll export these lists to read in the following analyses.
+lncrna_mrna_promoters <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
+rtracklayer::export(lncrna_mrna_promoters, "results/lncrna_mrna_promoters.gtf")
+
+lncrna_promoters <- get_promoter_regions(gencode_gr, biotype = "lncRNA")
+rtracklayer::export(lncrna_promoters, "results/lncrna_promoters.gtf")
+
+mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
+rtracklayer::export(mrna_promoters, "results/mrna_promoters.gtf")
+```
+
+```{r count-peaks-per-promoter}
+promoter_peak_occurence <- count_peaks_per_feature(lncrna_mrna_promoters, consensus_peaks, 
+                                               type = "occurence")
+write.table(promoter_peak_occurence, "results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
+
+# Make a data frame of binding events per promoter.
+peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
+                                "number_of_tfs" = colSums(promoter_peak_occurence))
+write_csv(peak_occurence_df, "results/lncrna_mrna_promoter_peak_counts.csv")
+```
+
+```{r}
+# Make a density plot of all promoter binding events per goal #1.
+g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
+  theme_paperwhite() +
+  xlab(expression("Number of TFs")) +
+  ylab(expression("Density")) +
+  ggtitle("Promoter binding events",
+          subtitle = "mRNA and lncRNA genes")
+ggsave("figures/k562_promoter_binding_density.png")
+ggsave("figures/k562_promoter_binding_density.pdf")
+```
+
+```{r unbound-promoters}
+unbound_promoters <- peak_occurence_df %>% filter(peak_occurence_df$number_of_tfs < 1)
+write_csv(unbound_promoters, "results/unbound_lncrna_mrna_promoters.csv")
+```
+
+```{r}
+tf_promoter_ovl <- get_overlapping_peaks(lncrna_mrna_promoters, consensus_peaks)
+num_ovl <- sapply(tf_promoter_ovl, length)
+```
+
+There are no proteins that don't overlap any promoters and the least number of promoters bound is `r names(num_ovl)[which(num_ovl == min(num_ovl))]` which overlapped `r min(num_ovl)`
+
 
 
 
