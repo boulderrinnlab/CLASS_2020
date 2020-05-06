@@ -12,6 +12,8 @@ library(rtracklayer)
 library(liftOver)
 library(tidyverse)
 library(GenomicRanges)
+library(rslurm)
+library(regioneR)
 ```
 
 # Retrieving superenhancer info
@@ -21,7 +23,7 @@ We got this from the SEdb: https://asntech.org/dbsuper/
 `wget http://asntech.org/dbsuper/data/bed/hg19/K562.bed`
 
 ```{r}
-reservoirs <- rtracklayer::import("../04_correlation_with_expression/results/k562_ghost_promoters.bed")
+reservoirs <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/04_correlation_with_expression/results/k562_ghost_promoters.bed")
 se_hg19 <- rtracklayer::import("K562.bed")
 ch <- import.chain("hg19ToHg38.over.chain")
 ```
@@ -38,10 +40,10 @@ rtracklayer::export(se_hg38, "results/k562_superenhancers_hg38.bed")
 ```
 
 ```{r}
-se_hg38 <- rtracklayer::import("results/k562_superenhancers_hg38.bed")
+se_hg38 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/results/k562_superenhancers_hg38.bed")
 ```
 
-### Look at the overlaps between reservoirs and superenhancers
+Look at the overlaps between reservoirs and superenhancers:
 
 ```{r}
 se_res_ov <- findOverlaps(reservoirs, se_hg38)
@@ -49,7 +51,18 @@ reservoirs_overlapping_ses <- reservoirs[se_res_ov@from]
 rtracklayer::export(reservoirs_overlapping_ses, "results/reservoirs_overlapping_ses.bed")
 ```
 
-## Now you can do the permutation test here! 
+Do permutation of superenhancers to see how often they overlap with reservoirs by chance:
 
-Let us know if you need help getting started.
+```{r}
+hg38 <- getGenome("hg38")
+pt <- overlapPermTest(A = reservoirs, 
+                        B = se_hg38, 
+                        ntimes = 1000, 
+                        non.overlapping = FALSE, 
+                        verbose = FALSE,
+                        genome = hg38,
+                        alternative =  "auto", 
+                        mc.cores = 20)
+plot(pt)
+```
 
