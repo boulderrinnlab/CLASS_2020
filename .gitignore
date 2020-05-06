@@ -12,4 +12,7 @@
 *figures*
 *bam*
 *.tmp
-
+*html
+*.bed
+*_rslurm*
+*.chain
