@@ -13,7 +13,6 @@ library(tidyverse)
 library(GenomicRanges)
 library(GenomicFeatures)
 library(rtracklayer)
-#library(ggbio)
 library(ggrepel)
 library(Rsubread)
 library(effectsize)
@@ -65,24 +64,25 @@ Calling peaks and counting overlaps with promoters for lncRNAs and mRNAs
 
 ```{r}
 # Read in consensus peaks as a list.
-consensus_peaks <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
+consensus_peaks <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks/")
 
 # Read in gencode.
 gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
-# Get the promoter regions of each lncRNA and mRNA.
+# Get the promoter regions of each lncRNA, mRNA, snRNA and snoRNA.
 
 promoter_type <- c("lncRNA", "protein_coding", "miRNA", "snRNA", "snoRNA")
 proms <- get_promoter_regions(gencode_gr = gtf, biotype = promoter_type,
                               upstream =3000, downstream = 3000)
-
+df_proms <- data.frame(proms)
 # Count peaks over promoters
 
-promoter_peak_count <- count_peaks_per_feature(features = proms, peak_list = consensus_peaks )
+promoter_peak_count <- count_peaks_per_feature(features = proms, peak_list = consensus_peaks)
 ```
 
 Finding ghosts
 Reservoirs/Ghost promoters: Promoters with TFs binding but without expression (Note: Here in the script we are using the term "ghosts" and they are same as the reservoirs)
+
 ```{r}
 # Make this binary -- a co-occurence matrix (the promoters bound by TFs).
 promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0),
@@ -112,14 +112,14 @@ What sort of RNAs are reservoirs/ghosts?
 ```{r}
 ghost_names <- ghosts$gene_id
 ghost_df <- data.frame("ghost_transcript_name" = character(),
-                       "ghost_gene_type" = character()
+                       "ghost_transcript_type" = character()
                        )
 
 for(i in 1:length(ghost_names)){
   gtf_ghost <- unique(gtf[gtf$gene_id == ghost_names[i]])
   gtf_ghost_type <- gtf_ghost$gene_type %>% unique()
   gdf <- data.frame("ghost_transcript_name" = unique(gtf_ghost$gene_id),
-                    "ghost_gene_type" = gtf_ghost_type )
+                    "ghost_transcript_type" = gtf_ghost_type )
   
   ghost_df <- bind_rows(ghost_df, gdf)
 }
@@ -129,9 +129,10 @@ total_ghost_transcript <- length(ghost_df$ghost_transcript_name)
 
 ghost_df_lengths <- data.frame("transcript_type" = character(),
                                "number_of_ghosts" = integer())
+
 for(i in 1:length(promoter_type)){
   transcript_type <- promoter_type[i]
-  number_of_ghosts <- length(which(ghost_df$ghost_gene_type == promoter_type[i]))
+  number_of_ghosts <- length(which(ghost_df$ghost_transcript_type == promoter_type[i]))
   pdff <- data.frame("transcript_type" = transcript_type,
                      "number_of_ghosts" = number_of_ghosts)
   ghost_df_lengths <- bind_rows(pdff, ghost_df_lengths)
@@ -139,16 +140,14 @@ for(i in 1:length(promoter_type)){
 
 ghost_gencode <- gencode_gr[gencode_gr$gene_id %in% ghost_df$ghost_transcript_name & gencode_gr$type == "gene"] %>% 
   as.data.frame()
-ghost_
 
 g <- ggplot(ghost_df_lengths, aes(x = transcript_type, y = number_of_ghosts))
-g + geom_bar(stat = "identity")
+g + geom_bar(stat = "identity") + theme(panel.grid = element_blank())
 
 ```
 
-
-
 Making a contingency table here
+
 ```{r}
 # No. of ghost promoters bound by each TF
 ghost_num_overlaps <- rowSums(ghost_peak_occurence)
@@ -192,6 +191,7 @@ for(i in 1:length(num_peaks)) {
 ```
 
 Revisit this chunk once the manuscript is ready
+
 ```{r}
 # TODO revisit this chu
 # Use what you just made to plot the results.
@@ -214,3 +214,23 @@ g + geom_point(alpha = 0.2) +
 ggsave("figures/k562_promoter_binding_vs_expression.png")
 ggsave("figures/k562_promoter_binding_vs_expression.pdf")
 ```
+
+Identifying top 10 promoters acting as the reservoirs with most TFs bound to it
+
+```{r}
+gtf_df <- as.data.frame(gtf)
+
+gene_identity <- data.frame("gene_name" = gtf_df$gene_name,
+                    "gene_id" = gtf_df$gene_id )
+
+# Merge in the expression data into the data frame
+peak_occurence <- merge(unique(gene_identity[,colnames(gene_identity)]), peak_occurence_df)
+
+# Defining ghosts here with the gene name
+ghosts_with_name <- peak_occurence %>% filter(number_of_tfs > 7, tpm < 0.001)
+
+# Plotting the graph
+g5 <- ggplot(ghosts_with_name, aes(gene_name, number_of_tfs))
+g5 + geom_point() + ylim (90, 120) + geom_text(aes(label = gene_name), check_overlap = TRUE, vjust = 0, hjust = 0, nudge_y = 1, size = 2.5) + theme(legend.position = "none", panel.grid = element_blank(), axis.text.x = element_blank())
+```
+
