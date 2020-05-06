@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(rtracklayer)
 library(liftOver)
 library(tidyverse)
+library(GenomicRanges)
 ```
 
 # Retrieving superenhancer info
@@ -43,10 +44,12 @@ se_hg38 <- rtracklayer::import("results/k562_superenhancers_hg38.bed")
 ### Look at the overlaps between reservoirs and superenhancers
 
 ```{r}
-library(GenomicRanges)
 se_res_ov <- findOverlaps(reservoirs, se_hg38)
 reservoirs_overlapping_ses <- reservoirs[se_res_ov@from]
 rtracklayer::export(reservoirs_overlapping_ses, "results/reservoirs_overlapping_ses.bed")
 ```
 
+## Now you can do the permutation test here! 
+
+Let us know if you need help getting started.
 
