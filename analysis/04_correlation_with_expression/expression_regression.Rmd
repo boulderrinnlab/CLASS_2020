@@ -1,0 +1,388 @@
+---
+title: "Expression regression"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(gbm)
+library(rsample)
+library(h2o)
+library(pdp)
+library(ggplot2)
+library(lime)
+library(vip)
+# system("source /etc/profile; module purge; module load gcc/7.1.0")
+# library(xgboost)
+```
+
+## Gather the data
+
+```{r}
+rnaseq_exp <- read_csv("results/k562_tpm.csv")
+dbp_occurence_matrix <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
+
+dbp_occurence_matrix <- t(dbp_occurence_matrix)
+# Make outcome variable matrix
+exp <- rnaseq_exp %>% 
+  dplyr::select(gene_id, tpm) %>%
+  column_to_rownames("gene_id") %>%
+  as.matrix()
+# Match the order
+exp <- exp[rownames(dbp_occurence_matrix),]
+stopifnot(all(rownames(exp) == rownames(dbp_occurence_matrix)))
+
+# For convenience for now we'll make this into a data frame
+# Although it will be faster to use gbm.fit with separate matrices.
+exp_df <- exp %>% as.data.frame() %>% rownames_to_column("gene_id")
+occ_df <- dbp_occurence_matrix %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id")
+occ_df <- merge(exp_df, occ_df) %>%
+  column_to_rownames("gene_id")
+names(occ_df)[1] <- "tpm"
+
+# Let's filter out those genes where there is no binding and also no expression.
+not_zero <- which(rowSums(occ_df %>% as.matrix()) != 0)
+occ_df <- occ_df[not_zero,]
+
+# Let's also filter out those that have no DBP binding as
+# We're not able to model anything here.
+occ_matrix <- occ_df %>% as.matrix()
+at_least_one_binding_event <- which(rowSums(occ_matrix[,2:ncol(occ_matrix)]) > 0)
+occ_df <- occ_df[at_least_one_binding_event,]
+
+# check
+occ_matrix <- occ_df %>% as.matrix()
+min(rowSums(occ_matrix))
+
+# Convert to log10
+occ_df$tpm <- log10(occ_df$tpm + 0.001)
+names(occ_df)[1] <- "log10_tpm"
+
+hist(occ_df$log10_tpm, breaks = 100)
+write_csv(occ_df, "results/occ_df.csv")
+```
+
+Let's subset this for testing purposes. 
+
+```{r}
+# occ_df <- occ_df[,1:10]
+occ_df <- read_csv("results/occ_df.csv")
+```
+
+```{r}
+set.seed(123)6
+# ames_split <- initial_split(AmesHousing::make_ames(), prop = .7)
+# ames_train <- training(ames_split)
+# ames_test  <- testing(ames_split)
+exp_split <- initial_split(occ_df, prop = .7)
+exp_train <- training(exp_split)
+exp_test <- testing(exp_split)
+```
+
+```{r}
+h2o.init(max_mem_size = "5g", nthreads = 6)
+y <- "log10_tpm"
+x <- setdiff(names(exp_train), y)
+train.h2o <- as.h2o(exp_train)
+test.h2o <- as.h2o(exp_test)
+# training basic GBM model with defaults
+h2o.fit1 <- h2o.gbm(
+  x = x,
+  y = y,
+  training_frame = train.h2o,
+  validation_frame = test.h2o,
+  nfolds = 5,
+  ntrees = 5000,
+  max_depth = 10,
+  stopping_rounds = 10,
+  stopping_tolerance = 0,
+  seed = 123
+)
+h2o.fit1@parameters$ntrees
+h2o.fit1@model$names
+h2o.rmse(h2o.fit1, xval = TRUE)
+
+h2o.varimp_plot(h2o.fit1, num_of_features = 10)
+# print(h2o.auc(h2o.fit1))
+```
+
+```{r}
+pfun <- function(object, newdata) {
+  as.data.frame(predict(object, newdata = as.h2o(newdata)))[[1L]]
+}
+
+pdp <- h2o.fit1 %>%
+  partial(
+    pred.var = "POLR2A", 
+    pred.fun = pfun,
+    grid.resolution = 20, 
+    train = exp_train
+    ) %>%
+  autoplot(rug = TRUE, train = exp_train, alpha = .1) +
+  # scale_y_continuous(labels = scales::dollar) +
+  ggtitle("PDP")
+
+ice <- h2o.fit1 %>%
+  partial(
+    pred.var = "POLR2A", 
+    pred.fun = pfun,
+    grid.resolution = 20, 
+    train = exp_train,
+    ice = TRUE
+    ) %>%
+  autoplot(rug = TRUE, train = exp_train, alpha = .1, center = TRUE) +
+  # scale_y_continuous(labels = scales::dollar) +
+  ggtitle("ICE")
+
+gridExtra::grid.arrange(pdp, ice, nrow = 1)
+```
+
+
+
+```{r}
+h2o.partialPlot(h2o.fit1, data = train.h2o, cols = "SUPT5H")
+```
+
+```{r}
+which.max(exp_test$log10_tpm)
+which.min(exp_test$log10_tpm)
+local_obs <- exp_test[c(16,7341), -1]
+local_obs$log10_tpm
+explainer <- lime(exp_train, h2o.fit1)
+explanation <- explain(local_obs, explainer, n_features = 5)
+plot_features(explanation)
+```
+
+
+```{r}
+airlines <-  h2o.importFile("http://s3.amazonaws.com/h2o-public-test-data/smalldata/airlines/allyears2k_headers.zip")
+
+# convert columns to factors
+airlines["Year"] <- as.factor(airlines["Year"])
+airlines["Month"] <- as.factor(airlines["Month"])
+airlines["DayOfWeek"] <- as.factor(airlines["DayOfWeek"])
+airlines["Cancelled"] <- as.factor(airlines["Cancelled"])
+airlines['FlightNum'] <- as.factor(airlines['FlightNum'])
+
+# set the predictor names and the response column name
+predictors <- c("Origin", "Dest", "Year", "UniqueCarrier", "DayOfWeek", "Month", "Distance", "FlightNum")
+response <- "IsDepDelayed"
+
+# split into train and validation
+airlines.splits <- h2o.splitFrame(data =  airlines, ratios = .8, seed = 1234)
+train <- airlines.splits[[1]]
+valid <- airlines.splits[[2]]
+
+# try using the `categorical_encoding` parameter:
+encoding = "OneHotExplicit"
+
+# train your model
+airlines_gbm <- h2o.gbm(x = predictors, y = response, training_frame = train, validation_frame = valid,
+                        categorical_encoding = encoding, seed = 1234)
+
+# print the auc for the validation set
+print(h2o.auc(airlines_gbm, valid=TRUE))
+airlines_gbm@model$names
+h2o.partialPlot(airlines_gbm, data = train, cols = "DayOfWeek")
+```
+
+
+
+```{r}
+set.seed(123)
+?gbm
+
+# train GBM model
+gbm.fit <- gbm(
+  formula = log10_tpm ~ .,
+  distribution = "gaussian",
+  data = exp_train,
+  n.trees = 1000,
+  interaction.depth = 1,
+  shrinkage = 0.001,
+  cv.folds = 5,
+  n.cores = 1, # will use all cores by default
+  verbose = TRUE
+  )  
+
+# print results
+print(gbm.fit)
+```
+
+```{r}
+# get MSE and compute RMSE
+sqrt(min(gbm.fit$cv.error))
+## [1] 29133.33
+
+# plot loss function as a result of n trees added to the ensemble
+gbm.perf(gbm.fit, method = "cv")
+```
+
+```{r}
+# for reproducibility
+set.seed(123)
+
+# train GBM model
+gbm.fit2 <- gbm(
+  formula = Sale_Price ~ .,
+  distribution = "gaussian",
+  data = ames_train,
+  n.trees = 5000,
+  interaction.depth = 3,
+  shrinkage = 0.1,
+  cv.folds = 5,
+  n.cores = 15, # will use all cores by default
+  verbose = FALSE
+  )  
+
+# find index for n trees with minimum CV error
+min_MSE <- which.min(gbm.fit2$cv.error)
+
+# get MSE and compute RMSE
+sqrt(gbm.fit2$cv.error[min_MSE])
+## [1] 23112.1
+
+# plot loss function as a result of n trees added to the ensemble
+gbm.perf(gbm.fit2, method = "cv")
+```
+
+
+```{r}
+# create hyperparameter grid
+# hyper_grid <- expand.grid(
+#   shrinkage = c(.01, .1, .3),
+#   interaction.depth = c(1, 3, 5),
+#   n.minobsinnode = c(5, 10, 15),
+#   bag.fraction = c(.65, .8, 1), 
+#   optimal_trees = 0,               # a place to dump results
+#   min_RMSE = 0                     # a place to dump results
+# )
+# 
+# # total number of combinations
+# nrow(hyper_grid)
+## [1] 81
+```
+
+```{r}
+# randomize data
+random_index <- sample(1:nrow(ames_train), nrow(ames_train))
+random_ames_train <- ames_train[random_index, ]
+
+# grid search 
+for(i in 1:nrow(hyper_grid)) {
+  
+  # reproducibility
+  set.seed(123)
+  
+  # train model
+  gbm.tune <- gbm(
+    formula = Sale_Price ~ .,
+    distribution = "gaussian",
+    data = random_ames_train,
+    n.trees = 5000,
+    interaction.depth = hyper_grid$interaction.depth[i],
+    shrinkage = hyper_grid$shrinkage[i],
+    n.minobsinnode = hyper_grid$n.minobsinnode[i],
+    bag.fraction = hyper_grid$bag.fraction[i],
+    train.fraction = .75,
+    n.cores = NULL, # will use all cores by default
+    verbose = FALSE
+  )
+  
+  # add min training error and trees to grid
+  hyper_grid$optimal_trees[i] <- which.min(gbm.tune$valid.error)
+  hyper_grid$min_RMSE[i] <- sqrt(min(gbm.tune$valid.error))
+}
+
+hyper_grid %>% 
+  dplyr::arrange(min_RMSE) %>%
+  head(10)
+```
+
+```{r}
+par(mar = c(5, 8, 1, 1))
+summary(
+  gbm.fit, 
+  cBars = 10,
+  method = relative.influence, # also can use permutation.test.gbm
+  las = 2
+  )
+```
+
+```{r}
+vip::vip(gbm.fit)
+```
+
+```{r}
+gbm.fit %>%
+  partial(pred.var = "Gr_Liv_Area", n.trees = gbm.fit$n.trees, grid.resolution = 100) %>%
+  autoplot(rug = TRUE, train = ames_train) +
+  scale_y_continuous(labels = scales::dollar)
+```
+
+```{r}
+ice1 <- gbm.fit %>%
+  partial(
+    pred.var = "Gr_Liv_Area", 
+    n.trees = gbm.fit$n.trees, 
+    grid.resolution = 100,
+    ice = TRUE
+    ) %>%
+  autoplot(rug = TRUE, train = ames_train, alpha = .1) +
+  ggtitle("Non-centered") +
+  scale_y_continuous(labels = scales::dollar)
+
+ice2 <- gbm.fit %>%
+  partial(
+    pred.var = "Gr_Liv_Area", 
+    n.trees = gbm.fit$n.trees, 
+    grid.resolution = 100,
+    ice = TRUE
+    ) %>%
+  autoplot(rug = TRUE, train = ames_train, alpha = .1, center = TRUE) +
+  ggtitle("Centered") +
+  scale_y_continuous(labels = scales::dollar)
+
+gridExtra::grid.arrange(ice1, ice2, nrow = 1)
+```
+
+
+```{r}
+model_type.gbm <- function(x, ...) {
+  return("regression")
+}
+
+predict_model.gbm <- function(x, newdata, ...) {
+  pred <- predict(x, newdata, n.trees = x$n.trees)
+  return(as.data.frame(pred))
+}
+```
+
+```{r}
+# get a few observations to perform local interpretation on
+local_obs <- ames_test[1:2, ]
+
+# apply LIME
+explainer <- lime(ames_train, gbm.fit)
+explanation <- explain(local_obs, explainer, n_features = 5)
+plot_features(explanation)
+```
+
+```{r}
+# predict values for test data
+pred <- predict(gbm.fit, n.trees = gbm.fit$n.trees, ames_test)
+
+# results
+caret::RMSE(pred, ames_test$Sale_Price)
+```
+
+
+
+
