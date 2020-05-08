@@ -1,3 +1,6 @@
+Global clustering
+=================
+
 ``` r
 # We are going to start out with a function to import files called "import_peaks"
 # This the filtered consensus_peaks; final list of 161 TFs after filtering
@@ -104,17 +107,9 @@ g + geom_point() +
 
 ``` r
 ggsave("figures/umap_mrna_lncrna_promoters.png")
-```
-
-    ## Saving 7 x 5 in image
-
-``` r
 ggsave("figures/umap_mrna_lncrna_promoters.pdf")
-```
 
-    ## Saving 7 x 5 in image
 
-``` r
 # Let's make a df of the clusters for naming and gene ontology
 clusters_df <- umap_df %>%
   dplyr::select(cluster, dbp) %>%
@@ -122,19 +117,18 @@ clusters_df <- umap_df %>%
   summarize(dbp = paste(dbp, collapse = " ")) %>%
   mutate(dbp = gsub("eGFP-","", dbp))
 write_csv(clusters_df, "results/umap_clusters.csv")
-clusters_df
+knitr::kable(clusters_df)
 ```
 
-    ## # A tibble: 7 x 2
-    ##   cluster dbp                                                              
-    ##   <fct>   <chr>                                                            
-    ## 1 1       ATF7 ATF1 ID3 NR4A1 EGR1 EP400 GABPB1 GMEB1 L3MBTL2 MGA MNT MTA3…
-    ## 2 2       ARID1B BCOR CTBP1 IKZF1 NBN SMARCA4 SMARCE1                      
-    ## 3 3       C11orf30 POLR2H TAF7 GTF2F1 TAF9B TOE1                           
-    ## 4 4       E2F8 E4F1 DIDO1 ETV1 NR2C1 ELF1 ELF4 NR2C1 NR2F1 PHF20 SIN3B     
-    ## 5 5       ATF2 ATF3 ATF4 ATF3 CEBPB CEBPG KHSRP MTA1                       
-    ## 6 6       CREB3 DDX20 GTF2A2 HDAC8 IRF1 IRF9 MEF2D PTRF PTTG1 PYGO2 RELA Z…
-    ## 7 7       AFF1 ARHGAP35 ARID2 ASH1L BRCA1 BRD9 CBFA2T2 CBFA2T3 CC2D1A CDC5…
+| cluster | dbp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|:--------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1       | ATF7 ATF1 ID3 NR4A1 EGR1 EP400 GABPB1 GMEB1 L3MBTL2 MGA MNT MTA3 NFIC NRF1 POLR2A POLR2B SUPT5H ZBTB33 ZBTB40 ZNF592                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 2       | ARID1B BCOR CTBP1 IKZF1 NBN SMARCA4 SMARCE1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| 3       | C11orf30 POLR2H TAF7 GTF2F1 TAF9B TOE1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 4       | E2F8 E4F1 DIDO1 ETV1 NR2C1 ELF1 ELF4 NR2C1 NR2F1 PHF20 SIN3B                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 5       | ATF2 ATF3 ATF4 ATF3 CEBPB CEBPG KHSRP MTA1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 6       | CREB3 DDX20 GTF2A2 HDAC8 IRF1 IRF9 MEF2D PTRF PTTG1 PYGO2 RELA ZNF740                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 7       | AFF1 ARHGAP35 ARID2 ASH1L BRCA1 BRD9 CBFA2T2 CBFA2T3 CC2D1A CDC5L CHAMP1 CREB3L1 DACH1 DDX20 DPF2 E2F1 E2F7 HINFP ILK KLF1 KLF13 MAFG NFE2 NFE2L1 PBX2 TEAD2 TSC22D4 ZNF24 ZNF507 ZNF512 EHMT2 ESRRA EWSR1 FOXK2 FOXM1 GATAD2A GATAD2B HDAC1 HDAC2 HDAC3 HDGF HES1 HLTF ILF3 KDM1A LARP7 LEF1 MCM3 MEIS2 MIER1 MITF MLLT1 MTA2 MYBL2 NCOA6 NCOR1 NFATC3 NFRKB NFXL1 NKRF NONO PHB2 PHF21A PKNOX1 PRDM10 RAD51 RB1 REST RFX1 RLF RNF2 RUNX1 SKIL SMARCA5 SMARCC2 SNIP1 SOX6 SP1 TAL1 TARDBP TCF12 THRAP3 TRIM24 TRIM28 ZBTB2 ZBTB5 ZEB2 ZFP91 ZNF184 ZNF24 ZNF280A ZNF282 ZNF316 ZNF407 ZNF639 ZSCAN29 ZZZ3 |
 
 ### Sub clustering of largest cluster
 
@@ -182,19 +176,18 @@ clusters_df <- umap_sub %>%
   summarize(dbp = paste(dbp, collapse = " ")) %>%
   mutate(dbp = gsub("eGFP-","", dbp))
 write_csv(clusters_df, "results/umap_clusters.csv")
-clusters_df
+knitr::kable(clusters_df)
 ```
 
-    ## # A tibble: 10 x 2
-    ##    cluster dbp                                                             
-    ##    <fct>   <chr>                                                           
-    ##  1 0       DACH1 MAFG NFE2 NFE2L1 FOXM1 MYBL2                              
-    ##  2 1       PBX2 MEIS2 PKNOX1 ZBTB2                                         
-    ##  3 2       EWSR1 GATAD2B ILF3 NONO RB1 THRAP3                              
-    ##  4 3       CREB3L1 KLF1 KLF13 ESRRA                                        
-    ##  5 4       ZNF512 FOXK2 HDAC1 LARP7 LEF1 MIER1 MITF NFATC3 NKRF RAD51 REST…
-    ##  6 5       ARHGAP35 ARID2 ASH1L BRCA1 CC2D1A CDC5L CHAMP1 DDX20 E2F1 E2F7 …
-    ##  7 6       CBFA2T2 CBFA2T3 DPF2 SMARCC2 SOX6 TAL1 TCF12                    
-    ##  8 7       GATAD2A HES1 PHB2 TRIM24 ZNF282                                 
-    ##  9 8       HDAC2 HDAC3 KDM1A MTA2 NCOR1 ZEB2                               
-    ## 10 9       AFF1 BRD9 HDGF MLLT1 PRDM10
+| cluster | dbp                                                                                                                                                                                                                                                               |
+|:--------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0       | DACH1 MAFG NFE2 NFE2L1 FOXM1 MYBL2                                                                                                                                                                                                                                |
+| 1       | PBX2 MEIS2 PKNOX1 ZBTB2                                                                                                                                                                                                                                           |
+| 2       | EWSR1 GATAD2B ILF3 NONO RB1 THRAP3                                                                                                                                                                                                                                |
+| 3       | CREB3L1 KLF1 KLF13 ESRRA                                                                                                                                                                                                                                          |
+| 4       | ZNF512 FOXK2 HDAC1 LARP7 LEF1 MIER1 MITF NFATC3 NKRF RAD51 REST ZNF639                                                                                                                                                                                            |
+| 5       | ARHGAP35 ARID2 ASH1L BRCA1 CC2D1A CDC5L CHAMP1 DDX20 E2F1 E2F7 HINFP ILK TEAD2 TSC22D4 ZNF24 ZNF507 EHMT2 HLTF MCM3 NCOA6 NFRKB NFXL1 PHF21A RFX1 RLF RNF2 RUNX1 SKIL SMARCA5 SNIP1 SP1 TARDBP TRIM28 ZBTB5 ZFP91 ZNF184 ZNF24 ZNF280A ZNF316 ZNF407 ZSCAN29 ZZZ3 |
+| 6       | CBFA2T2 CBFA2T3 DPF2 SMARCC2 SOX6 TAL1 TCF12                                                                                                                                                                                                                      |
+| 7       | GATAD2A HES1 PHB2 TRIM24 ZNF282                                                                                                                                                                                                                                   |
+| 8       | HDAC2 HDAC3 KDM1A MTA2 NCOR1 ZEB2                                                                                                                                                                                                                                 |
+| 9       | AFF1 BRD9 HDGF MLLT1 PRDM10                                                                                                                                                                                                                                       |

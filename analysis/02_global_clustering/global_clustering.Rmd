@@ -18,7 +18,7 @@ source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
 
-
+# Global clustering
 
 ```{r import-data}
 # We are going to start out with a function to import files called "import_peaks"
@@ -38,7 +38,7 @@ promoter_peak_occurence <- read.table("../01_consensus_peaks/results/lncrna_mrna
 
 Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense. We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
 
-```{r hclust-all}
+```{r hclust-all, fig.height=12, fig.width=5}
 # Hierarchical clustering with binary distance measure
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 
@@ -49,7 +49,7 @@ ggsave("figures/all_hclust_binary_dist.png", height = 26, width = 6)
 
 ## lncRNA promoter binding clustering
 
-```{r hclust-lnrna}
+```{r hclust-lnrna, fig.height=20, fig.width=5}
 lncrna_peak_occurence <- promoter_peak_occurence[,lncrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
@@ -61,7 +61,7 @@ ggsave("figures/lncrna_hclust_binary_dist.png", height = 26, width = 6)
 
 ## mRNA promoter binding clustering
 
-```{r hclust-mrna}
+```{r hclust-mrna, fig.height=20, fig.width=5}
 mrna_peak_occurence <- promoter_peak_occurence[,mrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
@@ -75,7 +75,7 @@ ggsave("figures/mrna_hclust_binary_dist.png", height = 26, width = 6)
 
 Here we're going to perform UMAP and cluster with HDBscan to get a global view of DBP binding on lncRNA and mRNA promoters.
 
-```{r umap-all}
+```{r umap-all, fig.height=10, fig.width=10.5, message=FALSE}
 umap_params <- umap.defaults
 umap_params$n_neighbors <- 4
 umap_params$random_state <- 7748
@@ -114,12 +114,12 @@ clusters_df <- umap_df %>%
   summarize(dbp = paste(dbp, collapse = " ")) %>%
   mutate(dbp = gsub("eGFP-","", dbp))
 write_csv(clusters_df, "results/umap_clusters.csv")
-clusters_df
+knitr::kable(clusters_df)
 ```
 
 ### Sub clustering of largest cluster
 
-```{r umap-large-cluster}
+```{r umap-large-cluster, fig.height=10, fig.width=10.5}
 dbps_in_large_cluster <- umap_df[umap_df$cluster == 7, "dbp"]
 lc_peak_occurence <- promoter_peak_occurence[dbps_in_large_cluster,]
 
@@ -158,7 +158,7 @@ clusters_df <- umap_sub %>%
   summarize(dbp = paste(dbp, collapse = " ")) %>%
   mutate(dbp = gsub("eGFP-","", dbp))
 write_csv(clusters_df, "results/umap_clusters.csv")
-clusters_df
+knitr::kable(clusters_df)
 ```
 
 
