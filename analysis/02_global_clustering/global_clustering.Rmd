@@ -38,7 +38,7 @@ promoter_peak_occurence <- read.table("../01_consensus_peaks/results/lncrna_mrna
 
 Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense. We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
 
-```{r hclust-all, fig.height=12, fig.width=5}
+```{r hclust-all, fig.height=25, fig.width=5}
 # Hierarchical clustering with binary distance measure
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 
@@ -49,7 +49,7 @@ ggsave("figures/all_hclust_binary_dist.png", height = 26, width = 6)
 
 ## lncRNA promoter binding clustering
 
-```{r hclust-lnrna, fig.height=20, fig.width=5}
+```{r hclust-lnrna, fig.height=25, fig.width=5}
 lncrna_peak_occurence <- promoter_peak_occurence[,lncrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
@@ -61,7 +61,7 @@ ggsave("figures/lncrna_hclust_binary_dist.png", height = 26, width = 6)
 
 ## mRNA promoter binding clustering
 
-```{r hclust-mrna, fig.height=20, fig.width=5}
+```{r hclust-mrna, fig.height=25, fig.width=5}
 mrna_peak_occurence <- promoter_peak_occurence[,mrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
