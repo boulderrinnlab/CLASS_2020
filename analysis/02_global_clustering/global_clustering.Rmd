@@ -9,78 +9,123 @@ editor_options:
 options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(ggdendro)
 library(GenomicRanges)
-source("/Shares/rinn_class/data/k562_chip/analysis/util/intersect_functions.R")
-source("/Shares/rinn_class/data/k562_chip/analysis/util/_setup.R")
-
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
 ```
 
-# The first step is to get a matrix of features by TFs.
+
 
 ```{r}
 # We are going to start out with a function to import files called "import_peaks"
-# This the filtered peak_list; final list of 161 TFs after filtering
-peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/")
+# This the filtered consensus_peaks; final list of 161 TFs after filtering
+# consensus_peaks <- import_peaks("../01_consensus_peaks/results/consensus_peaks")
 
-# Making the features (gencode) GRanges that has lots of features annotated
-gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-
-# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA promoters
-proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
+# Let's grab both the lncRNA and mRNA promoters
+# proms <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
+mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
 
 # Counts the number of promoters that each TF binds to
-promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
+promoter_peak_occurence <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv") %>%
+  as.matrix()
+
 ```
 
-```{r filtering}
-# Now we want to remove any columns (promoters) where a promoter has no TF binding.
-promoter_no_peak <- promoter_peak_count[,which(colSums(promoter_peak_count) < 1)]
 
-### TFs bind to these promoters
-promoter_positive_peaks <- promoter_peak_count[,which(colSums(promoter_peak_count) > 0)]
-
-#yes_binding <- colnames(promoter_positive_peaks)
-
-# Now we want to remove any columns (tfs) where a TF has bound no promoters
-# no_binding <- colnames(promoter_no_peak)
-
-promoter_positive_peaks <- promoter_positive_peaks[which(rowSums(promoter_positive_peaks) > 0),]
-
-# We're going to make this binary -- make it a co-occurence matrix where any number of
-# peaks in a promoter for a tf is considered "binding" and so we're going to change all the
-# values to zeros and ones.
-promoter_bound <- promoter_peak_count > 0
-## Make this into a numeric vector (0 or 1) instead of a boolean vector
-promoter_occurence <- as.numeric(promoter_bound)
-
-# We make this into a matrix with the original dimensions
-promoter_peak_occurence <- matrix(promoter_occurence, 
-                           nrow = dim(promoter_peak_count)[1],
-                           ncol = dim(promoter_peak_count)[2])
-# Let's transfer the row and column names
-rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
-colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
-```
+Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense. We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
 
 ```{r}
-# Find the distribution of DNA binding events across promoters that had at least 1 event
-
-hist(promoter_positive_peaks)
-```
-
-# Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense
-# We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
-
-```{r}
-
-# Calculate a distance measure between the rows.
+# Hierarchical clustering with binary distance measure
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
-plot(bin_hier)
-
-# load library for ggdendro for the best trees we could find 
-library(ggdendro)
 
 ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
-ggsave("figures/hclust_binary_dist.pdf", height = 26, width = 6)
+ggsave("figures/all_hclust_binary_dist.pdf", height = 26, width = 6)
+ggsave("figures/all_hclust_binary_dist.png", height = 26, width = 6)
+```
+
+## lncRNA promoter binding clustering
+
+```{r}
+lncrna_peak_occurence <- promoter_peak_occurence[,lncrna_promoters$gene_id]
+
+bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
+
+ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+ggsave("figures/lncrna_hclust_binary_dist.pdf", height = 26, width = 6)
+ggsave("figures/lncrna_hclust_binary_dist.png", height = 26, width = 6)
+```
+
+## mRNA promoter binding clustering
+
+```{r}
+mrna_peak_occurence <- promoter_peak_occurence[,mrna_promoters$gene_id]
+
+bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
+
+ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+ggsave("figures/mrna_hclust_binary_dist.pdf", height = 26, width = 6)
+ggsave("figures/mrna_hclust_binary_dist.png", height = 26, width = 6)
+```
+
+```{r}
+library(umap)
+library(dbscan)
+
+custom.settings <- umap.defaults
+custom.settings$n_neighbors <- 4
+custom.settings$min_dist <- 0
+custom.settings$n_components <- 2
+custom.settings$metric <- "russellrao"
+custom.settings$spread <- 0.201
+# 283
+seeds_to_try <- c(89313, 23987, 2389, 283, 12398, 210, 42, 290)
+
+make_umap <- function(seed) {
+  print(seed)
+  custom.settings$random_state <- seed
+  umap_fit <- umap(promoter_peak_occurence, config = custom.settings)
+  umap_df <- umap_fit$layout %>% as.data.frame() %>%
+    rownames_to_column("dbp")
+  
+  labels <- hdbscan(umap_fit$layout, minPts = 6)
+  umap_df$cluster <- factor(labels$cluster)
+  # pol2_clusters <- as.numeric(umap_df[umap_df$dbp %in% c("POLR2A",
+  #                                                 "POLR2B", 
+  #                                                 "SUPT5H",
+  #                                                 "eGFP-POLR2H"), 
+  #                              "cluster"])
+  # pol2_clustered_together <- all(pol2_clusters[1] == pol2_clusters)
+  # num_cluster <- length(unique(umap_df$cluster))-1
+  # num_unclustered <- length(which(umap_df$cluster == 0))
+  # return(data.frame("seed" = seed,
+  #                   "pol2_clustered" = pol2_clustered_together,
+  #                   "num_clusters" = num_cluster,
+  #                   "num_unclustered" = num_unclustered))
+  return(umap_df)
+}
+set.seed(123)
+seeds_to_try <- sample(1:10000, 500, replace = FALSE)
+seed_test <- bind_rows(lapply(seeds_to_try, make_umap))
+
+# umap_df <- make_umap(1215)
+# umap_df <- make_umap(1406)
+# umap_df <- make_umap(2194)
+umap_df <- make_umap(7748)
+g <- ggplot(umap_df, aes(x = V1, y = V2, label = dbp, color = cluster))
+g + geom_point() + 
+  # geom_text()
+  geom_text(data = umap_df %>% filter(dbp %in% c("POLR2A",
+                                                  "POLR2B",
+                                                  "SUPT5H",
+                                                  "eGFP-POLR2H")))
+
+
+# for(i in unique(umap_df$cluster)) {
+#   print(i)
+#   print(paste(umap_df[umap_df$cluster == i, "dbp"], collapse = " "))
+# }
 
 ```
+
