@@ -38,7 +38,7 @@ promoter_peak_occurence <- read.table("../01_consensus_peaks/results/lncrna_mrna
 
 Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense. We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
 
-```{r hclust-all, fig.height=25, fig.width=5}
+```{r hclust-all, fig.height=30, fig.width=5}
 # Hierarchical clustering with binary distance measure
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 
