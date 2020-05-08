@@ -1,26 +1,4 @@
----
-title: "Clustering by Features"
-output: html_document
-editor_options: 
-  chunk_output_type: console
----
-
-```{r setup, include=FALSE}
-options(stringsAsFactors = FALSE)
-knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse)
-library(ggdendro)
-library(GenomicRanges)
-library(umap)
-library(dbscan)
-library(ggrepel)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
-```
-
-
-
-```{r import-data}
+``` r
 # We are going to start out with a function to import files called "import_peaks"
 # This the filtered consensus_peaks; final list of 161 TFs after filtering
 # consensus_peaks <- import_peaks("../01_consensus_peaks/results/consensus_peaks")
@@ -35,47 +13,64 @@ promoter_peak_occurence <- read.table("../01_consensus_peaks/results/lncrna_mrna
   as.matrix()
 ```
 
+Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense. We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric.
 
-Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense. We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
-
-```{r hclust-all}
+``` r
 # Hierarchical clustering with binary distance measure
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 
 ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+```
+
+![](global_clustering_files/figure-markdown_github/hclust-all-1.png)
+
+``` r
 ggsave("figures/all_hclust_binary_dist.pdf", height = 26, width = 6)
 ggsave("figures/all_hclust_binary_dist.png", height = 26, width = 6)
 ```
 
-## lncRNA promoter binding clustering
+lncRNA promoter binding clustering
+----------------------------------
 
-```{r hclust-lnrna}
+``` r
 lncrna_peak_occurence <- promoter_peak_occurence[,lncrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
 
 ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+```
+
+![](global_clustering_files/figure-markdown_github/hclust-lnrna-1.png)
+
+``` r
 ggsave("figures/lncrna_hclust_binary_dist.pdf", height = 26, width = 6)
 ggsave("figures/lncrna_hclust_binary_dist.png", height = 26, width = 6)
 ```
 
-## mRNA promoter binding clustering
+mRNA promoter binding clustering
+--------------------------------
 
-```{r hclust-mrna}
+``` r
 mrna_peak_occurence <- promoter_peak_occurence[,mrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
 
 ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+```
+
+![](global_clustering_files/figure-markdown_github/hclust-mrna-1.png)
+
+``` r
 ggsave("figures/mrna_hclust_binary_dist.pdf", height = 26, width = 6)
 ggsave("figures/mrna_hclust_binary_dist.png", height = 26, width = 6)
 ```
 
-# UMAP dimensionality reduction
+UMAP dimensionality reduction
+=============================
 
 Here we're going to perform UMAP and cluster with HDBscan to get a global view of DBP binding on lncRNA and mRNA promoters.
 
-```{r umap-all}
+``` r
 umap_params <- umap.defaults
 umap_params$n_neighbors <- 4
 umap_params$random_state <- 7748
@@ -103,10 +98,23 @@ g + geom_point() +
         axis.text = element_blank(),
         axis.ticks = element_blank()) +
   scale_color_manual(values = col_pal)
+```
+
+![](global_clustering_files/figure-markdown_github/umap-all-1.png)
+
+``` r
 ggsave("figures/umap_mrna_lncrna_promoters.png")
+```
+
+    ## Saving 7 x 5 in image
+
+``` r
 ggsave("figures/umap_mrna_lncrna_promoters.pdf")
+```
 
+    ## Saving 7 x 5 in image
 
+``` r
 # Let's make a df of the clusters for naming and gene ontology
 clusters_df <- umap_df %>%
   dplyr::select(cluster, dbp) %>%
@@ -117,9 +125,20 @@ write_csv(clusters_df, "results/umap_clusters.csv")
 clusters_df
 ```
 
+    ## # A tibble: 7 x 2
+    ##   cluster dbp                                                              
+    ##   <fct>   <chr>                                                            
+    ## 1 1       ATF7 ATF1 ID3 NR4A1 EGR1 EP400 GABPB1 GMEB1 L3MBTL2 MGA MNT MTA3…
+    ## 2 2       ARID1B BCOR CTBP1 IKZF1 NBN SMARCA4 SMARCE1                      
+    ## 3 3       C11orf30 POLR2H TAF7 GTF2F1 TAF9B TOE1                           
+    ## 4 4       E2F8 E4F1 DIDO1 ETV1 NR2C1 ELF1 ELF4 NR2C1 NR2F1 PHF20 SIN3B     
+    ## 5 5       ATF2 ATF3 ATF4 ATF3 CEBPB CEBPG KHSRP MTA1                       
+    ## 6 6       CREB3 DDX20 GTF2A2 HDAC8 IRF1 IRF9 MEF2D PTRF PTTG1 PYGO2 RELA Z…
+    ## 7 7       AFF1 ARHGAP35 ARID2 ASH1L BRCA1 BRD9 CBFA2T2 CBFA2T3 CC2D1A CDC5…
+
 ### Sub clustering of largest cluster
 
-```{r umap-large-cluster}
+``` r
 dbps_in_large_cluster <- umap_df[umap_df$cluster == 7, "dbp"]
 lc_peak_occurence <- promoter_peak_occurence[dbps_in_large_cluster,]
 
@@ -149,6 +168,11 @@ g + geom_point()  +
         axis.ticks = element_blank()) +
   scale_color_manual(values = col_pal) + 
   geom_text_repel()
+```
+
+![](global_clustering_files/figure-markdown_github/umap-large-cluster-1.png)
+
+``` r
 ggsave("figures/umap_large_subcluster_promoters.png", height = 11, width = 11.5)
 ggsave("figures/umap_large_subcluster_promoters.pdf", height = 11, width = 11.5)
 
@@ -161,4 +185,16 @@ write_csv(clusters_df, "results/umap_clusters.csv")
 clusters_df
 ```
 
-
+    ## # A tibble: 10 x 2
+    ##    cluster dbp                                                             
+    ##    <fct>   <chr>                                                           
+    ##  1 0       DACH1 MAFG NFE2 NFE2L1 FOXM1 MYBL2                              
+    ##  2 1       PBX2 MEIS2 PKNOX1 ZBTB2                                         
+    ##  3 2       EWSR1 GATAD2B ILF3 NONO RB1 THRAP3                              
+    ##  4 3       CREB3L1 KLF1 KLF13 ESRRA                                        
+    ##  5 4       ZNF512 FOXK2 HDAC1 LARP7 LEF1 MIER1 MITF NFATC3 NKRF RAD51 REST…
+    ##  6 5       ARHGAP35 ARID2 ASH1L BRCA1 CC2D1A CDC5L CHAMP1 DDX20 E2F1 E2F7 …
+    ##  7 6       CBFA2T2 CBFA2T3 DPF2 SMARCC2 SOX6 TAL1 TCF12                    
+    ##  8 7       GATAD2A HES1 PHB2 TRIM24 ZNF282                                 
+    ##  9 8       HDAC2 HDAC3 KDM1A MTA2 NCOR1 ZEB2                               
+    ## 10 9       AFF1 BRD9 HDGF MLLT1 PRDM10
