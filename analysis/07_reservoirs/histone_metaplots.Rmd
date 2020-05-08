@@ -1,0 +1,126 @@
+---
+title: "Reservoir histone mark metaplots"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ChIPseeker)
+# library(valr)
+```
+
+
+```{r retrieve-encode-peak-files}
+# K9me1 - https://www.encodeproject.org/files/ENCFF285EKW/@@download/ENCFF285EKW.bed.gz
+# K27me3 - https://www.encodeproject.org/files/ENCFF031FSF/@@download/ENCFF031FSF.bed.gz
+# K27ac - https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz
+# K9me3 - https://www.encodeproject.org/files/ENCFF371GMJ/@@download/ENCFF371GMJ.bed.gz
+# K4me1 - https://www.encodeproject.org/files/ENCFF159VKJ/@@download/ENCFF159VKJ.bed.gz
+```
+
+
+```{r}
+# Note, you'll need to append /Shares/rinn_class/data/CLASS_2020/analysis" to the files paths to get the files.
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+reservoir_promoters <- rtracklayer::import("../04_correlation_with_expression/results/k562_ghost_promoters.bed")
+peak_files <- data.frame("file" = list.files("data/", full.names = TRUE, pattern = ".bed"),
+                         "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
+
+# Read in peaks 
+hmark_peaks <- lapply(peak_files$file, read.table)
+names(hmark_peaks) <- peak_files$histone_mark
+
+hmark_granges <- lapply(hmark_peaks, function(peaks) {
+  GRanges(seqnames = peaks$V1,
+          ranges = IRanges(start = peaks$V2,
+                           end = peaks$V3))
+})
+```
+
+```{r}
+# create a matrix indicating whether each chromatin mark overlaps each promoter
+hmark_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = nrow(peak_files))
+rownames(hmark_occurence) <- reservoir_promoters$name
+colnames(hmark_occurence) <- peak_files$histone_mark
+
+# Fill in the matrix with overlaps
+# First column 1
+ov1 <- findOverlaps(reservoir_promoters, hmark_granges[[1]])
+res_overlaps <- unique(ov1@from)
+hmark_occurence[res_overlaps,1] <- 1
+
+table(hmark_occurence[,1])
+
+# Repeat for the next histone marks
+ov2 <- findOverlaps(reservoir_promoters, hmark_granges[[2]])
+res_overlaps <- unique(ov2@from)
+hmark_occurence[res_overlaps,2] <- 1
+
+table(hmark_occurence[,2])
+
+
+# I'll let you continue with the rest as well as add in super enhancer.
+# you may need to install this.
+library(eulerr)
+genes.venn <- euler(hmark_occurence[,c(1,2)])
+plot(genes.venn, quantities = TRUE)
+
+
+```
+
+
+---------------
+This is some messy draft code. It's not done.
+
+```{r}
+# Let's get the reservoir promoter regions
+reservoir_promoters <- rtracklayer::import("../04_correlation_with_expression/results/k562_ghost_promoters.bed")
+peak_files <- data.frame("file" = list.files("data/", full.names = TRUE, pattern = ".bed"),
+                         "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
+
+hmark_peaks <- lapply(peak_files$file, read.table)
+names(hmark_peaks) <- peak_files$histone_mark
+
+hmark_granges <- lapply(hmark_peaks, function(peaks) {
+  GRanges(seqnames = peaks$V1,
+          ranges = IRanges(start = peaks$V2,
+                           end = peaks$V3))
+})
+
+res_hmarks <- lapply(hmark_granges, function(peaks) {
+  subsetByOverlaps(peaks, reservoir_promoters)
+})
+
+hmark_peaks <- lapply(peak_files$file, read_bed)
+names(hmark_peaks) <- peak_files$histone_mark
+
+res_prom <- read_bed("../04_correlation_with_expression/results/k562_ghost_promoters.bed")
+
+res_prom_windows <- res_prom %>%
+  bed_makewindows(50) 
+
+res_overlaps <- bed_map(res_prom_windows, hmark_peaks[[2]], .counts = dplyr::n())
+
+
+res_overlaps <- res_overlaps %>%
+  group_by(.win_id) %>%
+  summarize(sum_counts = sum(.counts, na.rm = T))
+
+
+g <- ggplot(res_overlaps, aes(x = .win_id, y = sum_counts))
+g + geom_point()
+names(hmark_peaks)
+
+
+me3_ac_overlaps <- bed_intersect(hmark_peaks[[1]], hmark_peaks[[2]])
+nrow(hmark_peaks[[1]])
+nrow(hmark_peaks[[2]])
+
+res_me3ac_overlaps <- bed_intersect(res_prom, hmark_peaks[[1]])
+res_me3ac_overlaps <- bed_intersect(res_prom, hmark_peaks[[2]])
+```
+
