@@ -7,9 +7,11 @@ editor_options:
 ```{r setup, include=FALSE}
 options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
+install.packages("tidyverse")
 library(tidyverse)
+library(GenomicRanges)
 library(ChIPseeker)
-# library(valr)
+#library(valr)
 ```
 ```{r retrieve-encode-peak-files}
 # K9me1 - https://www.encodeproject.org/files/ENCFF285EKW/@@download/ENCFF285EKW.bed.gz
@@ -26,6 +28,7 @@ reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/a
 peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis", full.names = TRUE, pattern = ".bed"),
                          "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
 # Read in peaks
+se_hg19 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/K562.bed")
 hmark_peaks <- lapply(peak_files$file, read.table)
 names(hmark_peaks) <- peak_files$histone_mark
 hmark_granges <- lapply(hmark_peaks, function(peaks) {
@@ -92,13 +95,37 @@ hmark_se_occurence_matrix <- hmark_se_occurence_ %>% column_to_rownames("GeneID"
 
 #plotting histone occurence and super enhancer occurence
 library(eulerr)
-genes.venn <- euler(hmark_se_occurence_matrix[,c(-4,-5)])
+genes.venn <- euler(hmark_se_occurence_matrix[,c(-3,-4,-5)])
 plot(genes.venn, quantities = TRUE)
-
-#pol2 overlap with reservoirs
-pol2_peaks <- rtracklayer::import(/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/results/pol)
 ```
 
+```{r}
+k27_hmark_se_occurence <- hmark_se_occurence_matrix [,c(-3,-4,-5)]
+
+k27_hmark_se_occurence <- as.data.frame(k27_hmark_se_occurence)
+
+H3_K27_me3_and_ac <- data.frame("H3_K27_me3_and_ac" = as.integer())
+
+k27_hmark_se_occurence <- k27_hmark_se_occurence %>% rownames_to_column("GeneID")
+
+for (i in 1:nrow(k27_hmark_se_occurence)) {
+  if (k27_hmark_se_occurence$H3K27ac[[i]]==1 & k27_hmark_se_occurence$H3K27me3[[i]] == 1 ) {
+    temp_df <- data.frame("GeneID" = k27_hmark_se_occurence$GeneID[[i]], "H3_K27_me3_and_ac" = 1)
+    H3_K27_me3_and_ac <- bind_rows(temp_df, H3_K27_me3_and_ac)
+  }}
+
+k27_sum_df <- data.frame("H3K27me3_reservoirs" = sum (k27_hmark_se_occurence$H3K27me3),
+                         "H3K27ac_reservoirs" = sum (k27_hmark_se_occurence$H3K27ac),
+                         "me3_ac_overlap" = sum (H3_K27_me3_and_ac$H3_K27_me3_and_ac),
+                         "super_enhancers_reservoirs" = sum (k27_hmark_se_occurence$super_enhancers))
+
+rownames(k27_sum_df) <- "Number_reservoirs"
+
+#Save Overlap Table as CSV
+
+write.csv(k27_sum_df, "H3K27me3_H3K27ac_overlap.csv")
+
+```
 
 ---------------
 This is some messy draft code. It's not done.
