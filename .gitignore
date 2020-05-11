@@ -16,3 +16,5 @@
 *.bed
 *_rslurm*
 *.chain
+*.bed*
+*data*
