@@ -1,249 +1,68 @@
 ---
-title: "profile_plots"
+title: "TSS profiles: plotting & clustering"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
 options(stringsAsFactors = FALSE)
-library(rtracklayer)
-library(GenomicRanges)
-library(ChIPseeker)
-library(GenomicFeatures)
-library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
+# library(rtracklayer)
+library(GenomicRanges)
+# library(ChIPseeker)
+library(boot)
+# library(GenomicFeatures)
+library(tidyverse)
+library(pheatmap)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
 ```
 
-# Don't run for all TFs or you'll get the heck yelled out of you
-# Look at representatives for three different patterns
-# Eventually we'll look for ones that are different between mRNAs and lncRNAs
+```{r import}
+lncrna_mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
+mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
 
-```{r}
-getTagCount <- function(tagMatrix, xlim, conf, ...) {
-    ss <- colSums(tagMatrix)
-    ss <- ss/sum(ss)
-    ## plot(1:length(ss), ss, type="l", xlab=xlab, ylab=ylab)
-    pos <- value <- NULL
-    dd <- data.frame(pos=c(xlim[1]:xlim[2]), value=ss)
-    if (!(missingArg(conf) || is.na(conf))){
-        tagCiMx <- getTagCiMatrix(tagMatrix, conf = conf, ...)
-        dd$Lower <- tagCiMx["Lower", ]
-        dd$Upper <- tagCiMx["Upper", ]
-    }
-    return(dd)
-}
+consensus_peaks <- import_peaks("../01_consensus_peaks/results/consensus_peaks/")
 ```
 
-```{r}
-getTagCiMatrix <- function(tagMatrix, conf = 0.95, resample=500){
-    RESAMPLE_TIME <- resample
-    trackLen <- ncol(tagMatrix)
-    if (Sys.info()[1] == "Windows") {
-        tagMxBoot <- boot(data = tagMatrix, statistic = getSgn, R = RESAMPLE_TIME)
-    } else {
-        tagMxBoot <- boot(data = tagMatrix, statistic = getSgn, R = RESAMPLE_TIME,
-                          parallel = "multicore", ncpus = 6)
-    }
-    cat(">> Running bootstrapping for tag matrix...\t\t",
-        format(Sys.time(), "%Y-%m-%d %X"), "\n")
-    tagMxBootCi <- sapply(seq_len(trackLen), function(i) {
-                        bootCiToken <- boot.ci(tagMxBoot, type = "perc", index = i)
-                        ## parse boot.ci results
-                        return(parseBootCiPerc(bootCiToken))
-                        }
-                    )
-    row.names(tagMxBootCi) <- c("Lower", "Upper")
-    return(tagMxBootCi)
-}
-```
-
-```{r}
-getSgn <- function(data, idx){
-    d <- data[idx, ]
-    ss <- colSums(d)
-    ss <- ss / sum(ss)
-    return(ss)
-}
-```
-
-```{r}
-parseBootCiPerc <- function(bootCiPerc){
-    bootCiPerc <- bootCiPerc$percent
-    tmp <- length(bootCiPerc)
-    ciLo <- bootCiPerc[tmp - 1]
-    ciUp <- bootCiPerc[tmp]
-    return(c(ciLo, ciUp))
-}
-```
-
-```{r}
-#txdb_gencode_v32 <- makeTxDbFromGFF(file = "/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-gtf_gencode_v32 <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-
-```
-
-```{r}
-#promoters <- getPromoters(TxDb=txdb_gencode_v32, upstream=3000, downstream=3000, by = "gene")
-
-get_promoter_regions <- function(gencode_gr, upstream = 3000, downstream = 3000) {
-  genes <- gencode_gr[gencode_gr$type == "gene"]
-  proms <- GenomicRanges::promoters(genes, upstream = 3000, downstream = 3000)
-  return(proms)
-}
-
-promoters <- get_promoter_regions(gtf_gencode_v32)
-
-lncrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA")]
-mrna_promoters <- gtf_promoters[which(gtf_promoters$gene_type == "protein_coding")]
-
-
-```
-
-```{r}
-plot_profile <- function(tag_count, tf_name) {
-  p <- ggplot(tag_count, aes(pos))
-  p <- p + geom_ribbon(aes(ymin = Lower, ymax = Upper),
-                       linetype = 0, alpha = 0.2)
-  p <- p + geom_line(aes(y = value))
-  
-  xlim <-c(-3000, 3000)
-  origin_label = "TSS"
-  #### Testing below       
-  p <- p + geom_vline(xintercept=0,
-                      linetype="longdash")
-  p <- p + scale_x_continuous(breaks=c(xlim[1], floor(xlim[1]/2),
-                                       0,
-                                       floor(xlim[2]/2), xlim[2]),
-                              labels=c(xlim[1], floor(xlim[1]/2),
-                                       origin_label, 
-                                       floor(xlim[2]/2), xlim[2]))
-  p <- p+xlab("Genomic Region (5'->3')")+ylab("Peak Count Frequency")
-  p <- p + theme_bw() + theme(legend.title=element_blank())
-  p <- p + theme(legend.position="none")
-  p <- p + ggtitle(tf_name)
-  return(p)
-}
-
-```
-
-```{r}
-fl <- list.files("~/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/consensus",
-                 recursive = TRUE, full.names=TRUE)
-fl <- fl[grep(".bed", fl)]
-
-
+```{r create-profiles}
 tag_count_df <- data.frame("pos" = integer(0),
                            "value" = numeric(0),
                            "Lower" = numeric(0),
                            "Upper" = numeric(0),
-                           "tf_name" = character(0))
-for (i in 1:length(fl)) {
-  
-  tf_name <- unlist(strsplit(fl[i], "/"))[[11]]
-  
+                           "dbp" = character(0))
+for (i in 1:length(consensus_peaks)) {
   if(i %% 10 == 0) { print(i) }
-  
-  if (file.size(fl[i]) > 0) {
+    tag_matrix <- get_tag_matrix(consensus_peaks[[i]], windows=lncrna_mrna_promoters)
+    tag_count <- get_tag_count(tag_matrix, xlim=c(-3000, 3000), conf = 0.95, ncpus = 6)
+    tag_count$dbp <- names(consensus_peaks)[i]
     
-    peaks <- readPeakFile(fl[i]) 
-    tag_matrix <- getTagMatrix(peaks, windows=promoters)
-   # p <- plotAvgProf(tag_matrix, xlim=c(-3000, 3000), conf = 0.95, resample = 1000)
-    #show(p + ggtitle(tf_name))
-    tag_count <- getTagCount(tag_matrix, xlim=c(-3000, 3000), conf = 0.95)
-    
-    
-    g <- plot_profile(tag_count = tag_count, tf_name = tf_name)
-    
-    tag_count$tf_name <- tf_name
     tag_count_df <- bind_rows(tag_count_df, tag_count)
-    show(g)
-    
-  
-    }
 }
+write_csv(tag_count_df, "results/tss_profiles.csv")
 ```
 
-
-```{r}
-#Cool way to load a bunch of files into a list and then a for loop to do the same for all files and the bind them at the end
-fl <- list.files("/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/deepTools/plotProfile/", full.names=TRUE)
-fl <- fl[grep(".tab", fl)]
-dat <- read.table(fl[1], skip=1)
-for(i in 2:length(fl)) {
-  tdat <- read.table(fl[i], skip = 1)
-  dat <- bind_rows(dat, tdat)
-}
-samnames <- sapply(fl, function(x) {
-tempstring <- unlist(strsplit(x, "//"))[2]
-temsprting <- gsub(".plotProfile.tab", "" , tempstring)
-return(tempstring)
-})
-dat$sampnames <- samnames
-dat <- dat %>% dplyr::select(sampnames, everything())
-colnames(dat)
-dat_long <- gather(dat, key = "position", value = "value", 3:702)
-dat_long$position <- gsub("X","",dat_long$position) %>% as.numeric()
-dat_long$bp_position <- dat_long$position * 10
-dat_long$tf_name <- sapply(dat_long$sampnames, function(x) {
-  unlist(strsplit(x, "_"))[[1]]
-})
-qplot(x=position, y=value, data=dat_long %>% dplyr::filter(tf_name == "AFF1"), geom=c("point", "smooth"),
-      color = sampnames)
-g <- ggplot(dat_long %>% dplyr::filter(tf_name %in% c("DDX20", "AFF1")), aes(x = bp_position, y = value, color = sampnames))
-g + geom_line() +
-  scale_x_continuous(breaks = seq(0,7000, by = 1000),
-                     labels = c("-3000", "-2000", "-1000",
-                                "TSS", "TES", "1000", "2000", "3000"))
-#prof <- read.table("../../results/bwa/mergedLibrary/deepTools/plotProfile/", header=FALSE, skip=3) #This gets us to the third row as the first two are not values
-```
-
-## Clustering
-
-```{r}
-# First we're going to average the profile per tf.
-dat_sum <- dat_long %>% group_by(tf_name, bp_position) %>%
-  summarize(mean_value = mean(value)) %>%
-  spread(bp_position, mean_value) %>%
-  column_to_rownames(var = "tf_name") %>%
+```{r profile-clustering}
+tcm <- tag_count_df %>%
+  dplyr::select(pos, value, dbp) %>%
+  pivot_wider(names_from = pos, values_from = value) %>%
+  column_to_rownames("dbp") %>%
   as.matrix()
-dat_sum_long <- dat_long %>% group_by(tf_name, bp_position) %>%
-  summarize(mean_value = mean(value))
-dat_dist <- dist(dat_sum, method = "euclidean")
-dat_hclust <- hclust(dat_dist)
-plot(dat_hclust)
-# Some example plots
-g <- ggplot(dat_sum_long %>% dplyr::filter(tf_name %in% c("eGFP-ZNF512", "HDAC3")),
-            aes(x = bp_position, y = mean_value, color = tf_name))
-g + geom_line() +
-  scale_x_continuous(breaks = seq(0,7000, by = 1000),
-                     labels = c("-3000", "-2000", "-1000",
-                                "TSS", "TES", "1000", "2000", "3000"))
+tmp_hclust <- hclust(dist(tcm))
+tcmz <- t(scale(t(tcm)))
+pheatmap(tcmz, cluster_cols = FALSE)
 ```
 
-## Z-scaled clustering
+```{r representative-profiles}
 
-```{r}
-# First we're going to average the profile per tf.
-dat_sum <- dat_long %>% group_by(tf_name, bp_position) %>%
-  summarize(mean_value = mean(value)) %>%
-  spread(bp_position, mean_value) %>%
-  column_to_rownames(var = "tf_name") %>%
-  as.matrix()
-dat_sum_long <- dat_long %>% group_by(tf_name, bp_position) %>%
-  summarize(mean_value = mean(value))
-
-dat_norm <- t(scale(t(dat_sum)))
-dat_dist <- dist(dat_norm, method = "euclidean")
-dat_hclust <- hclust(dat_dist)
-plot(dat_hclust)
-# Some example plots
-g <- ggplot(dat_sum_long %>% dplyr::filter(tf_name %in% c("eGFP-ZNF512", "HDAC3")),
-            aes(x = bp_position, y = mean_value, color = tf_name))
-g + geom_line() +
-  scale_x_continuous(breaks = seq(0,7000, by = 1000),
-                     labels = c("-3000", "-2000", "-1000",
-                                "TSS", "TES", "1000", "2000", "3000"))
-clust <- cutree(dat_hclust, k = 7)
-clust_df <- data.frame("tf_name" = rownames(dat_norm),
-                       "clust" = clust)
 ```
+
+```{r example-profiles}
+
+```
+
+
+
 

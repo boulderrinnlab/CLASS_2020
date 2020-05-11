@@ -19,7 +19,7 @@
 #' @param consensus_file_path the path to consensus peak files
 
 
-import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks") {
+import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks/") {
   peak_files <- list.files(consensus_file_path, full.names = T)
   file_names <- str_extract(peak_files, "[\\w-]+\\.bed")
   tf_name <- str_extract(file_names, "^[^_]+(?=_)")
@@ -303,6 +303,143 @@ count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
 }
 
+##### These functions are adapted from the ChIPSeeker package.
+##### We could not use the ChIPSeeker packages directly because
+##### They were hardcoded to use all the available cores -- which
+##### is not feasible in a shared compute environment.
+
+get_tag_count <- function(tag_matrix, xlim, conf, ncpus = 6) {
+  ss <- colSums(tag_matrix)
+  ss <- ss/sum(ss)
+  pos <- value <- NULL
+  dd <- data.frame(pos=c(xlim[1]:(xlim[2]-1)), value=ss)
+  if (!(missingArg(conf) || is.na(conf))){
+    tagCiMx <- get_tag_ci_matrix(tag_matrix, conf = conf, ncpus = ncpus)
+    dd$Lower <- tagCiMx["Lower", ]
+    dd$Upper <- tagCiMx["Upper", ]
+  }
+  return(dd)
+}
+
+get_tag_ci_matrix <- function(tag_matrix, conf = 0.95, resample=500, ncpus = 6){
+  RESAMPLE_TIME <- resample
+  trackLen <- ncol(tag_matrix)
+  if (Sys.info()[1] == "Windows") {
+    tagMxBoot <- boot(data = tag_matrix, statistic = get_sgn, R = RESAMPLE_TIME)
+  } else {
+    tagMxBoot <- boot(data = tag_matrix, statistic = get_sgn, R = RESAMPLE_TIME,
+                      parallel = "multicore", ncpus = ncpus)
+  }
+  cat(">> Running bootstrapping for tag matrix...\t\t",
+      format(Sys.time(), "%Y-%m-%d %X"), "\n")
+  tagMxBootCi <- sapply(seq_len(trackLen), function(i) {
+    bootCiToken <- boot.ci(tagMxBoot, type = "perc", index = i)
+    ## parse boot.ci results
+    return(parse_boot_ci_perc(bootCiToken))
+  }
+  )
+  row.names(tagMxBootCi) <- c("Lower", "Upper")
+  return(tagMxBootCi)
+}
+
+get_sgn <- function(data, idx){
+  d <- data[idx, ]
+  ss <- colSums(d)
+  ss <- ss / sum(ss)
+  return(ss)
+}
+
+parse_boot_ci_perc <- function(bootCiPerc){
+  bootCiPerc <- bootCiPerc$percent
+  tmp <- length(bootCiPerc)
+  ciLo <- bootCiPerc[tmp - 1]
+  ciUp <- bootCiPerc[tmp]
+  return(c(ciLo, ciUp))
+}
+
+plot_profile <- function(tag_count, tf_name) {
+  p <- ggplot(tag_count, aes(pos))
+  p <- p + geom_ribbon(aes(ymin = Lower, ymax = Upper),
+                       linetype = 0, alpha = 0.2)
+  p <- p + geom_line(aes(y = value))
+  
+  xlim <-c(-3000, 3000)
+  origin_label = "TSS"
+  #### Testing below       
+  p <- p + geom_vline(xintercept=0,
+                      linetype="longdash")
+  p <- p + scale_x_continuous(breaks=c(xlim[1], floor(xlim[1]/2),
+                                       0,
+                                       floor(xlim[2]/2), xlim[2]),
+                              labels=c(xlim[1], floor(xlim[1]/2),
+                                       origin_label, 
+                                       floor(xlim[2]/2), xlim[2]))
+  p <- p+xlab("Genomic Region (5'->3')")+ylab("Peak Count Frequency")
+  p <- p + theme_bw() + theme(legend.title=element_blank())
+  p <- p + theme(legend.position="none")
+  p <- p + ggtitle(tf_name)
+  return(p)
+}
+
+##' calculate the tag matrix
+##'
+##'
+##' @title getTagMatrix
+##' @param peak peak file or GRanges object
+##' @param weightCol column name of weight, default is NULL
+##' @param windows a collection of region with equal size, eg. promoter region.
+##' @param flip_minor_strand whether flip the orientation of minor strand
+##' @return tagMatrix
+##' @export
+##' @import BiocGenerics S4Vectors IRanges GenomeInfoDb GenomicRanges
+get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=TRUE) {
+  
+  if (! is(windows, "GRanges")) {
+    stop("windows should be a GRanges object...")
+  }
+  if (length(unique(width(windows))) != 1) {
+    stop("width of windows should be equal...")
+  }
+
+  if (is.null(weightCol)) {
+    peak.cov <- coverage(peak.gr)
+  } else {
+    weight <- mcols(peak.gr)[[weightCol]]
+    peak.cov <- coverage(peak.gr, weight=weight)
+  }
+  cov.len <- elementNROWS(peak.cov)
+  cov.width <- GRanges(seqnames=names(cov.len),
+                       IRanges(start=rep(1, length(cov.len)),
+                               end=cov.len))
+  windows <- subsetByOverlaps(windows, cov.width,
+                              type="within", ignore.strand=TRUE)
+  
+  chr.idx <- intersect(names(peak.cov),
+                       unique(as.character(seqnames(windows))))
+  
+  peakView <- Views(peak.cov[chr.idx], as(windows, "IntegerRangesList")[chr.idx])
+  tagMatrixList <- lapply(peakView, function(x) t(viewApply(x, as.vector)))
+  tagMatrix <- do.call("rbind", tagMatrixList)
+  
+  ## get the index of windows, that are reorganized by as(windows, "IntegerRangesList")
+  idx.list <- split(1:length(windows),  as.factor(seqnames(windows)))
+  idx <- do.call("c", idx.list)
+  
+  rownames(tagMatrix) <- idx
+  tagMatrix <- tagMatrix[order(idx),]
+  
+  ## minus strand
+  if (flip_minor_strand) {
+    ## should set to FALSE if upstream is not equal to downstream
+    ## can set to TRUE if e.g. 3k-TSS-3k
+    ## should set to FALSE if e.g. 3k-TSS-100
+    minus.idx <- which(as.character(strand(windows)) == "-")
+    tagMatrix[minus.idx,] <- tagMatrix[minus.idx, ncol(tagMatrix):1]
+  }
+  
+  tagMatrix <- tagMatrix[rowSums(tagMatrix)!=0,]
+  return(tagMatrix)
+}
 
 
 

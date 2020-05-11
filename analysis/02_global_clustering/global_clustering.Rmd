@@ -13,14 +13,14 @@ library(ggdendro)
 library(GenomicRanges)
 library(umap)
 library(dbscan)
-
+library(ggrepel)
 source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
 
+# Global clustering
 
-
-```{r}
+```{r import-data}
 # We are going to start out with a function to import files called "import_peaks"
 # This the filtered consensus_peaks; final list of 161 TFs after filtering
 # consensus_peaks <- import_peaks("../01_consensus_peaks/results/consensus_peaks")
@@ -33,13 +33,12 @@ mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promot
 # Counts the number of promoters that each TF binds to
 promoter_peak_occurence <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv") %>%
   as.matrix()
-
 ```
 
 
 Now that we have a binary matrix and counts of number of features that intersect with DNA binding events -- let's cluster to see if the grouping makes sense. We are using a binary matrix that calculates the distance betweeen each sample using the binary distance metric. 
 
-```{r}
+```{r hclust-all, fig.height=30, fig.width=5}
 # Hierarchical clustering with binary distance measure
 bin_hier <- hclust(dist(promoter_peak_occurence, method = "binary"))
 
@@ -50,7 +49,7 @@ ggsave("figures/all_hclust_binary_dist.png", height = 26, width = 6)
 
 ## lncRNA promoter binding clustering
 
-```{r}
+```{r hclust-lnrna, fig.height=25, fig.width=5}
 lncrna_peak_occurence <- promoter_peak_occurence[,lncrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
@@ -62,7 +61,7 @@ ggsave("figures/lncrna_hclust_binary_dist.png", height = 26, width = 6)
 
 ## mRNA promoter binding clustering
 
-```{r}
+```{r hclust-mrna, fig.height=25, fig.width=5}
 mrna_peak_occurence <- promoter_peak_occurence[,mrna_promoters$gene_id]
 
 bin_hier <- hclust(dist(lncrna_peak_occurence, method = "binary"))
@@ -76,8 +75,7 @@ ggsave("figures/mrna_hclust_binary_dist.png", height = 26, width = 6)
 
 Here we're going to perform UMAP and cluster with HDBscan to get a global view of DBP binding on lncRNA and mRNA promoters.
 
-```{r}
-
+```{r umap-all, fig.height=10, fig.width=10.5, message=FALSE}
 umap_params <- umap.defaults
 umap_params$n_neighbors <- 4
 umap_params$random_state <- 7748
@@ -90,9 +88,8 @@ labels <- hdbscan(umap_fit$layout, minPts = 6)
 umap_df$cluster <- factor(labels$cluster)
 write_csv(umap_df, "results/umap_lncrna_mrna_promoters.csv")
 
-col_pal <- c(pals::stepped(), pals::stepped2())[c(2,6,10,14,18,22)]
-col_pal <- c(col_pal, pals::stepped3()[c(6)])
-col_pal <- col_pal[c(5,2,3,4,6,7,1)]
+
+col_pal <- c("#653EB3", "#B3823E", "#78B33E", "#3E9FB3", "#666666", "#fd8d3c", "#B33E52")
 g <- ggplot(umap_df, aes(x = V1, y = V2, label = dbp, color = cluster))
 g + geom_point() + 
   geom_text(data = umap_df %>% filter(dbp %in% c("POLR2A",
@@ -117,11 +114,12 @@ clusters_df <- umap_df %>%
   summarize(dbp = paste(dbp, collapse = " ")) %>%
   mutate(dbp = gsub("eGFP-","", dbp))
 write_csv(clusters_df, "results/umap_clusters.csv")
+knitr::kable(clusters_df)
 ```
 
 ### Sub clustering of largest cluster
 
-```{r}
+```{r umap-large-cluster, fig.height=10, fig.width=10.5}
 dbps_in_large_cluster <- umap_df[umap_df$cluster == 7, "dbp"]
 lc_peak_occurence <- promoter_peak_occurence[dbps_in_large_cluster,]
 
@@ -137,14 +135,10 @@ umap_sub <- umap_fit$layout %>% as.data.frame() %>%
 
 labels <- hdbscan(umap_fit$layout, minPts = 4)
 umap_sub$cluster <- factor(labels$cluster)
-library(ggrepel)
+write_csv(umap_sub, "results/umap_largest_subcluster.csv")
 
-col_pal <- c(pals::stepped(), pals::stepped2(), pals::stepped3())
-col_pal <- col_pal[c(seq(2,22,by = 4),seq(27, 43, by = 4),seq(46,62,by=4))]
-col_pal <- col_pal[-6]
-col_pal <- col_pal[-15]
-set.seed(424)
-col_pal <- c("#666666", col_pal[sample(1:length(col_pal),9)])
+
+col_pal <- c("#666666", "#9e9ac8", "#6b6ecf", "#B3823E", "#fd8d3c", "#78B33E", "#653EB3", "#6baed6", "#d6616b", "#3E9FB3")
 g <- ggplot(umap_sub, aes(x = V1, y = V2, label = dbp, color = cluster))
 g + geom_point()  +
     ggtitle("UMAP: large subcluster",
@@ -158,141 +152,13 @@ g + geom_point()  +
 ggsave("figures/umap_large_subcluster_promoters.png", height = 11, width = 11.5)
 ggsave("figures/umap_large_subcluster_promoters.pdf", height = 11, width = 11.5)
 
+clusters_df <- umap_sub %>%
+  dplyr::select(cluster, dbp) %>%
+  group_by(cluster) %>%
+  summarize(dbp = paste(dbp, collapse = " ")) %>%
+  mutate(dbp = gsub("eGFP-","", dbp))
+write_csv(clusters_df, "results/umap_clusters.csv")
+knitr::kable(clusters_df)
 ```
-
-
-# Mapping info to UMAP
-
-First, let's bring in some data from the The Human TFs paper. 
-
-```{r}
-# http://humantfs.ccbr.utoronto.ca/download/v_1.01/databaseExtract_v_1.01.csv
-tf_info <- read.csv("data/DatabaseExtract_v_1.01.csv")
-
-umap_df$HGNC_symbol <- sapply(umap_df$dbp, function(x) {
-  tmp <- unlist(strsplit(x, "-"))
-  if(length(tmp) == 1) {
-    return(tmp[[1]])
-  } else {
-    return(tmp[[2]])
-  }
-})
-length(which(tolower(umap_df$HGNC_symbol) %in% tolower(tf_info$HGNC.symbol)))
-tfs <- tf_info[which(tf_info$HGNC.symbol %in% umap_df$HGNC_symbol),]
-missing_tfs <- umap_df$HGNC_symbol[which(!(umap_df$HGNC_symbol %in% tfs$HGNC.symbol))]
-tf_info <- tf_info %>% dplyr::select(c("Ensembl.ID","HGNC.symbol", "DBD", "Is.TF.","TF.assessment","Binding.mode","Motif.status",
-                                       "Interpro.ID.s.","EntrezGene.ID",
-                                       "EntrezGene.Description","PDB.ID","TF.tested.by.HT.SELEX.",
-                                       "TF.tested.by.PBM.", "Conditional.Binding.Requirements", "Go.Evidence", "Pfam.Domains..By.ENSP.ID.",
-                                       "Is.C2H2.ZF.KRAB.."  ))
-names(tf_info) <- c("ensembl_id", "hgnc_symbol", "dbd", 
-                    "is_tf", "tf_assessment",
-                    "binding_mode", "motif_status",
-                    "interpro_id", "entrez_id", 
-                    "entrez_desc", "pdb_id",
-                    "ht_selex", "pbm", "conditional_binding",
-                    "go_evidence", "pfam_domains",
-                    "is_c2hc_zf_krab")
-names(umap_df)[5] <- "hgnc_symbol"
-names(umap_df)
-umap_df <- merge(umap_df, tf_info, all.x = T, by = "hgnc_symbol")
-umap_df <- umap_df %>% arrange(cluster)
-write_csv(umap_df, "results/umap_with_tf_info.csv")
-```
-
-```{r}
-# cp /Shares/rinn_class/data/k562_chip/analysis/09_expression/expression_summary_per_tf.csv /Shares/rinn_class/data/CLASS_2020/analysis/02_global_clustering/data/.
-binding_summary <- read_csv("data/expression_summary_per_tf.csv")
-csres <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/09_expression/results/chisq_res.csv")
-names(binding_summary)[1] <- "dbp"
-names(csres)[1] <- "dbp"
-umap_df   <- merge(umap_df, csres, all.x = T)
-umap_df <- merge(umap_df, binding_summary)
-names(umap_df)
-```
-
-```{r, fig.width=12, fig.height=10}
-g <- ggplot(umap_df, aes(x = umap_x, y = umap_y, color = dbd))
-g + geom_point(size = 2) + theme_paperwhite() + 
-  theme(axis.line=element_blank(),
-      axis.text.x=element_blank(),
-      axis.text.y=element_blank(),
-      axis.ticks=element_blank(),
-      axis.title.x=element_blank(),
-      axis.title.y=element_blank())  + 
-  ggtitle("Colored by DNA binding domain")
-```
-
-```{r, fig.width=12, fig.height=10}
-g <- ggplot(umap_df, aes(x = umap_x, y = umap_y, color = is_tf))
-g + geom_point(size = 2) + theme_paperwhite() + 
-  theme(axis.line=element_blank(),
-      axis.text.x=element_blank(),
-      axis.text.y=element_blank(),
-      axis.ticks=element_blank(),
-      axis.title.x=element_blank(),
-      axis.title.y=element_blank()) +
-  scale_color_manual(values = c("#424242","#a8404c")) +
-  ggtitle("Colored by Human TFs catalog annotation")
-```
-
-```{r, fig.width=12, fig.height=10}
-g <- ggplot(umap_df, aes(x = umap_x, y = umap_y, color = diff))
-g + geom_point(size = 2) + theme_paperwhite() + 
-  scale_color_gradient2(limits = c(-50,50), oob = scales::squish) +
-  theme(axis.line=element_blank(),
-      axis.text.x=element_blank(),
-      axis.text.y=element_blank(),
-      axis.ticks=element_blank(),
-      axis.title.x=element_blank(),
-      axis.title.y=element_blank()) +
-  ggtitle("Colored by enrichment on reservoirs",
-          subtitle = "blue is more enriched on reservoirs")
-```
-
-
-```{r, fig.width=12, fig.height=10}
-# let's map expression of bound genes
-g <- ggplot(umap_df, aes(x = umap_x, y = umap_y, color = median_expression, label = tf))
-g + geom_point(size = 2) + theme_paperwhite() + 
-  # scale_color_manual(values = cbPalette) +
-  theme(axis.line=element_blank(),
-      axis.text.x=element_blank(),
-      axis.text.y=element_blank(),
-      axis.ticks=element_blank(),
-      axis.title.x=element_blank(),
-      axis.title.y=element_blank()) +
-  scale_color_gradientn(colors = pals::ocean.amp(100)) +
-  ggtitle("TFs colored by median expression of bound promoters")
-```
-
-```{r, fig.width=12, fig.height=10}
-g <- ggplot(umap_df, aes(x = umap_x, y = umap_y, color = num_promoters_bound, label = tf))
-g + geom_point(size = 2) + theme_paperwhite() + 
-  # scale_color_manual(values = cbPalette) +
-  theme(axis.line=element_blank(),
-      axis.text.x=element_blank(),
-      axis.text.y=element_blank(),
-      axis.ticks=element_blank(),
-      axis.title.x=element_blank(),
-      axis.title.y=element_blank()) +
-  geom_text() +
-  scale_color_gradientn(colors = pals::ocean.amp(100)) +
-  ggtitle("TFs colored by number of promoters bound")
-```
-
-
-```{r, fig.width=12, fig.height=10}
-g <- ggplot(umap_df, aes(x = num_promoters_bound, y = median_expression, label = tf, color = cv_expression))
-g + geom_point() + 
-  geom_text() + 
-  scale_color_gradientn(colors = pals::ocean.amp(100)) +
-  ggtitle("Median expression of bound promoters vs num promoters bound",
-          subtitle = "Colored by coefficient of variation for bound promoters")
-```
-
-
-
-
 
 
