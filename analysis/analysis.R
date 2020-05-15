@@ -11,6 +11,7 @@ rmarkdown::render("01_consensus_peaks/consensus_peak_set.Rmd", md_document(varia
 
 # 02_global_clustering
 rmarkdown::render("02_global_clustering/global_clustering.Rmd", md_document(variant = "markdown_github"))
+rmarkdown::render("02_global_clustering/tss_metaplots.Rmd", md_document(variant = "markdown_github"))
 # - count_based_clustering.Rmd (bam files)
 # - peak_based_clustering.Rmd (consensus peak files)
  
