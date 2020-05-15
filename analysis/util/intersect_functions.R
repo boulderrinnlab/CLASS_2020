@@ -271,12 +271,12 @@ get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0
 #' #list of peaks of dna binding proteins that will be intersected
 #' 
 #' @param type
-#' Return either a matrix of counts over features or a binary occurence matrix
+#' Return either a matrix of counts over features or a binary occurrence matrix
 
 count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
-  if(!(type %in% c("counts", "occurence"))) {
-    stop("Type must be either occurence or counts.")
+  if(!(type %in% c("counts", "occurrence"))) {
+    stop("Type must be either occurrence or counts.")
   }
   
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
@@ -290,13 +290,13 @@ count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
   peak_matrix <- peak_count
   
-  if(type == "occurence") {
-    peak_occurence <- matrix(as.numeric(peak_count > 0), 
+  if(type == "occurrence") {
+    peak_occurrence <- matrix(as.numeric(peak_count > 0), 
                              nrow = dim(peak_count)[1],
                              ncol = dim(peak_count)[2])
-    rownames(peak_occurence) <- rownames(peak_count)
-    colnames(peak_occurence) <- colnames(peak_count)
-    peak_matrix <- peak_occurence
+    rownames(peak_occurrence) <- rownames(peak_count)
+    colnames(peak_occurrence) <- colnames(peak_count)
+    peak_matrix <- peak_occurrence
   }
   
   return(peak_matrix)

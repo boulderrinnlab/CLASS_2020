@@ -14,12 +14,12 @@ library(GenomicRanges)
 library(GenomicFeatures)
 library(rtracklayer)
 library(ggrepel)
+library(ggpubr)
 library(Rsubread)
 library(regioneR)
 
 source("../util/intersect_functions.R")
 source("../util/_setup.R")
-
 ```
 
 
@@ -32,210 +32,211 @@ This script extracts expression counts from K562 RNA-seq data and identifies DNA
 
 total RNA-seq for K562 dataset: https://www.encodeproject.org/experiments/ENCSR885DVH/
 
-system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
-      intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
-system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
-       intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
-
 
 ### Analysis of RNA-seq data
 
 ```{r read_counts_to_TPM}
-
-counts <- featureCounts(c("ENCFF625ZBS.bam", "ENCFF630HEX.bam"),
-                        annot.ext = "../../../../../Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
-                        isGTFAnnotationFile = T,
-                        isPairedEnd = TRUE,
-                        nthreads = 16)
-
-rpk <- counts$counts / (counts$annotation$Length/1000)
-expression <- data.frame("rpk" = rpk) %>%
-  rownames_to_column("gene_id") %>%
-  pivot_longer(2:3, names_to = "sample", values_to = "rpk")
-
-expression_summary <- expression %>%
-  group_by(sample) %>%
-  summarize(total_rpk = sum(rpk, na.rm = T))
-expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
-expression <- merge(expression, expression_summary)
-expression$tpm <-expression$rpk / expression$rpk_m
-tpm <- expression %>% group_by(gene_id) %>%
-  summarize(tpm = mean(tpm, na.rm = T))
-```
-
-
-### Import consensus peak set
-
-For details on how the consensus peak set was determined, see "CLASS_2020/analysis/01_consensus_peaks/consensus_peak_set.Rmd"
-
-```{r consensus_peaks}
-
-#' @description import_peaks
-#' this function will compile .bed files of consensus peaks for multiple DNA-binding proteins into a list
-#' 
-#' @param consensus_file_path
-#'the file path in which the .bed files are located
-
-import_peaks <- function(consensus_file_path = "/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results") {
-  peak_files <- list.files(consensus_file_path, full.names = T)
-  file_names <- str_extract(peak_files, "[\\w-]+\\.bed")
-  tf_name <- str_extract(file_names, "^[^_]+(?=_)")
+if(!file.exists("results/k562_tpm.csv")) {
   
-  peak_list <- c()
-  for(i in 1:length(peak_files)) {
-    peaks <- rtracklayer::import(peak_files[i])
-    peak_list <- c(peak_list, peaks)
-    names(peak_list)[length(peak_list)] <- tf_name[i]
+  fl <- list.files("data/", pattern = ".bam", full.names = T)
+  if(length(fl < 2)) {
+    system("wget https://www.encodeproject.org/files/ENCFF625ZBS/@@download/ENCFF625ZBS.bam",
+           intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
+    system("wget https://www.encodeproject.org/files/ENCFF630HEX/@@download/ENCFF630HEX.bam",
+           intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
   }
-
-  return(peak_list)
-}
-
-peak_list <- import_peaks()
-
-```
-
-### Import promoter regions from Gencode for lncRNA- and mRNA-coding genes
-
-```{r promoters_from_gencode}
-
-gtf <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-
-#' @description get_promoter_regions
-#' this function will create a Granges object of promoter regions from an annotated reference genome
-#' 
-#' @param gencode_gr
-#'  Granges object containing gencode annotated reference genome
-#'
-#' @param upstream
-#'  number of kilobases upstream of a TSS you'd define as a promoter
-#'
-#' @param downstream
-#'  number of kilobases downstream of a TSS you'd define as a promoter
-
-get_promoter_regions <- function(gencode_gr, upstream = 3000, downstream = 3000) {
-  genes <- gencode_gr[gencode_gr$type == "gene"]
-  proms <- GenomicRanges::promoters(genes, upstream, downstream)
-return(proms)
-}
-
-gtf_promoters <- get_promoter_regions(gtf)
-promoters <- gtf_promoters[which(gtf_promoters$gene_type == "lncRNA" | gtf_promoters$gene_type == "protein_coding")]
-
-```
-
-
-### Count consensus peaks in each promoter region
-
-```{r peaks_per_promoter}
-
-#' @description count_peaks_per_feature
-#' this function will create a matrix with counts for all DNA-binding protein peaks in each genomic region
-#' 
-#' @param features
-#'  Granges object containing genomic features of interest
-#'
-#' @param peak_list
-#'  list of consensus peaks
-
-count_peaks_per_feature <- function(features, peak_list) {
-
-  peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
   
-  for(j in 1:length(peak_list)) {
-    ov <- countOverlaps(features, peak_list[[j]])
-    peak_count <- rbind(peak_count, ov)
-    rownames(peak_count)[nrow(peak_count)] <- names(peak_list)[j]
-    colnames(peak_count) <- features$gene_id
-  }
-  return(peak_count)
+  counts <- featureCounts(c("data/ENCFF625ZBS.bam", "data/ENCFF630HEX.bam"),
+                          annot.ext = "../../../../../Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf",
+                          isGTFAnnotationFile = T,
+                          isPairedEnd = TRUE,
+                          nthreads = 16)
+  
+  rpk <- counts$counts / (counts$annotation$Length/1000)
+  expression <- data.frame("rpk" = rpk) %>%
+    rownames_to_column("gene_id") %>%
+    pivot_longer(2:3, names_to = "sample", values_to = "rpk")
+  
+  expression_summary <- expression %>%
+    group_by(sample) %>%
+    summarize(total_rpk = sum(rpk, na.rm = T))
+  expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+  expression <- merge(expression, expression_summary)
+  expression$tpm <-expression$rpk / expression$rpk_m
+  tpm <- expression %>% group_by(gene_id) %>%
+    summarize(tpm = mean(tpm, na.rm = T))
+  write_csv(tpm, "results/k562_tpm.csv")
 }
-
-promoter_peak_count <- count_peaks_per_feature(promoters, peak_list)
-
+tpm <- read_csv("results/k562_tpm.csv")
 ```
 
 
-```{r peak_count_data_frame}
+```{r}
 
-promoter_peak_occurrence <- matrix(as.numeric(promoter_peak_count > 0),
-                           nrow = dim(promoter_peak_count)[1],
-                           ncol = dim(promoter_peak_count)[2])
-rownames(promoter_peak_occurrence) <- rownames(promoter_peak_count)
-colnames(promoter_peak_occurrence) <- colnames(promoter_peak_count)
+peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/")
+
+lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
+mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+promoters_df <- promoters %>% as.data.frame() %>% dplyr::select(gene_id, gene_type, gene_name)
+
+lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
+mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
+promoter_peak_occurrence <- count_peaks_per_feature(promoters, peak_list, type = "occurrence")
 
 peak_occurrence_df <- data.frame("gene_id" = colnames(promoter_peak_occurrence),
-                                "number_of_tfs" = colSums(promoter_peak_occurrence),
-                                'gene_type'=promoters$gene_type)
-
-peak_occurrence_df <- merge(peak_occurrence_df,tpm)
-
-write_csv(peak_occurrence_df, "results/k562_expression_binding.csv")
-
+                                "number_of_tfs" = colSums(promoter_peak_occurrence))
+peak_occurrence_df <- merge(peak_occurrence_df, tpm)
+peak_occurrence_df <- merge(peak_occurrence_df, promoters_df)
 ```
+
+```{r, message=FALSE, warning=FALSE}
+g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g + 
+  geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), alpha = 0.2) +
+  geom_smooth() + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0)) + 
+  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") + 
+  ggtitle("Expression vs. promoter binding events") + 
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/k562_expression_vs_promoter_binding.png")
+ggsave("figures/k562_expression_vs_promoter_binding.pdf")
+
+
+
+# lncRNA density plot
+g <- ggplot(peak_occurrence_df %>% filter(gene_type == "lncRNA"), aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g + stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE, n = 500) + 
+  scale_fill_gradientn(colors = colorRampPalette(colors = c("#ffffff", "#a8404c"))(100)) + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0)) + 
+  ggtitle("lncRNA binding vs. expression") + 
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/lncRNA_binding_vs_expression_density.png")
+ggsave("figures/lncRNA_binding_vs_expression_density.pdf")
+
+
+# mRNA density plot
+g <- ggplot(peak_occurrence_df %>% filter(gene_type == "protein_coding"), aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g + stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE, n = 500) + 
+  scale_fill_gradientn(colors = colorRampPalette(colors = c("#ffffff", "#a8404c"))(100)) + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0)) + 
+  ggtitle("mRNA binding vs. expression") + 
+  xlab(expression('Number of TFs')) +
+  ylab(expression(log[10](TPM)))
+ggsave("figures/mRNA_binding_vs_expression_density.png")
+ggsave("figures/mRNA_binding_vs_expression_density.pdf")
+
+g <- ggplot(peak_occurrence_df, aes(y = log2(tpm), x = number_of_tfs))
+g + geom_hex(bins =60) + facet_grid(~gene_type) + 
+  scale_fill_gradientn(colors = colorRampPalette(colors = c("#ffffff", "#a8404c"))(100)) + 
+  scale_y_continuous(expand = c(0,0)) + 
+  scale_x_continuous(expand = c(0,0))
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+## let's try a binned approach
+quantile(peak_occurrence_df$tpm)
+peak_occurrence_df$expression <- cut(peak_occurrence_df$tpm, breaks = c(-1, 0.001, 0.137, 3, 5000),
+                                    labels = c("off", "low", "med", "high"))
+table(peak_occurrence_df$expression)
+
+g <- ggplot(peak_occurrence_df, aes(x = expression, y = number_of_tfs, color = gene_type))
+g + geom_boxplot() + stat_compare_means() + 
+  scale_color_manual(values = c("#a8404c", "#424242"))  
+```
+
+
+```{r}
+g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs, fill = gene_type))
+g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+  ggtitle("RNA-seq all genes")
+
+off_genes <- peak_occurrence_df %>% filter(tpm < 0.001)
+g <- ggplot(off_genes, aes(x = number_of_tfs, fill = gene_type))
+g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+  ggtitle("RNA-seq zero expression")
+
+g <- ggplot(peak_occurrence_df %>% filter(tpm > 1), aes(x = number_of_tfs, fill = gene_type))
+g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+  ggtitle("RNA-seq expressed: TPM > 1")
+```
+
+```{r}
+reservoirs <- off_genes %>% filter(number_of_tfs > 7)
+
+
+ov_proms <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/08_overlapping_promoters/results/overlapped_promoter_regions.csv")
+ov_proms_genes <- ov_proms %>% dplyr::select(gene_id, gene_name, num_overlaps, gene_type, gene_strands)
+ov_proms_genes$overlapping_gene_ids <- ov_proms_genes$gene_id
+
+ov_proms_genes <- ov_proms_genes %>% separate_rows(gene_id, sep = ";")
+names(ov_proms_genes) <- c("gene_id", "overlapping_gene_names", "num_overlaps", "overlapping_gene_types", "overlapping_gene_strands", "overlapping_gene_ids")
+
+ov_proms_genes <- ov_proms_genes[!duplicated(ov_proms_genes$gene_id),]
+
+
+reservoirs_w_overlaps <- merge(reservoirs, ov_proms_genes, all.x = T)
+reservoirs_w_overlaps[is.na(reservoirs_w_overlaps$num_overlaps), "num_overlaps"] <- 0
+
+
+
+
+
+table(reservoirs_w_overlaps$num_overlaps)
+length(which(reservoirs_w_overlaps$num_overlaps > 0))
+length(which(reservoirs_w_overlaps$num_overlaps > 0)) / nrow(reservoirs_w_overlaps)
+
+reservoir_promoters <- promoters[which(promoters$gene_id %in% reservoirs_w_overlaps$gene_id)]
+reservoir_promoters$name <- paste(reservoir_promoters$gene_id, "promoter_tss6kb", sep = "_")
+reservoir_promoters$score <- 0
+rtracklayer::export(reservoir_promoters, "results/k562_reservoir_promoters.bed")
+reservoir_promoters_df <- reservoir_promoters %>% 
+  as.data.frame() %>%
+  dplyr::select(gene_id, seqnames, start, end)
+names(reservoir_promoters_df) <- c("gene_id", "promoter_seqnames", "promoter_start", "promoter_end")
+
+
+reservoirs_w_overlaps <- merge(reservoirs_w_overlaps, reservoir_promoters_df)
+write_csv(reservoirs_w_overlaps, "results/k562_reservoir_promoters_info.csv")
+```
+
+
 
 
 ### Chi-square statistics for reservoir promoters with POLII binding vs. without POLII binding
 
-```{r chi_squared}
+```{r chi_squared, message=FALSE, warning=FALSE}
 
-# Get ghost promoters
-ghosts <- peak_occurrence_df %>% filter(tpm < 0.001)
-ghosts <- ghosts[which(ghosts$number_of_tfs > 7),]
-ghost_promoters <- gtf_promoters[gtf_promoters$gene_id %in% ghosts$gene_id,]
+# Get reservoir promoters
+reservoir_promoters <- promoters[promoters$gene_id %in% reservoirs$gene_id,]
 
 # Get peaks
-poliia <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2A_consensus_peaks.bed")
-poliib <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/POLR2B_consensus_peaks.bed")
+poliia <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks/POLR2A_consensus_peaks.bed")
+poliib <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks/POLR2B_consensus_peaks.bed")
 polii_peaks <- c(poliia, poliib)
 
-# Get ghosts with and without POLII in them
-pol_ghost_overlaps <- findOverlaps(ghost_promoters, polii_peaks)
-pol_ghost_proms <- ghost_promoters[unique(pol_ghost_overlaps@from)]
-nn <- c(1:length(ghost_promoters))
-mm <- subset(nn, !(nn %in% pol_ghost_overlaps@from))
-nopol_ghost_proms <- ghost_promoters[mm]
+# Get reservoirs with and without POLII in them
+pol_reservoir_overlaps <- findOverlaps(reservoir_promoters, polii_peaks)
+pol_reservoir_proms <- reservoir_promoters[unique(pol_reservoir_overlaps@from)]
+nn <- c(1:length(reservoir_promoters))
+mm <- subset(nn, !(nn %in% pol_reservoir_overlaps@from))
+nopol_reservoir_proms <- reservoir_promoters[mm]
 
-# This is a rehash of the count_peaks_per_feature function so it will work with the "occurrence" option.
-
-count_peaks_per_feature <- function(features, peak_list, type) {
-  
-  if(!(type %in% c("counts", "occurrence"))) {
-    stop("Type must be either occurrence or counts.")
-  }
-  
-  peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
-  
-  for(j in 1:length(peak_list)) {
-    ov <- countOverlaps(features, peak_list[[j]])
-    peak_count <- rbind(peak_count, ov)
-    rownames(peak_count)[nrow(peak_count)] <- names(peak_list)[j]
-    colnames(peak_count) <- features$gene_id
-  }
-  
-  peak_matrix <- peak_count
-  
-  if(type == "occurrence") {
-    peak_occurrence <- matrix(as.numeric(peak_count > 0), 
-                             nrow = dim(peak_count)[1],
-                             ncol = dim(peak_count)[2])
-    rownames(peak_occurrence) <- rownames(peak_count)
-    colnames(peak_occurrence) <- colnames(peak_count)
-    peak_matrix <- peak_occurrence
-  }
-  
-  return(peak_matrix)
-  
-}
-pol_matrix <- count_peaks_per_feature(pol_ghost_proms, peak_list, type = "occurrence")
-nopol_matrix <- count_peaks_per_feature(nopol_ghost_proms, peak_list, type = "occurrence")
+pol_matrix <- count_peaks_per_feature(pol_reservoir_proms, peak_list, type = "occurrence")
+nopol_matrix <- count_peaks_per_feature(nopol_reservoir_proms, peak_list, type = "occurrence")
 
 pol_num_overlaps <- rowSums(pol_matrix)
 nopol_num_overlaps <- rowSums(nopol_matrix)
 num_peaks <- sapply(peak_list, length)
-total_pol <- length(pol_ghost_proms)
-total_nopol <- length(nopol_ghost_proms)
-total_ghosts <- length(ghost_promoters)
+total_pol <- length(pol_reservoir_proms)
+total_nopol <- length(nopol_reservoir_proms)
+total_reservoirs <- length(reservoir_promoters)
 
 chisq_res <- data.frame("tf" =character(),
                   "polii_peaks_observed" = numeric(),
@@ -266,52 +267,11 @@ chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
 chisq_res$diff <- chisq_res$polii_peaks_observed - chisq_res$polii_peaks_expected
 
 write_csv(chisq_res, "results/k562_polII_reservoirs_chisquare.csv")
-
-```
-
-
-### Make plots for figures
-
-Figure A: Scatter plot of expression vs. number of DNA-binding factors bound for lncRNA and protein-coding promoters 
-```{r plot_expression_vs_binding_events}
-
-g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
-
-g + geom_point(alpha = 0.2) +
-  geom_smooth() +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") +
-  ggtitle("Expression vs. promoter binding events") +
-  xlab(expression('Number of TFs')) +
-  ylab(expression(log[10](TPM))) 
-
-ggsave("figures/k562_expression_vs_promoter_binding_all_points.png")
-ggsave("figures/k562_expression_vs_promoter_binding_all_points.pdf")
-```
-
-
-Figure B: Scatter plot of expression vs. number of DNA-binding factors bound for lncRNA and protein-coding promoters. Promoters with >7 factors bound but no expression are shown as dots.
-```{r plot_expression_v_binding_events_ghosts}
-
-g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
-g + 
-  geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), alpha = 0.2) +
-  geom_smooth() + 
-  scale_y_continuous(expand = c(0,0)) + 
-  scale_x_continuous(expand = c(0,0)) + 
-  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") + 
-  ggtitle("Expression vs. promoter binding events") + 
-  xlab(expression('Number of TFs')) +
-  ylab(expression(log[10](TPM)))
-
-ggsave("figures/k562_expression_vs_promoter_binding.png")
-ggsave("figures/k562_expression_vs_promoter_binding.pdf")
 ```
 
 
 Figure C: Histogram of promoters by number of DNA-binding factors bound
-```{r binding_histogram}
+```{r binding_histogram, message=FALSE, warning=FALSE}
 
 peak_occurrence_df$expression <- "off"
 peak_occurrence_df[which(peak_occurrence_df$tpm > 0.001), "expression"] <- "expressed"
@@ -329,7 +289,7 @@ ggsave("figures/k562_binding_histogram.pdf")
 
 
 Figure D: Histogram of promoters by number of DNA-binding factors bound for different biotypes and expression levels
-```{r expression_histogram}
+```{r expression_histogram, message=FALSE, warning=FALSE}
 
 g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs))
 g + geom_histogram(binwidth = 5)  + 
@@ -343,24 +303,20 @@ ggsave("figures/k562_binding_histogram_expression.pdf")
 
 
 Figure E: Histogram of promoters by gene expression for different DNA-binding factor densities. In red are prommoters with fewer than 25 factors bound). In black are promomters with 25 or more factors bound.
-```{r plot_peak_occurrence}
-
+```{r plot_peak_occurrence, message=FALSE, warning=FALSE}
 peak_occurrence_df$tf_binding <- "low"
 peak_occurrence_df[which(peak_occurrence_df$number_of_tfs > 25), "tf_binding"] <- "high"
 
 g <- ggplot(peak_occurrence_df, aes(x = log10(tpm), color = tf_binding))
 g + geom_density(alpha = 0.2) +
   scale_color_manual(values = c("#424242","#a8404c"), name = "tf_binding")
-
 ggsave("figures/k562_expression_histogram.png")
 ggsave("figures/k562_expression_histogram.pdf")
-
 ```
 
 
 Figure F: Chi-square values vs. difference in expected and observed binding for DNA-binding factors at promoters with or without POLII bound
-```{r plot_chi_square}
-
+```{r plot_chi_square, message=FALSE, warning=FALSE}
 g <- ggplot(chisq_res, aes(x = diff, y = -log10(padj)))
 g + geom_point(colour = "#424242") +
     geom_text_repel(
@@ -369,10 +325,12 @@ g + geom_point(colour = "#424242") +
     size = 3,
     color ="#a8404c",
     box.padding = unit(0.35, "lines"),
-    point.padding = unit(0.3, "lines"))
+    point.padding = unit(0.3, "lines")) +
+  geom_vline(xintercept = 0, lty = 2) +
+  ggtitle("Reservoirs: polII vs non-polII") 
 
 ggsave("figures/k562_polII_reservoirs_chisquare.png")
 ggsave("figures/k562_polII_reservoirs_chisquare.pdf")
-
 ```
+
 

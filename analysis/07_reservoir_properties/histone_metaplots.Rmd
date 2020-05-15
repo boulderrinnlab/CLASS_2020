@@ -9,22 +9,26 @@ options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(ChIPseeker)
+library(GenomicRanges)
+library(eulerr)
+library(boot)
 # library(valr)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
 ```
+
+
 ```{r retrieve-encode-peak-files}
-# K9me1 - https://www.encodeproject.org/files/ENCFF285EKW/@@download/ENCFF285EKW.bed.gz
 # K27me3 - https://www.encodeproject.org/files/ENCFF031FSF/@@download/ENCFF031FSF.bed.gz
 # K27ac - https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz
-# K9me3 - https://www.encodeproject.org/files/ENCFF371GMJ/@@download/ENCFF371GMJ.bed.gz
-# K4me1 - https://www.encodeproject.org/files/ENCFF159VKJ/@@download/ENCFF159VKJ.bed.gz
 ```
 
 ```{r}
 # Note, you'll need to append /Shares/rinn_class/data/CLASS_2020/analysis" to the files paths to get the files.
 promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
 reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/04_correlation_with_expression/results/k562_ghost_promoters.bed")
-peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis", full.names = TRUE, pattern = ".bed"),
-                         "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
+peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/data/", full.names = TRUE, pattern = ".bed"),
+                         "histone_mark" = c("H3K27me3", "H3K27ac"))
 # Read in peaks
 hmark_peaks <- lapply(peak_files$file, read.table)
 names(hmark_peaks) <- peak_files$histone_mark
@@ -37,66 +41,206 @@ hmark_granges <- lapply(hmark_peaks, function(peaks) {
 
 ```{r}
 # create a matrix indicating whether each chromatin mark overlaps each promoter
-hmark_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = nrow(peak_files))
+hmark_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = 3)
 rownames(hmark_occurence) <- reservoir_promoters$name
-colnames(hmark_occurence) <- peak_files$histone_mark
+colnames(hmark_occurence) <- c(peak_files$histone_mark, "SE")
 
 # Fill in the matrix with overlaps
 # First column 1
 ov1 <- findOverlaps(reservoir_promoters, hmark_granges[[1]])
 res_overlaps <- unique(ov1@from)
 hmark_occurence[res_overlaps,1] <- 1
-table(hmark_occurence[,1])
+
 
 # Repeat for the next histone marks
 ov2 <- findOverlaps(reservoir_promoters, hmark_granges[[2]])
 res_overlaps <- unique(ov2@from)
 hmark_occurence[res_overlaps,2] <- 1
-table(hmark_occurence[,2])
 
-# Repeat for the next histone marks
-ov3 <- findOverlaps(reservoir_promoters, hmark_granges[[3]])
-res_overlaps <- unique(ov3@from)
-hmark_occurence[res_overlaps,3] <- 1
-table(hmark_occurence[,3])
-
-# Repeat for the next histone marks
-ov4 <- findOverlaps(reservoir_promoters, hmark_granges[[4]])
-res_overlaps <- unique(ov4@from)
-hmark_occurence[res_overlaps,4] <- 1
-table(hmark_occurence[,4])
-
-# Repeat for the next histone marks
-ov5 <- findOverlaps(reservoir_promoters, hmark_granges[[5]])
-res_overlaps <- unique(ov5@from)
-hmark_occurence[res_overlaps,5] <- 1
-table(hmark_occurence[,5])
 
 
 #make super enhancers data frame
 # create a matrix indicating whether each super enhancer overlaps each promoter
+# Note that there are two overlapping promoters which is making the 35 overlaps into 36
 super_enhacer_res_ov <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/results/reservoirs_overlapping_ses.bed")
-se_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = 1)
-rownames(se_occurence) <- reservoir_promoters$name
-colnames(se_occurence) <- "super_enhancers"
-ov6 <- findOverlaps(reservoir_promoters, se_hg19)
-res_overlaps <- unique(ov6@from)
-se_occurence[res_overlaps,1] <- 1
-table(se_occurence[,1])
+ov2 <- findOverlaps(reservoir_promoters, super_enhacer_res_ov)
+res_overlaps <- unique(ov2@from)
+hmark_occurence[res_overlaps,3] <- 1
 
-#Merge histone mark occurence and super enhancer occurence
-se_occurence_df <- as.data.frame(se_occurence) %>% rownames_to_column("GeneID")
-hmark_occurence_df <- as.data.frame(hmark_occurence) %>% rownames_to_column("GeneID")
-hmark_se_occurence_ <- merge(hmark_occurence_df, se_occurence_df)
-hmark_se_occurence_matrix <- hmark_se_occurence_ %>% column_to_rownames("GeneID") %>% as.matrix()
+length(super_enhacer_res_ov)
 
+hmark_occurence_df <- hmark_occurence %>% as.data.frame() %>% rownames_to_column("gene_id")
+write_csv(hmark_occurence_df, "results/reservoir_histone_mark_occurrence.csv")
 #plotting histone occurence and super enhancer occurence
-library(eulerr)
-genes.venn <- euler(hmark_se_occurence_matrix[,c(-4,-5)])
-plot(genes.venn, quantities = TRUE)
 
-#pol2 overlap with reservoirs
-pol2_peaks <- rtracklayer::import(/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/results/pol)
+genes.venn <- euler(hmark_occurence)
+pdf("figures/reservoir_histone_mark_overlaps_venn.pdf")
+plot(genes.venn, quantities = TRUE)
+dev.off()
+
+```
+
+
+### Make some metaplots per group.
+
+```{r}
+tag_count_df <- data.frame("pos" = integer(0),
+                           "value" = numeric(0),
+                           "Lower" = numeric(0),
+                           "Upper" = numeric(0),
+                           "hmark" = character(0))
+for (i in 1:length(hmark_granges)) {
+  if(i %% 10 == 0) { print(i) }
+    tag_matrix <- get_tag_matrix(hmark_granges[[i]], windows=reservoir_promoters)
+    tag_count <- get_tag_count(tag_matrix, xlim=c(-3000, 3000), conf = 0.95, ncpus = 6)
+    tag_count$hmark <- names(hmark_granges)[i]
+    g <- plot_profile(tag_count, names(hmark_granges)[i])
+    show(g)
+    tag_count_df <- bind_rows(tag_count_df, tag_count)
+}
+write_csv(tag_count_df, "results/reservoir_H3K27_profiles.csv")
+
+
+reservoir_genes <- gsub("_promoter_tss6kb", "", reservoir_promoters$name)
+lncrna_mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+not_reservoirs <- lncrna_mrna_promoters[!(lncrna_mrna_promoters$gene_id %in% reservoir_genes)]
+# rna_seq_expression <- read_csv("../04_correlation_with_expression/results/k562_tpm.csv")
+# not_expressed_no_binders <- rna_seq_expression[rna_seq_expression$tpm < 0.001]
+tag_count_df_nr <- data.frame("pos" = integer(0),
+                           "value" = numeric(0),
+                           "Lower" = numeric(0),
+                           "Upper" = numeric(0),
+                           "hmark" = character(0))
+for (i in 1:length(hmark_granges)) {
+  if(i %% 10 == 0) { print(i) }
+    tag_matrix <- get_tag_matrix(hmark_granges[[i]], windows=not_reservoirs)
+    tag_count <- get_tag_count(tag_matrix, xlim=c(-3000, 3000), conf = 0.95, ncpus = 6)
+    tag_count$hmark <- names(hmark_granges)[i]
+    g <- plot_profile(tag_count, names(hmark_granges)[i])
+    show(g)
+    tag_count_df_nr <- bind_rows(tag_count_df_nr, tag_count)
+}
+
+# 
+tag_count_df$reservoir <- TRUE
+tag_count_df_nr$reservoir <- FALSE
+tcdf <- bind_rows(tag_count_df, tag_count_df_nr)
+
+# Plot with reservoir vs nonreservoir.
+g <- ggplot(tcdf, aes(x = pos, y = value, color = reservoir)) 
+g + geom_line() + facet_wrap(~hmark, scales = "free_y") + 
+  geom_ribbon(aes(ymin = Lower, ymax = Upper),
+                       linetype = 0, alpha = 0.2)
+ggsave("figures/hmark_metaplot_res_vs_nonres.pdf")
+```
+
+## Is there nascent expression at these hmark classes.
+
+```{r}
+nascent_exp <- read_csv("../08_nascent/results/k562_nascent_tpm.csv")
+
+nascent_exp$reservoir <- FALSE
+nascent_exp[nascent_exp$gene_id %in% reservoir_genes, "reservoir"] <- TRUE
+table(nascent_exp$reservoir)
+
+nascent_exp$h3k27ac <- FALSE
+nascent_exp[nascent_exp$gene_id %in% gsub("_promoter_tss6kb", "", rownames(hmark_occurence)[hmark_occurence[,"H3K27ac"] == 1]), "h3k27ac"] <- TRUE
+table(nascent_exp$h3k27ac)
+
+nascent_exp$h3k27me3 <- FALSE
+nascent_exp[nascent_exp$gene_id %in% gsub("_promoter_tss6kb", "", rownames(hmark_occurence)[hmark_occurence[,"H3K27me3"] == 1]), "h3k27me3"] <- TRUE
+table(nascent_exp$h3k27me3)
+
+nascent_exp$se <- FALSE
+nascent_exp[nascent_exp$gene_id %in% gsub("_promoter_tss6kb", "", rownames(hmark_occurence)[hmark_occurence[,"SE"] == 1]), "se"] <- TRUE
+table(nascent_exp$se)
+write_csv(nascent_exp, "results/nascent_exp_with_h3k27_annotations_for_reservoirs.csv")
+
+
+g <- ggplot(nascent_exp %>% filter(reservoir == T), aes(x = log10(tpm + 0.1), fill = h3k27ac))
+g + geom_density(alpha = 0.2, adjust = 1.1)
+
+g <- ggplot(nascent_exp %>% filter(reservoir == T), aes(x = log10(tpm + 0.1), fill = h3k27me3))
+g + geom_density(alpha = 0.2)
+
+g <- ggplot(nascent_exp %>% filter(reservoir == T), aes(x = log10(tpm + 0.1), fill = se))
+g + geom_density(alpha = 0.2)
+
+
+
+
+length(which(nascent_exp$reservoir & nascent_exp$tpm == 0))
+# 399/1363
+# 
+# gencode_gr <- rtracklayer::import("../../../genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+# genes <- gencode_gr[gencode_gr$type == "gene"]
+# reservoirs <- genes[genes$gene_id %in% reservoir_genes,]
+# table(reservoirs$)
+# no_nascent <- nascent_exp[nascent_exp$reservoir & nascent_exp$tpm == 0,]
+# no_nascent_genes <- reservoirs[reservoirs$gene_id %in% no_nascent$gene_id]
+# table(no_nascent_genes$gene_type)
+
+
+peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks/")
+promoter_peak_occurence <- count_peaks_per_feature(promoters, peak_list, type = "occurence")
+
+binding_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
+                         "num_binding_events" = colSums(promoter_peak_occurence))
+nascent_exp <- merge(nascent_exp, binding_df)
+library(ggpubr)
+g  <- ggplot(nascent_exp %>% filter(reservoir == T), aes(x = num_binding_events, y = log10(tpm), color = h3k27ac))
+g + geom_point() + 
+  geom_smooth(method = "lm") + stat_cor()
+# binding_df <- promoter_peak_occurence %>%
+#   as.data.frame() %>%
+#   rownames_to_column("tf") %>%
+#   pivot_longer(cols = 2:ncol(.), names_to = "gene_id", values_to = "bound") %>%
+#   filter(bound > 0)
+
+nascent_exp$expressed <- FALSE
+nascent_exp[nascent_exp$tpm > 0.001, "expressed"] <- TRUE
+g <- ggplot(nascent_exp %>% filter(reservoir == T), aes(x = num_binding_events, fill = expressed))
+g + geom_density(alpha = 0.2) + 
+  ggtitle("Reservoirs: nascent exp. vs off")
+
+g <- ggplot(nascent_exp, aes(x = num_binding_events, fill = expressed))
+g + geom_density(alpha = 0.2) + 
+  ggtitle("All genes: nascent exp. vs off")
+
+g <- ggplot(nascent_exp, aes(x = num_binding_events, y = log10(tpm+0.1))) 
+g + geom_point() + stat_cor() + 
+  geom_smooth(method = "lm")
+
+# There the number of binding events doesn't matter until you turn on?
+# What determines whether you turn on?
+# What separates the on from the off. 
+
+
+res_summary <- nascent_exp %>% group_by(reservoir, h3k27ac, h3k27me3, se, expressed) %>%
+  summarize(count = n())
+
+
+
+library(UpSetR)
+
+listInput <- list(one = c(1, 2, 3, 5, 7, 8, 11, 12, 13), two = c(1, 2, 4, 5, 
+    10), three = c(1, 5, 6, 7, 8, 9, 10, 12, 13))
+library(tidyverse)
+res_expression <- nascent_exp %>% filter(reservoir == T)
+
+write_csv(res_expression, "results/reservoir_nascent_expression.csv")
+
+res_sets <- list(reservoir = res_expression[res_expression$reservoir, "gene_id"],
+                 h3k27ac = res_expression[res_expression$h3k27ac, "gene_id"],
+                 h3k27me3 = res_expression[res_expression$h3k27me3, "gene_id"],
+                 se = res_expression[res_expression$se, "gene_id"],
+                 nascent_expression = res_expression[res_expression$expressed, "gene_id"])
+upset(fromList(res_sets), order.by = "freq")
+# what describes the no expression data -- lncRNA proportion? proportions of hmarks, etc.
+```
+
+```{r}
+
 ```
 
 
