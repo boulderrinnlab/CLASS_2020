@@ -26,3 +26,9 @@ rmarkdown::render("06_nascent_expression/nascent_expression.Rmd", md_document(va
 
 # 07_reservoir_properties
 rmarkdown::render("07_reservoir_properties/factors_on_reservoirs.Rmd", md_document(variant = "markdown_github"))
+
+# 08_dbp_properties
+rmarkdown::render("08_dbp_properties/umap_with_metadata.Rmd", md_document(variant = "markdown_github"))
+
+# 09_expression_regression
+rmarkdown::render("09_expression_regression/expression_regression.Rmd", md_document(variant = "markdown_github"))
