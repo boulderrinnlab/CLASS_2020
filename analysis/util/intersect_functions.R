@@ -133,7 +133,7 @@ get_overlapping_peaks <- function(features, peak_list){
   
   overlaps_list <- c()
   for(j in 1:length(peak_list)) {
-    ov <- findOverlaps(peak_list[[j]], features)
+    suppressWarnings(ov <- findOverlaps(peak_list[[j]], features))
     overlapping_peaks <- peak_list[[j]][unique(ov@from)]
     overlaps_list <- c(overlaps_list, overlapping_peaks)
     names(overlaps_list)[length(overlaps_list)] <- names(peak_list)[j]
@@ -225,7 +225,7 @@ get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0
   proms <- GenomicRanges::promoters(genes, upstream = upstream, downstream = downstream)
   
   reduced_proms <- GenomicRanges::reduce(proms)
-  ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE)
+  suppressWarnings(ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE))
   ov_proms <- data.frame("gene_promoters_from" = ov_proms@from,
                          "reduced_promoters_to" = ov_proms@to)
   
@@ -282,7 +282,7 @@ count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
   
   for(j in 1:length(peak_list)) {
-    ov <- countOverlaps(features, peak_list[[j]])
+    suppressWarnings(ov <- countOverlaps(features, peak_list[[j]]))
     peak_count <- rbind(peak_count, ov)
     rownames(peak_count)[nrow(peak_count)] <- names(peak_list)[j]
     colnames(peak_count) <- features$gene_id
@@ -411,8 +411,8 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
   cov.width <- GRanges(seqnames=names(cov.len),
                        IRanges(start=rep(1, length(cov.len)),
                                end=cov.len))
-  windows <- subsetByOverlaps(windows, cov.width,
-                              type="within", ignore.strand=TRUE)
+  suppressWarnings(windows <- subsetByOverlaps(windows, cov.width,
+                              type="within", ignore.strand=TRUE))
   
   chr.idx <- intersect(names(peak.cov),
                        unique(as.character(seqnames(windows))))
