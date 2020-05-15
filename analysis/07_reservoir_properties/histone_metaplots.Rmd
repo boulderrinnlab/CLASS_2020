@@ -162,4 +162,3 @@ nrow(hmark_peaks[[2]])
 res_me3ac_overlaps <- bed_intersect(res_prom, hmark_peaks[[1]])
 res_me3ac_overlaps <- bed_intersect(res_prom, hmark_peaks[[2]])
 ```
-

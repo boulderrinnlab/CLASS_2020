@@ -133,7 +133,7 @@ get_overlapping_peaks <- function(features, peak_list){
   
   overlaps_list <- c()
   for(j in 1:length(peak_list)) {
-    ov <- findOverlaps(peak_list[[j]], features)
+    suppressWarnings(ov <- findOverlaps(peak_list[[j]], features))
     overlapping_peaks <- peak_list[[j]][unique(ov@from)]
     overlaps_list <- c(overlaps_list, overlapping_peaks)
     names(overlaps_list)[length(overlaps_list)] <- names(peak_list)[j]
@@ -225,7 +225,7 @@ get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0
   proms <- GenomicRanges::promoters(genes, upstream = upstream, downstream = downstream)
   
   reduced_proms <- GenomicRanges::reduce(proms)
-  ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE)
+  suppressWarnings(ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE))
   ov_proms <- data.frame("gene_promoters_from" = ov_proms@from,
                          "reduced_promoters_to" = ov_proms@to)
   
@@ -271,18 +271,18 @@ get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0
 #' #list of peaks of dna binding proteins that will be intersected
 #' 
 #' @param type
-#' Return either a matrix of counts over features or a binary occurence matrix
+#' Return either a matrix of counts over features or a binary occurrence matrix
 
 count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
-  if(!(type %in% c("counts", "occurence"))) {
-    stop("Type must be either occurence or counts.")
+  if(!(type %in% c("counts", "occurrence"))) {
+    stop("Type must be either occurrence or counts.")
   }
   
   peak_count <- matrix(numeric(), ncol = length(features), nrow = 0)
   
   for(j in 1:length(peak_list)) {
-    ov <- countOverlaps(features, peak_list[[j]])
+    suppressWarnings(ov <- countOverlaps(features, peak_list[[j]]))
     peak_count <- rbind(peak_count, ov)
     rownames(peak_count)[nrow(peak_count)] <- names(peak_list)[j]
     colnames(peak_count) <- features$gene_id
@@ -290,13 +290,13 @@ count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
   peak_matrix <- peak_count
   
-  if(type == "occurence") {
-    peak_occurence <- matrix(as.numeric(peak_count > 0), 
+  if(type == "occurrence") {
+    peak_occurrence <- matrix(as.numeric(peak_count > 0), 
                              nrow = dim(peak_count)[1],
                              ncol = dim(peak_count)[2])
-    rownames(peak_occurence) <- rownames(peak_count)
-    colnames(peak_occurence) <- colnames(peak_count)
-    peak_matrix <- peak_occurence
+    rownames(peak_occurrence) <- rownames(peak_count)
+    colnames(peak_occurrence) <- colnames(peak_count)
+    peak_matrix <- peak_occurrence
   }
   
   return(peak_matrix)
@@ -411,8 +411,8 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
   cov.width <- GRanges(seqnames=names(cov.len),
                        IRanges(start=rep(1, length(cov.len)),
                                end=cov.len))
-  windows <- subsetByOverlaps(windows, cov.width,
-                              type="within", ignore.strand=TRUE)
+  suppressWarnings(windows <- subsetByOverlaps(windows, cov.width,
+                              type="within", ignore.strand=TRUE))
   
   chr.idx <- intersect(names(peak.cov),
                        unique(as.character(seqnames(windows))))

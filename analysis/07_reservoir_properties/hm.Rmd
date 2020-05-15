@@ -7,7 +7,7 @@ editor_options:
 ```{r setup, include=FALSE}
 options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
-install.packages("tidyverse")
+# install.packages("tidyverse")
 library(tidyverse)
 library(GenomicRanges)
 library(ChIPseeker)
@@ -20,7 +20,6 @@ library(ChIPseeker)
 # K9me3 - https://www.encodeproject.org/files/ENCFF371GMJ/@@download/ENCFF371GMJ.bed.gz
 # K4me1 - https://www.encodeproject.org/files/ENCFF159VKJ/@@download/ENCFF159VKJ.bed.gz
 ```
-
 ```{r}
 # Note, you'll need to append /Shares/rinn_class/data/CLASS_2020/analysis" to the files paths to get the files.
 promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
@@ -28,7 +27,7 @@ reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/a
 peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis", full.names = TRUE, pattern = ".bed"),
                          "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
 # Read in peaks
-se_hg19 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/K562.bed")
+se_hg19 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/data/K562.bed")
 hmark_peaks <- lapply(peak_files$file, read.table)
 names(hmark_peaks) <- peak_files$histone_mark
 hmark_granges <- lapply(hmark_peaks, function(peaks) {
@@ -37,45 +36,37 @@ hmark_granges <- lapply(hmark_peaks, function(peaks) {
                            end = peaks$V3))
 })
 ```
-
 ```{r}
 # create a matrix indicating whether each chromatin mark overlaps each promoter
 hmark_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = nrow(peak_files))
 rownames(hmark_occurence) <- reservoir_promoters$name
 colnames(hmark_occurence) <- peak_files$histone_mark
-
 # Fill in the matrix with overlaps
 # First column 1
 ov1 <- findOverlaps(reservoir_promoters, hmark_granges[[1]])
 res_overlaps <- unique(ov1@from)
 hmark_occurence[res_overlaps,1] <- 1
 table(hmark_occurence[,1])
-
 # Repeat for the next histone marks
 ov2 <- findOverlaps(reservoir_promoters, hmark_granges[[2]])
 res_overlaps <- unique(ov2@from)
 hmark_occurence[res_overlaps,2] <- 1
 table(hmark_occurence[,2])
-
 # Repeat for the next histone marks
 ov3 <- findOverlaps(reservoir_promoters, hmark_granges[[3]])
 res_overlaps <- unique(ov3@from)
 hmark_occurence[res_overlaps,3] <- 1
 table(hmark_occurence[,3])
-
 # Repeat for the next histone marks
 ov4 <- findOverlaps(reservoir_promoters, hmark_granges[[4]])
 res_overlaps <- unique(ov4@from)
 hmark_occurence[res_overlaps,4] <- 1
 table(hmark_occurence[,4])
-
 # Repeat for the next histone marks
 ov5 <- findOverlaps(reservoir_promoters, hmark_granges[[5]])
 res_overlaps <- unique(ov5@from)
 hmark_occurence[res_overlaps,5] <- 1
 table(hmark_occurence[,5])
-
-
 #make super enhancers data frame
 # create a matrix indicating whether each super enhancer overlaps each promoter
 super_enhacer_res_ov <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/results/reservoirs_overlapping_ses.bed")
@@ -86,47 +77,34 @@ ov6 <- findOverlaps(reservoir_promoters, se_hg19)
 res_overlaps <- unique(ov6@from)
 se_occurence[res_overlaps,1] <- 1
 table(se_occurence[,1])
-
 #Merge histone mark occurence and super enhancer occurence
 se_occurence_df <- as.data.frame(se_occurence) %>% rownames_to_column("GeneID")
 hmark_occurence_df <- as.data.frame(hmark_occurence) %>% rownames_to_column("GeneID")
 hmark_se_occurence_ <- merge(hmark_occurence_df, se_occurence_df)
 hmark_se_occurence_matrix <- hmark_se_occurence_ %>% column_to_rownames("GeneID") %>% as.matrix()
-
 #plotting histone occurence and super enhancer occurence
 library(eulerr)
 genes.venn <- euler(hmark_se_occurence_matrix[,c(-3,-4,-5)])
 plot(genes.venn, quantities = TRUE)
 ```
-
 ```{r}
 k27_hmark_se_occurence <- hmark_se_occurence_matrix [,c(-3,-4,-5)]
-
 k27_hmark_se_occurence <- as.data.frame(k27_hmark_se_occurence)
-
 H3_K27_me3_and_ac <- data.frame("H3_K27_me3_and_ac" = as.integer())
-
 k27_hmark_se_occurence <- k27_hmark_se_occurence %>% rownames_to_column("GeneID")
-
 for (i in 1:nrow(k27_hmark_se_occurence)) {
   if (k27_hmark_se_occurence$H3K27ac[[i]]==1 & k27_hmark_se_occurence$H3K27me3[[i]] == 1 ) {
     temp_df <- data.frame("GeneID" = k27_hmark_se_occurence$GeneID[[i]], "H3_K27_me3_and_ac" = 1)
     H3_K27_me3_and_ac <- bind_rows(temp_df, H3_K27_me3_and_ac)
   }}
-
 k27_sum_df <- data.frame("H3K27me3_reservoirs" = sum (k27_hmark_se_occurence$H3K27me3),
                          "H3K27ac_reservoirs" = sum (k27_hmark_se_occurence$H3K27ac),
                          "me3_ac_overlap" = sum (H3_K27_me3_and_ac$H3_K27_me3_and_ac),
                          "super_enhancers_reservoirs" = sum (k27_hmark_se_occurence$super_enhancers))
-
 rownames(k27_sum_df) <- "Number_reservoirs"
-
 #Save Overlap Table as CSV
-
 write.csv(k27_sum_df, "H3K27me3_H3K27ac_overlap.csv")
-
 ```
-
 ---------------
 This is some messy draft code. It's not done.
 ```{r}
@@ -162,4 +140,3 @@ nrow(hmark_peaks[[2]])
 res_me3ac_overlaps <- bed_intersect(res_prom, hmark_peaks[[1]])
 res_me3ac_overlaps <- bed_intersect(res_prom, hmark_peaks[[2]])
 ```
-
