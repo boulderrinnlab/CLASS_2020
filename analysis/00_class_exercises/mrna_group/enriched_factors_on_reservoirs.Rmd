@@ -184,10 +184,15 @@ for(i in 1:length(num_peaks)) {
                     "not_ghosts" = not_ghost_num_overlaps[[i]],
                     "chisq_stat" = csres$statistic,
                     "chisq_pval" = csres$p.value,
-                    "phi_coefficient" = phi_coef$phi)
+                    "phi_coefficient" = phi_coef$phi,
+                    "diff" = not_ghost_num_overlaps[[i]] - ghost_num_overlaps[[i]])
   
   chisq_res <- bind_rows(chisq_res, tdf)
 }
+
+significant_ghosts <- chisq_res %>% filter(chisq_pval != 0)
+
+non_signif_ghosts <- chisq_res %>% filter(chisq_pval == 0)
 ```
 
 Revisit this chunk once the manuscript is ready
@@ -229,8 +234,14 @@ peak_occurence <- merge(unique(gene_identity[,colnames(gene_identity)]), peak_oc
 # Defining ghosts here with the gene name
 ghosts_with_name <- peak_occurence %>% filter(number_of_tfs > 7, tpm < 0.001)
 
+<<<<<<< HEAD
+# Plotting
+g5 <- ggplot(ghosts_with_name, aes(number_of_tfs, gene_name))
+g5 + geom_point() + xlim (90, 120) + geom_text(aes(label = gene_name), check_overlap = TRUE, hjust = 0, nudge_x = 0.5, size = 2.5) + theme(legend.position = "none", panel.grid = element_blank(), axis.text.y = element_blank())
+=======
 # Plotting the graph
 g5 <- ggplot(ghosts_with_name, aes(gene_name, number_of_tfs))
 g5 + geom_point() + ylim (90, 120) + geom_text(aes(label = gene_name), check_overlap = TRUE, vjust = 0, hjust = 0, nudge_y = 1, size = 2.5) + theme(legend.position = "none", panel.grid = element_blank(), axis.text.x = element_blank())
+>>>>>>> 3557ad1d4c069a7e5a7837ebaaea6892a230c0ef
 ```
 
