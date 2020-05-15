@@ -16,6 +16,7 @@ rmarkdown::render("02_global_clustering/tss_metaplots.Rmd", md_document(variant 
 # - peak_based_clustering.Rmd (consensus peak files)
  
 # 03_peak_feature_intersect
+rmarkdown::render("03_peak_feature_intersect/permutation_test_by_feature_type.Rmd", md_document(variant = "markdown_github"))
 # - subset_peaks_by_feature_type.Rmd
 # - permutation_test_by_feature_type.Rmd
  

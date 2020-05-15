@@ -100,31 +100,37 @@ if(length(res_files) == 0) {
 ```
 
 ```{r import-export-results}
-perm_res <- lapply(res_files, readRDS) %>%
-  unlist(recursive = F) %>%
-  rbind_list()
-
-# Since we did some filtering after this test was run, let's now filter to just the DBPs
-# with enough peaks to use in the analysis.
-perm_res <- perm_res %>% filter(tf %in% names(peak_list))
-
-length(region_list)
-perm_res$padj <- p.adjust(perm_res$pval, method = "BH", n = length(region_list)*length(peak_list))
-
-
-perm_res_family <- perm_res %>%
-  filter(grepl("family", region),
-         !grepl("\\?", region))
-write_csv(perm_res_family, "results/permutation_results_repeat_families.csv")
-
-perm_res_class <- perm_res %>%
-  filter(grepl("class", region),
-         !grepl("\\?", region))
-write_csv(perm_res_class, "results/permutation_results_repeat_classes.csv")
-
-perm_res_promoters <- perm_res %>%
-  filter(grepl("promoters", region))
-write_csv(perm_res_promoters, "results/permutation_results_promoters.csv")
+fl <- list.files("results/", pattern = "permutation_results", full.names = T)
+if(length(fl) < 3) {
+  perm_res <- lapply(res_files, readRDS) %>%
+    unlist(recursive = F) %>%
+    rbind_list()
+  
+  # Since we did some filtering after this test was run, let's now filter to just the DBPs
+  # with enough peaks to use in the analysis.
+  perm_res <- perm_res %>% filter(tf %in% names(peak_list))
+  
+  length(region_list)
+  perm_res$padj <- p.adjust(perm_res$pval, method = "BH", n = length(region_list)*length(peak_list))
+  
+  
+  perm_res_family <- perm_res %>%
+    filter(grepl("family", region),
+           !grepl("\\?", region))
+  write_csv(perm_res_family, "results/permutation_results_repeat_families.csv")
+  
+  perm_res_class <- perm_res %>%
+    filter(grepl("class", region),
+           !grepl("\\?", region))
+  write_csv(perm_res_class, "results/permutation_results_repeat_classes.csv")
+  
+  perm_res_promoters <- perm_res %>%
+    filter(grepl("promoters", region))
+  write_csv(perm_res_promoters, "results/permutation_results_promoters.csv")
+}
+perm_res_family <- read_csv("results/permutation_results_repeat_families.csv")
+perm_res_class <- read_csv("results/permutation_results_repeat_classes.csv")
+perm_res_promoters <- read_csv("results/permutation_results_promoters.csv")
 ```
 
 Nearly all DBPs were enriched on both lncRNA and mRNA promoters. A few however, were significantly depleted.
@@ -171,7 +177,7 @@ Not significant:
 `r paste(paste(ns_promoters$region, ns_promoters$tf, sep = "-"), collapse = " ")`
 
 
-```{r}
+```{r, fig.width=10, fig.height=9}
 
 sig_overlaps <- perm_res %>% filter(padj < 0.01)
 
@@ -187,10 +193,7 @@ overlaps <- perm_res %>%
 # Those that had zero overlaps have a z-score of NA.
 # Let's make it zero.
 overlaps[is.na(overlaps$zscore), "zscore"] <- 0
-```
 
-
-```{r hierarchical-clustering}
 sig_df <- overlaps %>%
   dplyr::select(region, tf, zscore) %>%
   pivot_wider(names_from = tf, values_from = zscore, values_fill = list("zscore" = 0))
@@ -207,7 +210,7 @@ plot(region_clust)
 
 Hmm, well that's interesting. It looks like in terms of enrichment, lncRNA promoters are not clustered with mRNA promoters, but rather with the MIR family, tRNAs, and simple repeats. I think that may be due to the lower magnitude of enrichment. 
 
-```{r}
+```{r, fig.width=10, fig.height=15}
 sig_df_long <- sig_df %>%
   pivot_longer(2:ncol(.), names_to = "tf", values_to = "zscore")
 sig_df_long$region <- factor(sig_df_long$region, region_clust$labels[region_clust$order])
@@ -226,7 +229,7 @@ g + geom_tile() + scale_fill_gradient2()
 ```
 
 
-```{r, fig.width=5, fig.height=20}
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
 # Just look at mRNA and lncRNA
 sig_df_family <- sig_df_long %>%
   filter(grepl("promoter", region))
@@ -258,7 +261,7 @@ ggsave("figures/mRNA_lncRNA_vs_tf_peaks_pointmap.png", height = 28, width = 4)
 
 ```
 
-```{r, fig.width=5, fig.height=20}
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
 # Just look at repeat classes
 # There's not a lot going on the ? classes and they tend to cluster with their main class type.
 # Exceppt for LTR_class? which is quite different than LTR_class
@@ -280,7 +283,7 @@ sig_df_classes$region <- factor(sig_df_classes$region,  class_region_clust$label
 sig_df_classes$tf<- factor(sig_df_classes$tf,  class_tf_clust$labels[class_tf_clust$order])
 ```
 
-```{r, fig.width=5, fig.height=20}
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
 summary(sig_df_classes$zscore)
 g <- ggplot(sig_df_classes, aes(x = tf, y = region, fill = zscore))
 g + geom_tile() + scale_fill_gradient2(limits = c(-100, 100), na.value = "#ffffff") +  
@@ -288,7 +291,7 @@ g + geom_tile() + scale_fill_gradient2(limits = c(-100, 100), na.value = "#fffff
 ggsave("figures/repeat_classes_vs_tf_peaks.pdf", height = 5, width = 28)
 ```
 
-```{r, fig.width=28, fig.height=5}
+```{r, fig.width=28, fig.height=5, fig.show=FALSE}
 # Order so the bigger zscores come up on top
 sig_df_classes <- sig_df_classes %>% arrange(abs(zscore))
 # New style of heatmap:
@@ -303,7 +306,7 @@ ggsave("figures/repeat_classes_vs_tf_peaks_pointmap.png", height = 28, width = 5
 ```
 
 
-```{r, fig.width=5, fig.height=20}
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
 # Just look at repeat families
 sig_df_family <- sig_df_long %>%
   filter(grepl("family", region),
@@ -322,14 +325,14 @@ sig_df_family$region <- factor(sig_df_family$region,  class_region_clust$labels[
 sig_df_family$tf<- factor(sig_df_family$tf,  class_tf_clust$labels[class_tf_clust$order])
 ```
 
-```{r, fig.width=5, fig.height=20}
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
 g <- ggplot(sig_df_family, aes(x = tf, y = region, fill = zscore))
 g + geom_tile() + scale_fill_gradient2(limits = c(-100, 100), na.value = "#ffffff") + 
   theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
 ggsave("figures/repeat_families_vs_tf_peaks.pdf", height = 12, width = 28)
 ```
 
-```{r, fig.width=5, fig.height=20}
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
 # Order so the bigger zscores come up on top
 sig_df_family <- sig_df_family %>% arrange(abs(zscore))
 # New style of heatmap:
