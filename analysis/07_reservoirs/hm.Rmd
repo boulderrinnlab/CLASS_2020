@@ -26,8 +26,9 @@ library(ChIPseeker)
 ```{r}
 # Note, you'll need to append /Shares/rinn_class/data/CLASS_2020/analysis" to the files paths to get the files.
 promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
-reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/04_correlation_with_expression/results/k562_ghost_promoters.bed")
-peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis", full.names = TRUE, pattern = ".bed"),
+reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/05_rnaseq_expression/results/k562_ghost_promoters.bed")
+peak_files <- data.frame("file" = list.files("/scratch/Users/sosh9992/CLASS_2020/analysis/07_reservoirs/", 
+                          full.names = TRUE, pattern = ".bed"),
                          "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
 # Read in peaks
 se_hg38 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoir_properties/results/k562_superenhancers_hg38.bed")
