@@ -24,32 +24,43 @@ library(vip)
 ## Gather the data
 
 ```{r}
-rnaseq_exp <- read_csv("results/k562_tpm.csv")
+rnaseq_exp <- read_csv("../05_rnaseq_expression/results/k562_tpm.csv")
+nascent_exp <- read_csv("../06_nascent_expression/results/k562_nascent_tpm.csv")
 dbp_occurence_matrix <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
 
 dbp_occurence_matrix <- t(dbp_occurence_matrix)
 # Make outcome variable matrix
-exp <- rnaseq_exp %>% 
+nascent_exp <- nascent_exp %>% 
+  dplyr::select(gene_id, tpm) %>%
+  column_to_rownames("gene_id") %>%
+  as.matrix()
+rnaseq_exp <- rnaseq_exp %>% 
   dplyr::select(gene_id, tpm) %>%
   column_to_rownames("gene_id") %>%
   as.matrix()
 # Match the order
-exp <- exp[rownames(dbp_occurence_matrix),]
-stopifnot(all(rownames(exp) == rownames(dbp_occurence_matrix)))
+nascent_exp <- nascent_exp[rownames(dbp_occurence_matrix),]
+rnaseq_exp <- rnaseq_exp[rownames(dbp_occurence_matrix),]
+stopifnot(all(rownames(nascent_exp) == rownames(dbp_occurence_matrix)))
+stopifnot(all(rownames(rnaseq_exp) == rownames(dbp_occurence_matrix)))
+
 
 # For convenience for now we'll make this into a data frame
 # Although it will be faster to use gbm.fit with separate matrices.
 exp_df <- exp %>% as.data.frame() %>% rownames_to_column("gene_id")
+names(exp_df)[2] <- "tpm"
+# exp_df$expressed <- FALSE
+# exp_df[which(exp_df$tpm > 0.01),"expressed"] <- TRUE
+
 occ_df <- dbp_occurence_matrix %>%
   as.data.frame() %>%
   rownames_to_column("gene_id")
-occ_df <- merge(exp_df, occ_df) %>%
+occ_df <- merge(exp_df %>% dplyr::select(gene_id, tpm), occ_df) %>%
   column_to_rownames("gene_id")
-names(occ_df)[1] <- "tpm"
 
 # Let's filter out those genes where there is no binding and also no expression.
-not_zero <- which(rowSums(occ_df %>% as.matrix()) != 0)
-occ_df <- occ_df[not_zero,]
+# not_zero <- which(rowSums(occ_df %>% as.matrix()) != 0)
+# occ_df <- occ_df[not_zero,]
 
 # Let's also filter out those that have no DBP binding as
 # We're not able to model anything here.
@@ -62,10 +73,10 @@ occ_matrix <- occ_df %>% as.matrix()
 min(rowSums(occ_matrix))
 
 # Convert to log10
-occ_df$tpm <- log10(occ_df$tpm + 0.001)
+occ_df$tpm <- log10(occ_df$tpm + 0.05)
 names(occ_df)[1] <- "log10_tpm"
 
-hist(occ_df$log10_tpm, breaks = 100)
+# hist(occ_df$log10_tpm, breaks = 100)
 write_csv(occ_df, "results/occ_df.csv")
 ```
 
@@ -77,10 +88,7 @@ occ_df <- read_csv("results/occ_df.csv")
 ```
 
 ```{r}
-set.seed(123)6
-# ames_split <- initial_split(AmesHousing::make_ames(), prop = .7)
-# ames_train <- training(ames_split)
-# ames_test  <- testing(ames_split)
+set.seed(123)
 exp_split <- initial_split(occ_df, prop = .7)
 exp_train <- training(exp_split)
 exp_test <- testing(exp_split)
@@ -88,11 +96,11 @@ exp_test <- testing(exp_split)
 
 ```{r}
 h2o.init(max_mem_size = "5g", nthreads = 6)
-y <- "log10_tpm"
+y <- "expressed"
 x <- setdiff(names(exp_train), y)
 train.h2o <- as.h2o(exp_train)
 test.h2o <- as.h2o(exp_test)
-# training basic GBM model with defaults
+# training basic GBM model 
 h2o.fit1 <- h2o.gbm(
   x = x,
   y = y,
@@ -110,54 +118,87 @@ h2o.fit1@model$names
 h2o.rmse(h2o.fit1, xval = TRUE)
 
 h2o.varimp_plot(h2o.fit1, num_of_features = 10)
+# colSums(dbp_occurence_matrix)
 # print(h2o.auc(h2o.fit1))
 ```
 
 ```{r}
-pfun <- function(object, newdata) {
-  as.data.frame(predict(object, newdata = as.h2o(newdata)))[[1L]]
-}
-
-pdp <- h2o.fit1 %>%
-  partial(
-    pred.var = "POLR2A", 
-    pred.fun = pfun,
-    grid.resolution = 20, 
-    train = exp_train
-    ) %>%
-  autoplot(rug = TRUE, train = exp_train, alpha = .1) +
-  # scale_y_continuous(labels = scales::dollar) +
-  ggtitle("PDP")
-
-ice <- h2o.fit1 %>%
-  partial(
-    pred.var = "POLR2A", 
-    pred.fun = pfun,
-    grid.resolution = 20, 
-    train = exp_train,
-    ice = TRUE
-    ) %>%
-  autoplot(rug = TRUE, train = exp_train, alpha = .1, center = TRUE) +
-  # scale_y_continuous(labels = scales::dollar) +
-  ggtitle("ICE")
-
-gridExtra::grid.arrange(pdp, ice, nrow = 1)
+# pfun <- function(object, newdata) {
+#   as.data.frame(predict(object, newdata = as.h2o(newdata)))[[1L]]
+# }
+# 
+# pdp <- h2o.fit1 %>%
+#   partial(
+#     pred.var = "POLR2A", 
+#     pred.fun = pfun,
+#     grid.resolution = 20, 
+#     train = exp_train
+#     ) %>%
+#   autoplot(rug = TRUE, train = exp_train, alpha = .1) +
+#   # scale_y_continuous(labels = scales::dollar) +
+#   ggtitle("PDP")
+# 
+# ice <- h2o.fit1 %>%
+#   partial(
+#     pred.var = "POLR2A", 
+#     pred.fun = pfun,
+#     grid.resolution = 20, 
+#     train = exp_train,
+#     ice = TRUE
+#     ) %>%
+#   autoplot(rug = TRUE, train = exp_train, alpha = .1, center = TRUE) +
+#   # scale_y_continuous(labels = scales::dollar) +
+#   ggtitle("ICE")
+# 
+# gridExtra::grid.arrange(pdp, ice, nrow = 1)
 ```
 
 
 
 ```{r}
 h2o.partialPlot(h2o.fit1, data = train.h2o, cols = "SUPT5H")
+h2o.partialPlot(h2o.fit1, data = train.h2o, cols = "BCOR")
+h2o.partialPlot(h2o.fit1, data = train.h2o, cols = "NRF1")
+h2o.partialPlot(h2o.fit1, data = train.h2o, cols = "AFF1")
 ```
 
 ```{r}
-which.max(exp_test$log10_tpm)
-which.min(exp_test$log10_tpm)
-local_obs <- exp_test[c(16,7341), -1]
-local_obs$log10_tpm
+reservoirs <- read_csv("../05_rnaseq_expression/results/k562_reservoir_promoters_info.csv")
+res_na_tpm <- nascent_exp[which(nascent_exp$gene_id %in% reservoirs$gene_id),]
+table(res_na_tpm$tpm > 0)
+reservoir_indices <- which(rownames(exp_test) %in% reservoirs$gene_id)
+non_expressed_indices <- which(rownames(exp_test) %in% res_na_tpm$gene_id[which(res_na_tpm$tpm == 0)])
+expressed_indices <- which(rownames(exp_test) %in% res_na_tpm$gene_id[which(res_na_tpm$tpm > 0)])
+
+local_obs <- exp_test[c(1,2), ]
 explainer <- lime(exp_train, h2o.fit1)
-explanation <- explain(local_obs, explainer, n_features = 5)
+explanation <- lime::explain(local_obs, explainer, n_labels = 2,n_features = 5)
 plot_features(explanation)
+exp_test[c(1,2), 1]
+rownames(exp_test)[1:2]
+
+table(exp_train$expressed)
+
+library(broom)
+lmdf <- data.frame("term" = character(),
+                   "estimate" = numeric(),
+                   "std.error" = numeric(),
+                   "statistic" = numeric(),
+                   "p.value" = numeric(),
+                   "dbp" = character())
+for(i in 2:ncol(occ_df)) {
+  t_lmdf <- tidy(lm(occ_df$log10_tpm ~ occ_df[,i]))
+  t_lmdf$dbp <- colnames(occ_df)[i]
+  lmdf <- bind_rows(lmdf, t_lmdf)
+}
+
+lmdf_slopes <- lmdf %>% filter(term != "(Intercept)")
+lmdf_slopes$padj <- p.adjust(lmdf_slopes$p.value, method = "BH")
+
+g <- ggplot(lmdf_slopes, aes(x = estimate, y = -log10(padj), label = dbp))
+g + geom_point() +
+  geom_text() + 
+  geom_hline(yintercept = -log10(0.01))
 ```
 
 
