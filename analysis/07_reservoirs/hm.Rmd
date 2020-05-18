@@ -20,14 +20,19 @@ library(ChIPseeker)
 # K9me3 - https://www.encodeproject.org/files/ENCFF371GMJ/@@download/ENCFF371GMJ.bed.gz
 # K4me1 - https://www.encodeproject.org/files/ENCFF159VKJ/@@download/ENCFF159VKJ.bed.gz
 ```
+
+#This needs to be cleaned up a lot on Monday
+
 ```{r}
 # Note, you'll need to append /Shares/rinn_class/data/CLASS_2020/analysis" to the files paths to get the files.
 promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
-reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/04_correlation_with_expression/results/k562_ghost_promoters.bed")
-peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis", full.names = TRUE, pattern = ".bed"),
+reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/05_rnaseq_expression/results/k562_ghost_promoters.bed")
+peak_files <- data.frame("file" = list.files("/scratch/Users/sosh9992/CLASS_2020/analysis/07_reservoirs/", 
+                          full.names = TRUE, pattern = ".bed"),
                          "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
 # Read in peaks
-se_hg38 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/results/k562_superenhancers_hg38.bed")
+se_hg38 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoir_properties/results/k562_superenhancers_hg38.bed")
+
 hmark_peaks <- lapply(peak_files$file, read.table)
 names(hmark_peaks) <- peak_files$histone_mark
 hmark_granges <- lapply(hmark_peaks, function(peaks) {
@@ -37,9 +42,10 @@ hmark_granges <- lapply(hmark_peaks, function(peaks) {
 })
 
 #read in nascent transcription data
-nascent_tpm <- read.csv("/Shares/rinn_class/data/CLASS_2020/analysis/08_nascent/results/k562_nascent_tpm.csv")
+nascent_tpm <- read.csv("/Shares/rinn_class/data/CLASS_2020/analysis/06_nascent_expression/results/k562_nascent_tpm.csv")
 
 ```
+
 
 ```{r}
 # create a matrix indicating whether each chromatin mark overlaps each promoter
@@ -158,4 +164,132 @@ g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
 ```
 
 
----------------
+```{r}
+# We are going to start out with a function to import files called "import_peaks"
+# This the filtered peak_list; final list of 161 TFs after filtering
+peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks")
+
+# Making the features (gencode) GRanges that has lots of features annotated
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+# Here we are using the function "get_promoter_regions" to grab both the lncRNA and mRNA promoters
+proms <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
+
+# Counts the number of promoters that each TF binds to
+promoter_peak_count <- count_peaks_per_feature(proms, peak_list)
+
+# Make this binary -- a co-occurence matrix (the promoters bound by TFs).
+promoter_peak_occurence <- matrix(as.numeric(promoter_peak_count > 0),
+                           nrow = dim(promoter_peak_count)[1],
+                           ncol = dim(promoter_peak_count)[2])
+rownames(promoter_peak_occurence) <- rownames(promoter_peak_count)
+colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
+
+# Make a data frame of binding events per promoter.
+peak_occurence_df <- data.frame("GeneID" = colnames(promoter_peak_occurence),
+                                "number_of_tfs" = colSums(promoter_peak_occurence))
+
+# Merge peak occurence into histone mark, SE, nascent data frame
+dbp_hm_nascent <- merge(hm_se_nascent, peak_occurence_df)
+```
+
+
+```{r}
+#graph number of binding events with or without nascent transcription in density plot
+nascent <- data.frame("nascent_exp" = as.character())
+for (i in 1:nrow(dbp_hm_nascent)) {
+  if (dbp_hm_nascent$tpm[[i]] > 0.001 ) {
+    temp_df <- data.frame("GeneID" = dbp_hm_nascent$GeneID[[i]], "nascent_exp" = "yes")
+  }
+    else{
+      temp_df <- data.frame("GeneID" = dbp_hm_nascent$GeneID[[i]], "nascent_exp" = "no")
+    }
+    nascent <- bind_rows(temp_df, nascent)
+  }
+#merge nascent with dbps
+dbp_nascent <- merge(nascent, peak_occurence_df)
+#plot it
+g <- ggplot(dbp_nascent, aes(x = number_of_tfs, color = nascent_exp))
+g + geom_density() +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "nascent_exp")
+
+#same thing for H3K27me3
+k27me3 <- data.frame("H3K27me3" = as.character())
+for (i in 1:nrow(dbp_hm_nascent)) {
+  if (dbp_hm_nascent$H3K27me3[[i]] == 1 ) {
+    temp_df <- data.frame("GeneID" = dbp_hm_nascent$GeneID[[i]], "H3K27me3" = "yes")
+  }
+    else{
+      temp_df <- data.frame("GeneID" = dbp_hm_nascent$GeneID[[i]], "H3K27me3" = "no")
+    }
+    k27me3 <- bind_rows(temp_df, k27me3)
+}
+#merge in tpm
+tpm_k27me3 <- merge(k27me3, nascent_tpm)
+#plot it
+g <- ggplot(tpm_k27me3, aes(x = log10(tpm), color = H3K27me3))
+g + geom_density() +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "H3K27me3")
+
+#same thing for H3K27ac
+k27ac <- data.frame("H3K27ac" = as.character())
+for (i in 1:nrow(dbp_hm_nascent)) {
+  if (dbp_hm_nascent$H3K27ac[[i]] == 1 ) {
+    temp_df <- data.frame("GeneID" = dbp_hm_nascent$GeneID[[i]], "H3K27ac" = "yes")
+  }
+    else{
+      temp_df <- data.frame("GeneID" = dbp_hm_nascent$GeneID[[i]], "H3K27ac" = "no")
+    }
+    k27ac <- bind_rows(temp_df, k27ac)
+}
+#merge in tpm
+tpm_k27ac <- merge(k27ac, nascent_tpm)
+#plot it
+g <- ggplot(tpm_k27ac, aes(x = log10(tpm), color = H3K27ac))
+g + geom_density() +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "H3K27ac")
+
+
+```
+
+```{r}
+#PolII
+polr2a <- peak_list$POLR2A
+polr2b <- peak_list$POLR2B
+
+pol2_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = 1)
+polr2a_ov <- findOverlaps(reservoir_promoters, polr2a)
+polr2a_res_overlaps <- unique(ov@from)
+pol2_occurence[polr2a_res_overlaps,] <- 1
+
+# polr2b_ov <- findOverlaps(reservoir_promoters, polr2b)
+# polr2b_res_overlaps <- unique(ov@from)
+# pol2_occurence[polr2b_res_overlaps,] <- 1
+
+rownames(pol2_occurence) <- reservoir_genes
+colnames(pol2_occurence) <- c("Polr2a")
+
+# Make a data frame of binding events per promoter.
+pol2_occurence_df <- data.frame("GeneID" = rownames(pol2_occurence),
+                                "number_bound" = rowSums(pol2_occurence))
+#make yes or no
+pol2 <- data.frame("Pol2" = as.character())
+for (i in 1:nrow(pol2_occurence_df)) {
+  if (pol2_occurence_df$number_bound[[i]] > 0) {
+    temp_df <- data.frame("GeneID" = pol2_occurence_df$GeneID[[i]], "Pol2" = "yes")
+  }
+    else{
+      temp_df <- data.frame("GeneID" = pol2_occurence_df$GeneID[[i]], "Pol2" = "no")
+    }
+    pol2 <- bind_rows(temp_df, pol2)
+}
+#merge in tpm
+tpm_pol2 <- merge(pol2, nascent_tpm)
+
+#plot it
+g <- ggplot(tpm_pol2, aes(x = log10(tpm), color = Pol2))
+g + geom_density() +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "Pol2")
+
+```
+
