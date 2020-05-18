@@ -1,0 +1,100 @@
+---
+title: "Reservoir properties"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(liftOver)
+library(GenomicRanges)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+```{r}
+peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/")
+
+lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
+mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+
+lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
+mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
+
+reservoirs <- rtracklayer::import("../05_rnaseq_expression/results/k562_reservoir_promoters.bed")
+```
+
+# Overlap with annotated superenhancers
+
+We got this from the SEdb: https://asntech.org/dbsuper/
+
+```{r}
+# http://asntech.org/dbsuper/data/bed/hg19/K562.bed
+se_hg19 <- rtracklayer::import("data/K562.bed")
+# http://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz
+ch <- import.chain("data/hg19ToHg38.over.chain")
+
+seqlevelsStyle(se_hg19) <- "UCSC"  # necessary
+se_hg38 <- liftOver(se_hg19, ch)
+# Subset just to contiguously liftedOver regions
+se_hg38 <- se_hg38[sapply(width(se_hg38), length) == 1]
+rtracklayer::export(se_hg38, "results/k562_superenhancers_hg38.bed")
+
+
+se_res_ov <- findOverlaps(reservoirs, se_hg38)
+reservoirs_overlapping_ses <- reservoirs[se_res_ov@from]
+rtracklayer::export(reservoirs_overlapping_ses, "results/reservoirs_overlapping_ses.bed")
+
+```
+
+#### Hypergeometric test
+
+```{r}
+# t is overlaps of ghosts on superenhancers = 35
+# n is total promoters with > 7 binding events = 16826
+# a is number of ghosts = 1362
+# b is number of superenhancers = 714
+
+# dhyper(t, a, n - a, b)
+# sum(dhyper(t:b, a, n - a, b))
+
+dhyper(35, 714, 16826 - 714, 1362)
+sum(dhyper(35:1362, 714, 16826 - 714, 1362))
+
+```
+
+# Histone mark overlaps
+
+```{r}
+# K27me3 - https://www.encodeproject.org/files/ENCFF031FSF/@@download/ENCFF031FSF.bed.gz
+# K27ac - https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz
+peak_files <- data.frame("file" = c("data/ENCFF031FSF.bed", "data/ENCFF038DDS.bed"),
+                         "histone_mark" = c("H3K27me3", "H3K27ac"))
+hmark_peaks <- lapply(peak_files$file, read.table)
+names(hmark_peaks) <- peak_files$histone_mark
+hmark_granges <- lapply(hmark_peaks, function(peaks) {
+  GRanges(seqnames = peaks$V1,
+          ranges = IRanges(start = peaks$V2,
+                           end = peaks$V3))
+})
+```
+
+
+# Clustering
+
+```{r}
+# Calculate a distance measure between the rows.
+bin_hier <- hclust(dist(ghost_peak_occurence, method = "binary"))
+plot(bin_hier)
+
+# load library for ggdendro for the best trees we could find 
+library(ggdendro)
+
+ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+ggsave("figures/ghost_binary_dist.pdf", height = 26, width = 6)
+
+```
