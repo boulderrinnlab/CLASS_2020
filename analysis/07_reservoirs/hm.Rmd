@@ -104,6 +104,29 @@ for (i in 1:nrow(k27_hmark_se_occurence)) {
   }}
 ```
 
+
+Add in nascent transcription tpm to the histone-mark data frame
+```{r}
+# add in nascent trancription tpm to dataframe with histone marks
+colnames(nascent_tpm) <- c("GeneID", "GeneName", "tpm")
+hm_se_nascent <- merge(k27_hmark_se_occurence, nascent_tpm)
+hm_se_nascent <-merge(hm_se_nascent, pol2_occurence_df)
+write.csv(hm_se_nascent, "results/gene_id_histone_mark_nascent_occurence.csv")
+
+
+histov_nascent <- data.frame("H3K27_me3_and_ac" = as.integer())
+for (i in 1:nrow(hm_se_nascent)) {
+  if (hm_se_nascent$H3K27ac[[i]]==1 & hm_se_nascent$H3K27me3[[i]] == 1 ) {
+    temp_df <- data.frame("GeneID" = hm_se_nascent$GeneID[[i]], "H3K27_me3_and_ac" = 1)
+  }
+    else{
+      temp_df <- data.frame("GeneID" = hm_se_nascent$GeneID[[i]], "H3K27_me3_and_ac" = 0)
+    }
+    histov_nascent <- bind_rows(temp_df, histov_nascent)
+  }
+
+```
+
 ```{r}
 #PolR2A and PolR2B had the same overlap profile with reservoirs so we only used PolR2A
 polr2a <- peak_list$POLR2A
@@ -122,7 +145,7 @@ pol2_occurence_df <- data.frame("GeneID" = rownames(pol2_occurence),
 #make yes or no
 pol2 <- data.frame("Pol2" = as.character())
 for (i in 1:nrow(pol2_occurence_df)) {
-  if (pol2_occurence_df$number_bound[[i]] > 0) {
+  if (pol2_occurence_df$pol2_number_bound[[i]] > 0) {
     temp_df <- data.frame("GeneID" = pol2_occurence_df$GeneID[[i]], "Pol2" = "yes")
   }
     else{
@@ -145,28 +168,6 @@ rownames(sum_df) <- "Number_reservoirs"
 
 #Save Overlap Table as CSV
 write.csv(sum_df, "results/histone_marks_se_pol2.csv")
-```
-
-Add in nascent transcription tpm to the histone-mark data frame
-```{r}
-# add in nascent trancription tpm to dataframe with histone marks
-colnames(nascent_tpm) <- c("GeneID", "GeneName", "tpm")
-hm_se_nascent <- merge(k27_hmark_se_occurence, nascent_tpm)
-hm_se_nascent <-merge(hm_se_nascent, pol2_occurence_df)
-write.csv(hm_se_nascent, "results/gene_id_histone_mark_nascent_occurence.csv")
-
-
-histov_nascent <- data.frame("H3K27_me3_and_ac" = as.integer())
-for (i in 1:nrow(hm_se_nascent)) {
-  if (hm_se_nascent$H3K27ac[[i]]==1 & hm_se_nascent$H3K27me3[[i]] == 1 ) {
-    temp_df <- data.frame("GeneID" = hm_se_nascent$GeneID[[i]], "H3K27_me3_and_ac" = 1)
-  }
-    else{
-      temp_df <- data.frame("GeneID" = hm_se_nascent$GeneID[[i]], "H3K27_me3_and_ac" = 0)
-    }
-    histov_nascent <- bind_rows(temp_df, histov_nascent)
-  }
-
 ```
 
 
