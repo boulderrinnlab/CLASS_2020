@@ -191,7 +191,8 @@ colnames(promoter_peak_occurence) <- colnames(promoter_peak_count)
 
 # Make a data frame of binding events per promoter.
 peak_occurence_df <- data.frame("GeneID" = colnames(promoter_peak_occurence),
-                                "number_of_tfs" = colSums(promoter_peak_occurence))
+                                "number_of_tfs" = colSums(promoter_peak_occurence),
+                                "GeneType" = promoters$gene_type)
 
 # Merge peak occurence into histone mark, SE, nascent data frame
 dbp_hm_nascent <- merge(hm_se_nascent, peak_occurence_df)
@@ -271,5 +272,39 @@ g <- ggplot(tpm_pol2, aes(x = log10(tpm+0.1), color = Pol2))
 g + geom_density() +
   scale_color_manual(values = c("#424242","#a8404c"), name = "Pol2")
 ggsave("results/Pol2_nascent_transcription.pdf")
+```
+
+Are ghosts/zombies coding or noncoding? Reservoirs were strongly enriched for lncRNAs...
+```{r}
+g <- ggplot(dbp_hm_nascent, aes(x = log10(tpm + 0.1), color = GeneType))
+g + geom_density() +
+  scale_color_manual(values = c("#424242","#a8404c"), name = "GeneType")
+ggsave("results/ghost_zombie_genetype.pdf")
+
+
+
+ghosts_zombies_type <- data.frame("ghost_lncRNAs" = as.numeric(count(filter(dbp_hm_nascent, tpm == 0, GeneType == "lncRNA"))),
+                         "ghost_mRNAs" = as.numeric(count(filter(dbp_hm_nascent, tpm == 0, GeneType == "protein_coding"))),
+                         "zombie_lncRNAs" = as.numeric(count(filter(dbp_hm_nascent, tpm > 0, GeneType == "lncRNA"))),
+                         "zombie_mRNAs" = as.numeric(count(filter(dbp_hm_nascent, tpm > 0, GeneType == "protein_coding")))
+                         )
+
+# hypergeometric
+# t is overlaps of lncRNAs on ghosts = 247
+# n is total reservoirs = 1363
+# a is number of lncRNAs = 981
+# b is number of ghosts = 399
+# dhyper(t, a, n - a, b)
+# sum(dhyper(t:b, a, n - a, b))
+
+
+dhyper(247, 981, 1363 - 981, 399)
+sum(dhyper(247:399, 981, 1363 - 981, 399))
+
+percent_lncRNA_res <- 981/1363 
+percent_lncRNA_ghost <- 247/399
+percent_lncRNA_zombie <- (981-247)/(1363-399)
+
+
 ```
 
