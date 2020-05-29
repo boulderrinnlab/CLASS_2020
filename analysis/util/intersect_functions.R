@@ -292,8 +292,8 @@ count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
   if(type == "occurrence") {
     peak_occurrence <- matrix(as.numeric(peak_count > 0), 
-                             nrow = dim(peak_count)[1],
-                             ncol = dim(peak_count)[2])
+                              nrow = dim(peak_count)[1],
+                              ncol = dim(peak_count)[2])
     rownames(peak_occurrence) <- rownames(peak_count)
     colnames(peak_occurrence) <- colnames(peak_count)
     peak_matrix <- peak_occurrence
@@ -400,7 +400,7 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
   if (length(unique(width(windows))) != 1) {
     stop("width of windows should be equal...")
   }
-
+  
   if (is.null(weightCol)) {
     peak.cov <- coverage(peak.gr)
   } else {
@@ -412,7 +412,7 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
                        IRanges(start=rep(1, length(cov.len)),
                                end=cov.len))
   suppressWarnings(windows <- subsetByOverlaps(windows, cov.width,
-                              type="within", ignore.strand=TRUE))
+                                               type="within", ignore.strand=TRUE))
   
   chr.idx <- intersect(names(peak.cov),
                        unique(as.character(seqnames(windows))))
@@ -440,7 +440,6 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
   tagMatrix <- tagMatrix[rowSums(tagMatrix)!=0,]
   return(tagMatrix)
 }
-
 
 
 

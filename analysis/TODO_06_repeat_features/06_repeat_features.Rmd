@@ -1,0 +1,108 @@
+---
+title: "TE Properties"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+"../02_permutation_of_consensus_peaks/results/permutation_results_promoters.csv"
+perm_res_family <- read_csv("../02_permutation_of_consensus_peaks/results/permutation_results_repeat_families.csv")
+perm_res_class <- read_csv("../02_permutation_of_consensus_peaks/results/permutation_results_repeat_classes.csv")
+```
+
+
+## This first chunck doesn't run error : sig_df_classes not found
+
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
+# Just look at repeat classes
+# There's not a lot going on the ? classes and they tend to cluster with their main class type.
+# Exceppt for LTR_class? which is quite different than LTR_class
+# I'm going to take them out for now.
+sig_df_classes <- sig_df_long %>%
+  filter(grepl("class", region),
+         !grepl("\\?", region))
+# Let's recluster
+class_ov_matrix <- sig_df_classes %>%
+  pivot_wider(names_from = tf, values_from = zscore) %>%
+  column_to_rownames("region") %>%
+  as.matrix()
+class_region_clust <- hclust(dist(class_ov_matrix))
+class_tf_clust <- hclust(dist(t(class_ov_matrix)))
+plot(class_region_clust)
+plot(class_tf_clust)
+
+sig_df_classes$region <- factor(sig_df_classes$region,  class_region_clust$labels[class_region_clust$order])
+sig_df_classes$tf<- factor(sig_df_classes$tf,  class_tf_clust$labels[class_tf_clust$order])
+```
+
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
+summary(sig_df_classes$zscore)
+g <- ggplot(sig_df_classes, aes(x = tf, y = region, fill = zscore))
+g + geom_tile() + scale_fill_gradient2(limits = c(-100, 100), na.value = "#ffffff") +  
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+ggsave("figures/repeat_classes_vs_tf_peaks.pdf", height = 5, width = 28)
+```
+
+
+# This can plot
+```{r, fig.width=28, fig.height=5, fig.show=FALSE}
+# Order so the bigger zscores come up on top
+sig_df_classes <- sig_df_classes %>% arrange(abs(zscore))
+# New style of heatmap:
+g <- ggplot(sig_df_classes, aes(x = tf, y = region, color = zscore, size = zscore))
+g + geom_point() + scale_color_gradient2() + coord_flip() + 
+  theme_minimal() +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) + 
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+ggsave("figures/repeat_classes_vs_tf_peaks_pointmap.png", height = 28, width = 5)
+
+```
+
+
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
+# Just look at repeat families
+sig_df_family <- sig_df_long %>%
+  filter(grepl("family", region),
+         !grepl("\\?", region))
+# Let's recluster
+class_ov_matrix <- sig_df_family %>%
+  pivot_wider(names_from = tf, values_from = zscore) %>%
+  column_to_rownames("region") %>%
+  as.matrix()
+class_region_clust <- hclust(dist(class_ov_matrix))
+class_tf_clust <- hclust(dist(t(class_ov_matrix)))
+plot(class_region_clust)
+plot(class_tf_clust)
+
+sig_df_family$region <- factor(sig_df_family$region,  class_region_clust$labels[class_region_clust$order])
+sig_df_family$tf<- factor(sig_df_family$tf,  class_tf_clust$labels[class_tf_clust$order])
+```
+
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
+g <- ggplot(sig_df_family, aes(x = tf, y = region, fill = zscore))
+g + geom_tile() + scale_fill_gradient2(limits = c(-100, 100), na.value = "#ffffff") + 
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+ggsave("figures/repeat_families_vs_tf_peaks.pdf", height = 12, width = 28)
+```
+
+
+# This plots
+```{r, fig.width=5, fig.height=20, fig.show=FALSE}
+# Order so the bigger zscores come up on top
+sig_df_family <- sig_df_family %>% arrange(abs(zscore))
+# New style of heatmap:
+g <- ggplot(sig_df_family, aes(x = tf, y = region, color = zscore, size = zscore))
+g + geom_point() + scale_color_gradient2() + coord_flip() + 
+  theme_minimal() +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) + 
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+ggsave("figures/repeat_families_vs_tf_peaks_pointmap.png", height = 28, width = 5)
+```

@@ -1,0 +1,49 @@
+---
+title: "09_vetting_resv"
+author: "JR"
+date: "5/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Bidirectional promoters
+```{r}
+reservoirs <- off_genes %>% filter(number_of_tfs > 7)
+
+
+ov_proms <- read_csv("/Shares/rinn_class/data/k562_chip/analysis/08_overlapping_promoters/results/overlapped_promoter_regions.csv")
+ov_proms_genes <- ov_proms %>% dplyr::select(gene_id, gene_name, num_overlaps, gene_type, gene_strands)
+ov_proms_genes$overlapping_gene_ids <- ov_proms_genes$gene_id
+
+ov_proms_genes <- ov_proms_genes %>% separate_rows(gene_id, sep = ";")
+names(ov_proms_genes) <- c("gene_id", "overlapping_gene_names", "num_overlaps", "overlapping_gene_types", "overlapping_gene_strands", "overlapping_gene_ids")
+
+ov_proms_genes <- ov_proms_genes[!duplicated(ov_proms_genes$gene_id),]
+
+
+reservoirs_w_overlaps <- merge(reservoirs, ov_proms_genes, all.x = T)
+reservoirs_w_overlaps[is.na(reservoirs_w_overlaps$num_overlaps), "num_overlaps"] <- 0
+
+
+table(reservoirs_w_overlaps$num_overlaps)
+length(which(reservoirs_w_overlaps$num_overlaps > 0))
+length(which(reservoirs_w_overlaps$num_overlaps > 0)) / nrow(reservoirs_w_overlaps)
+
+reservoir_promoters <- promoters[which(promoters$gene_id %in% reservoirs_w_overlaps$gene_id)]
+reservoir_promoters$name <- paste(reservoir_promoters$gene_id, "promoter_tss6kb", sep = "_")
+reservoir_promoters$score <- 0
+rtracklayer::export(reservoir_promoters, "results/k562_reservoir_promoters.bed")
+reservoir_promoters_df <- reservoir_promoters %>% 
+  as.data.frame() %>%
+  dplyr::select(gene_id, seqnames, start, end)
+names(reservoir_promoters_df) <- c("gene_id", "promoter_seqnames", "promoter_start", "promoter_end")
+
+
+reservoirs_w_overlaps <- merge(reservoirs_w_overlaps, reservoir_promoters_df)
+
+# Here are the reservoirs
+write_csv(reservoirs_w_overlaps, "results/k562_reservoir_promoters_info.csv")
+```

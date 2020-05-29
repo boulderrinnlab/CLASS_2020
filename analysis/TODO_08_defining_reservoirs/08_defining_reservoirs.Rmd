@@ -1,0 +1,237 @@
+---
+title: "defining_reservoirs"
+author: "JR"
+date: "5/27/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidyverse)
+library(GenomicRanges)
+library(GenomicFeatures)
+library(rtracklayer)
+library(liftOver)
+
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+#Goal: to characterize the hundreds of promoters that have numerous DBPs bound, but do not result in expression.
+
+
+
+#here we want to find a cut off of binding events at promoters that are expressed less than 0.001 TPM.
+TODO: put a stat where 7 DBPs is in each distribution
+
+Density plots of binding events for lncRNAs and mRNAs expressed above 0.001 TPM
+We see similar distributions with a slight shift of lncRNA promoters having more promoters with > 60 DBPs bound
+
+
+```{r}
+g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs, fill = gene_type))
+g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+  ggtitle("RNA-seq all genes")
+
+off_genes <- peak_occurrence_df %>% filter(tpm < 0.001)
+g <- ggplot(off_genes, aes(x = number_of_tfs, fill = gene_type))
+g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+  ggtitle("RNA-seq zero expression")
+
+g <- ggplot(peak_occurrence_df %>% filter(tpm > 0.001), aes(x = number_of_tfs, fill = gene_type))
+g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+  ggtitle("RNA-seq expressed: TPM > 0.001")
+```
+
+
+
+We defined 7 DBPs as X quartile and now we will define "reservoirs" as having 7 binding events and expression less than 0.001 TPM
+
+#Goal: define reservoirs and write out to .csv
+```{r}
+
+# Reading in all promoters
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+
+# Reading in peak occurence and TPM for each promoter to start filtering.
+peak_occurrence_df <- read_csv("../TODO_07_binding_versus_expression/results/peak_tpm_occurence_df.csv")
+
+reservoirs <- peak_occurrence_df %>% filter(number_of_tfs > 7, tpm < 0.001) 
+
+#Here are the reservoirs!!
+
+write_csv(reservoirs, "results/k562_reservoir_promoters.csv")
+
+reservoir_gr <- promoters[promoters$gene_id %in% reservoirs$gene_id]
+
+```
+
+We still have two concerns: I. Overlap with Super Enhancer annotations that have some similar proterties (e.g. many DBPs bound)  II. Neighboring gene-expression})
+
+
+
+#I. Overlap with super enhancers
+Goal: to determine if reservoir promoters are comprised of Super-Enhancer (SE) annotations
+We used SE annotations from the Super-Enhancer DB (Sedb) from HG19
+SEdb: https://asntech.org/dbsuper/
+We will further lift over these regions to HG38
+
+
+```{r determining if reservoirs overlap with SEs}
+
+# http://asntech.org/dbsuper/data/bed/hg19/K562.bed
+# download super enhacers
+
+
+system("cd data; wget http://asntech.org/dbsuper/data/bed/hg19/K562.bed")
+se_hg19 <- rtracklayer::import("data/K562.bed")
+
+
+#Dowloading liftover chain-file #
+#http://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz
+
+system("cd data; wget http://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz; gunzip hg19ToHg38.over.chain.gz")
+
+ch <- import.chain("data/hg19ToHg38.over.chain")
+seqlevelsStyle(se_hg19) <- "UCSC" # this is required for liftover 
+se_hg38 <- liftOver(se_hg19, ch)
+
+# Subset just to contiguously liftedOver regions
+se_hg38 <- se_hg38[sapply(width(se_hg38), length) == 1]
+rtracklayer::export(se_hg38, "results/k562_superenhancers_hg38.bed")
+se_res_ov <- findOverlaps(reservoir_gr, se_hg38)
+reservoirs_overlapping_ses <- reservoir_gr[se_res_ov@from]
+reservoirs_overlapping_ses$score <- 0
+rtracklayer::export(reservoirs_overlapping_ses, "results/reservoirs_overlapping_ses.bed")
+
+```
+
+
+#### Hypergeometric test to see if super enhacers are enriched in reservoirs
+```{r}
+res_overlapping_se <- length(reservoirs_overlapping_ses)
+t <- res_overlapping_se
+num_promoters_w_gt7_dbps <- nrow(peak_occurrence_df %>% filter(number_of_tfs > 7))
+n <- num_promoters_w_gt7_dbps
+number_of_reservoirs <- length(reservoir_gr)  
+a <- number_of_reservoirs
+number_of_superenhancers <- length(se_hg38)
+b <- number_of_superenhancers
+
+dhyper(t, a, n - a, b)
+sum(dhyper(t:b, a, n - a, b))
+```
+
+
+
+II. Bidirectional promoters.
+Goal: To determine if reservoir promoters are due to regulation of a neighboring or "bidirectional gene"
+
+We will define "Bidirectional promoters if they overlap a gene on the opposite strand within 1000 bp (PMID: 17447839 for definition)". 
+Where the gene has to be on the opposite strand within 1000bp.
+
+```{r determing promoters that could regulate a neighboring gene on opposite strand within 200bp}
+
+# Load in Gencode annotations
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+#Define that the potential "bidirectional promoter is on the opposite strand and less than 200bp in distance"
+# 
+
+#Let's get to it and determine "bidrectional" promoters within 200bp
+
+overlapping_promoters <- function(gencode_gr, upstream = 1000, downstream = 0) {
+  
+  
+  genes <- gencode_gr[gencode_gr$type == "gene"]
+  proms <- GenomicRanges::promoters(genes, upstream = upstream, downstream = downstream)
+  
+  reduced_proms <- GenomicRanges::reduce(proms)
+  
+  reduced_widths <- data.frame(width = width(reduced_proms),
+                               index = 1:length(reduced_proms))
+
+  ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE)
+  ov_proms <- data.frame("gene_promoters_from" = ov_proms@from,
+                         "reduced_promoters_to" = ov_proms@to)
+  
+  ov_proms_summary <- ov_proms %>% 
+    group_by(reduced_promoters_to) %>%
+    summarize(count = n())
+  ov_proms <- merge(ov_proms, ov_proms_summary)
+  overlapped <- ov_proms %>% filter(count > 1)
+  
+  reduced_promoters_overlapping <- reduced_proms[unique(overlapped$reduced_promoters_to)]
+  
+  overlapped$gene_id <- proms$gene_id[overlapped$gene_promoters_from]
+  overlapped$gene_name <- proms$gene_name[overlapped$gene_promoters_from]
+  overlapped$gene_type <- proms$gene_type[overlapped$gene_promoters_from]
+  overlapped$strand <- as.character(strand(proms[overlapped$gene_promoters_from]))
+  
+  overlapped_metadata <- overlapped %>% 
+    group_by(reduced_promoters_to, count) %>%
+    summarize(gene_id = paste(gene_id, collapse = ";"),
+              gene_name = paste(gene_name, collapse = ";"),
+              gene_type = paste(gene_type, collapse = ";"),
+              gene_strands = paste(strand, collapse = ";"))
+  
+  
+  reduced_promoters_overlapping$num_overlaps <- overlapped_metadata$count
+  reduced_promoters_overlapping$gene_id <- overlapped_metadata$gene_id
+  reduced_promoters_overlapping$gene_name <- overlapped_metadata$gene_name
+  reduced_promoters_overlapping$gene_type <- overlapped_metadata$gene_type
+  reduced_promoters_overlapping$gene_strands <- overlapped_metadata$gene_strands
+  
+  return(reduced_promoters_overlapping) 
+}
+# TODO: something is messed up here. I can't get the gene_strands to output from this function.
+# hmm <- reduced_promoters_overlapping %>% as.data.frame()
+  
+
+ov_proms <- get_overlapping_promoters(gencode_gr)
+# rtracklayer::export("overlapping_promoter_regions.bed")
+ov_proms_df <- ov_proms %>% as.data.frame()
+write_csv(ov_proms_df, "results/overlapped_promoter_regions.csv")
+
+  
+```
+>>> Need to plot the results :
+
+Number of promoters
+how many had one gene one left or right
+
+
+
+#Goal: to test gene-expression levels in 5 genes that surround a reservoir promoter
+We will using a sliding window approach of windows containing 5 genes. We will compute the median TMP of each window.
+We will then slide the window one gene ... until all the gene windows of a given chromosome are measured. 
+We then ask what the differences are when a reservoir is or is not these gene windows.
+
+```{r expression permutaiton of reservoir neighborhoods}
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
