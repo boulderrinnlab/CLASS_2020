@@ -1,0 +1,45 @@
+---
+title: "10_reservoir_binding_properties"
+author: "JR"
+date: "5/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+BINDING EVENTS AT RESERVOIRS VS ACTIVE GENES
+```
+
+
+
+
+```{r}
+Pol II stuff ??
+  
+  
+  
+```
+
+
+
+
+
+
+# Clustering
+
+```{r}
+# Calculate a distance measure between the rows.
+bin_hier <- hclust(dist(ghost_peak_occurence, method = "binary"))
+plot(bin_hier)
+# load library for ggdendro for the best trees we could find 
+library(ggdendro)
+ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
+ggsave("figures/ghost_binary_dist.pdf", height = 26, width = 6)
+```
+```
+

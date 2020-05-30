@@ -1,0 +1,27 @@
+---
+title: "11_reservoir_chromatin_properties"
+author: "JR"
+date: "5/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Goal: to determine the chromatin environment of reservoir promoters using histone modification ChIP data. Specifically, Histone H3 (H3) Lysine 27 tri-methylation (H3K27me3) that represents heterochraomtic regions / and H3 lysine 27 acetylation that represents euchromatin.
+```{r}
+# Histone mark overlaps
+# K27me3 - https://www.encodeproject.org/files/ENCFF031FSF/@@download/ENCFF031FSF.bed.gz
+# K27ac - https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz
+peak_files <- data.frame("file" = c("data/ENCFF031FSF.bed", "data/ENCFF038DDS.bed"),
+                         "histone_mark" = c("H3K27me3", "H3K27ac"))
+hmark_peaks <- lapply(peak_files$file, read.table)
+names(hmark_peaks) <- peak_files$histone_mark
+hmark_granges <- lapply(hmark_peaks, function(peaks) {
+  GRanges(seqnames = peaks$V1,
+          ranges = IRanges(start = peaks$V2,
+                           end = peaks$V3))
+})
+```
+
