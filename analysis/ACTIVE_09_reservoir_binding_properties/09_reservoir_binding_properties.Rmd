@@ -10,20 +10,41 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-
+#1 Distribution of reservoir vs all subsetted by lncRNA and mRNA
 ```{r}
-BINDING EVENTS AT RESERVOIRS VS ACTIVE GENES
+
+
+
+
+
+
+```
+
+
+
+#2
+```{r}
+
+
+
 ```
 
 
 
 
+# 3
 ```{r}
-Pol II stuff ??
-  
-  
+
   
 ```
+
+
+
+
+
+
+
+
 
 
 
