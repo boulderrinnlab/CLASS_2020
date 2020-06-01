@@ -10,15 +10,65 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
+
+
+# loading in reservoirs
+
+```{r}
+peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/")
+
+lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
+mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+promoters_df <- promoters %>% as.data.frame() %>% dplyr::select(gene_id, gene_type, gene_name)
+
+lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
+mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
+promoter_peak_occurrence <- count_peaks_per_feature(promoters, peak_list, type = "occurrence")
+
+peak_occurrence_df <- data.frame("gene_id" = colnames(promoter_peak_occurrence),
+                                "number_of_tfs" = colSums(promoter_peak_occurrence))
+peak_occurrence_df <- merge(peak_occurrence_df, tpm)
+peak_occurrence_df <- merge(peak_occurrence_df, promoters_df)
+```
+
+
+
+peak_occurrence_df$expression <- "off"
+peak_occurrence_df[which(peak_occurrence_df$tpm > 0.001), "expression"] <- "expressed"
+
+
+
+
+
 #1 Distribution of reservoir vs all subsetted by lncRNA and mRNA
+Figure 4C
 ```{r}
 
 
+reservoir_promoters <- promoters[which(promoters$gene_id %in% reservoirs_w_overlaps$gene_id)]
+reservoir_promoters$name <- paste(reservoir_promoters$gene_id, "promoter_tss6kb", sep = "_")
+reservoir_promoters$score <- 0
+rtracklayer::export(reservoir_promoters, "results/k562_reservoir_promoters.bed")
+reservoir_promoters_df <- reservoir_promoters %>% 
+  as.data.frame() %>%
+  dplyr::select(gene_id, seqnames, start, end)
+names(reservoir_promoters_df) <- c("gene_id", "promoter_seqnames", "promoter_start", "promoter_end")
 
 
+reservoirs_w_overlaps <- merge(reservoirs_w_overlaps, reservoir_promoters_df)
+write_csv(reservoirs_w_overlaps, "results/k562_reservoir_promoters_info.csv")
+
+
+
+g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs))
+g + geom_histogram(binwidth = 5)  + 
+  xlim(30, 100) +
+  facet_wrap(expression~gene_type, scales = "free_y")
 
 
 ```
+
 
 
 
