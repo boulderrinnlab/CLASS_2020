@@ -124,140 +124,15 @@ sig_enriched <- sig %>% filter(diff > 1)
 paste(res_enriched$dbp, collapse = " ")
 
 ```
-# This makes figure 4D showing that most DBPs are depleted from resevoirs and the enrichment of several factors on reservoirs.
+# This makes figure 4D showing that most DBPs are depleted from resevoirs and the enrichment of one DBP reservoirs.
+
+
+
+
+#TODO ? UMAP reservoir promoter annotations ?
 
 
 
 
 
-
-
-
-
-# 3 Pol II reservoirs versus Pol II negative reservoirs
-```{r}
-polr2a_occurrence <- res_occurrence_matrix["POLR2A",] %>%
-  as.matrix()
-table(polr2a_occurrence["POLR2A",])
-pol2_res_occurrence_matrix <- res_occurrence_matrix[,which(polr2a_occurrence["POLR2A",] == 1)]
-non_pol2_res_occurrence_matrix <- res_occurrence_matrix[,which(polr2a_occurrence["POLR2A",] == 0)]
-
-# Number of promoters bound in each category
-dbp_binding <- data.frame(dbp = rownames(res_occurrence_matrix),
-                          "num_pol2_promoters_bound" = rowSums(pol2_res_occurrence_matrix),
-                          "num_nonpol2_promoters_bound" = rowSums(non_pol2_res_occurrence_matrix))
-
-dbp_binding <- dbp_binding %>%
-  mutate("num_pol2_promoters_not_bound" = ncol(pol2_res_occurrence_matrix) - num_pol2_promoters_bound,
-         "num_nonpol2_promoters_not_bound" = ncol(non_pol2_res_occurrence_matrix) - num_nonpol2_promoters_bound)
-
-
-for(i in 1:nrow(dbp_binding)) {
-  df1 <- data.frame("gene_type" = c("pol2","pol2", "non_pol2", "non_pol2"),
-                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
-                    "count" = c(dbp_binding$num_pol2_promoters_bound[i],
-                                dbp_binding$num_pol2_promoters_not_bound[i],
-                                dbp_binding$num_nonpol2_promoters_bound[i],
-                                dbp_binding$num_nonpol2_promoters_not_bound[i])) %>%
-    pivot_wider(names_from = gene_type, values_from = count) %>%
-    column_to_rownames("promoter_bound") %>%
-    as.matrix()
-  
-  csres <- chisq.test(df1)
-  phi_coef <- phi(df1)
-  
-  # Add the results to the data frame
-  dbp_binding[i, "chisq_stat"] <- csres$statistic
-  dbp_binding[i, "chisq_pval"] <- csres$p.value
-  dbp_binding[i, "pol2_peaks_expected"] <- csres$expected["bound", "pol2"]
-  dbp_binding[i, "phi_coefficient"] <- phi_coef$phi
-}
-
-dbp_binding$padj <- p.adjust(dbp_binding$chisq_pval, method = "BH")
-dbp_binding$diff <- log2(dbp_binding$num_pol2_promoters_bound/dbp_binding$pol2_peaks_expected)
-write_csv(chisq_res, "results/reservoir_pol2_vs_non_pol2_chi_squared_results.csv")
-
-
-g <- ggplot(dbp_binding, aes(x = diff, y = -log10(chisq_pval), label = dbp))
-g + geom_point() +
-  geom_text() +
-  geom_hline(yintercept = -log10(0.001))
-
-#PolR2A and PolR2B had the same overlap profile with reservoirs so we only used PolR2A
-
-reservoir_genes <- gsub("_promoter_tss6kb", "", reservoir_promoters$name)
-polr2a <- peak_list$POLR2A
-pol2_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = 1)
-polr2a_ov <- findOverlaps(reservoir_promoters, polr2a)
-polr2a_res_overlaps <- unique(polr2a_ov@from)
-pol2_occurence[polr2a_res_overlaps,] <- 1
-rownames(pol2_occurence) <- reservoir_genes
-colnames(pol2_occurence) <- c("Polr2a")
-
-
-
-# Make a data frame of binding events per promoter.
-pol2_occurence_df <- data.frame("GeneID" = rownames(pol2_occurence),
-                                "pol2_number_bound" = rowSums(pol2_occurence))
-#make yes or no
-pol2 <- data.frame("Pol2" = as.character())
-for (i in 1:nrow(pol2_occurence_df)) {
-  if (pol2_occurence_df$pol2_number_bound[[i]] > 0) {
-    temp_df <- data.frame("GeneID" = pol2_occurence_df$GeneID[[i]], "Pol2" = "yes")
-  }
-    else{
-      temp_df <- data.frame("GeneID" = pol2_occurence_df$GeneID[[i]], "Pol2" = "no")
-    }
-    pol2 <- bind_rows(temp_df, pol2)
-}
-
-
-
-#TODO 
-sum_df <- data.frame("Pol2" = sum(str_count(Pol2, pattern = "yes")))
-rownames(sum_df) <- "Number_reservoirs"
-#Save Overlap Table as CSV
-write.csv(sum_df, "results/histone_marks_se_pol2.csv")
-
-
-
-#TODO Chisquared
-
-
-
-
-
-
-
-
-
-
-  
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Clustering
-
-```{r}
-# Calculate a distance measure between the rows.
-bin_hier <- hclust(dist(ghost_peak_occurence, method = "binary"))
-plot(bin_hier)
-# load library for ggdendro for the best trees we could find 
-library(ggdendro)
-ggdendro::ggdendrogram(bin_hier, rotate = TRUE,  size = 3)
-ggsave("figures/ghost_binary_dist.pdf", height = 26, width = 6)
-```
-```
 
