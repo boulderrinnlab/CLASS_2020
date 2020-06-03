@@ -119,18 +119,135 @@ ggsave("figures/exp_not_exp_binding_histogram.pdf")
 
 
 
-#2
+#2 Chi-Squared test for DBPs enriched and depleted at reservoirs versus non-reservoir promoters.
 ```{r}
 
+#lncrna_num_overlaps <- rowSums(lncrna_matrix)
+#mrna_num_overlaps <- rowSums(mrna_matrix)
+num_peaks <- sapply(peak_list, length)
+#total_lncrna <- length(lncrna_promoters)
+#total_mrna <- length(mrna_promoters)
+#total_genes <- total_lncrna + total_mrna
+
+
+
+res_matrix <- count_peaks_per_feature(reservoir_promoters, peak_list, type = "occurrence")
+total_prom_matrix <- count_peaks_per_feature(promoters, peak_list, type = "occurrence")
+
+res_overlap <- rowSums(res_matrix)
+total_prom_overlap <- rowSums(total_prom_matrix)
+total_res <- length(reservoir_promoters)
+total_proms <- length(promoters)
+
+
+chisq_res <- data.frame("tf" =character(),
+                        "reservoir_peaks_observed" = numeric(),
+                        "chisq_stat" = numeric(),
+                        "chisq_pval" = numeric(),
+                        "reservoir_peaks_expected" = numeric())
+for(i in 1:length(num_peaks)) {
+  total_peaks <- num_peaks[[i]]
+  df1 <- data.frame("gene_type" = c("reservoir","reservoir", "total_promoters", "total_promoters"),
+                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
+                    "count" = c(res_overlap[[i]],
+                                total_proms - res_overlap[[i]],
+                                total_prom_overlap[[i]],
+                                total_proms - res_overlap[[i]])) %>%
+    pivot_wider(names_from = gene_type, values_from = count) %>%
+    column_to_rownames("promoter_bound") %>%
+    as.matrix()
+  
+  csres <- chisq.test(df1)
+  
+  
+  phi_coef <- phi(df1)
+  
+  tdf <- data.frame("tf" = names(num_peaks[i]),
+                    "lncrna_peaks_observed" = res_overlap[[i]],
+                    "chisq_stat" = csres$statistic,
+                    "chisq_pval" = csres$p.value,
+                    "reservoir_peaks_expected" = csres$expected[1,1],
+                    "phi_coefficient" = phi_coef$phi)
+  chisq_res <- bind_rows(chisq_res, tdf)
+}
+
+
+#Adjusting P value with BH correction, observed - expected and writing this to a .csv file
+
+chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
+chisq_res$diff <- chisq_res$reservoir_peaks_observed - chisq_res$reservoir_peaks_expected
+write_csv(chisq_res, "results/reservoir_chi_squared_results.csv")
+
+
+#Plotting Chi-squared test results 
+g <- ggplot(chisq_res, aes(x = diff, y = -log10(chisq_pval) ))
+g + geom_point()  
 
 
 ```
+# This makes figure 4D showing that most DBPs are depleted from resevoirs and the enrichment of several factors on reservoirs.
 
 
 
 
-# 3
+
+
+
+
+
+# 3 Pol II reservoirs versus Pol II negative reservoirs
 ```{r}
+#PolR2A and PolR2B had the same overlap profile with reservoirs so we only used PolR2A
+
+reservoir_genes <- gsub("_promoter_tss6kb", "", reservoir_promoters$name)
+polr2a <- peak_list$POLR2A
+pol2_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = 1)
+polr2a_ov <- findOverlaps(reservoir_promoters, polr2a)
+polr2a_res_overlaps <- unique(polr2a_ov@from)
+pol2_occurence[polr2a_res_overlaps,] <- 1
+rownames(pol2_occurence) <- reservoir_genes
+colnames(pol2_occurence) <- c("Polr2a")
+
+
+
+# Make a data frame of binding events per promoter.
+pol2_occurence_df <- data.frame("GeneID" = rownames(pol2_occurence),
+                                "pol2_number_bound" = rowSums(pol2_occurence))
+#make yes or no
+pol2 <- data.frame("Pol2" = as.character())
+for (i in 1:nrow(pol2_occurence_df)) {
+  if (pol2_occurence_df$pol2_number_bound[[i]] > 0) {
+    temp_df <- data.frame("GeneID" = pol2_occurence_df$GeneID[[i]], "Pol2" = "yes")
+  }
+    else{
+      temp_df <- data.frame("GeneID" = pol2_occurence_df$GeneID[[i]], "Pol2" = "no")
+    }
+    pol2 <- bind_rows(temp_df, pol2)
+}
+#merge in tpm
+#tpm_pol2 <- merge(pol2, hm_se_nascent)
+#table with total numbers of reservoirs overlapping with the different histone marks/superenhancers
+sum_df <- data.frame("H3K27me3_reservoirs" = sum (tpm_pol2$H3K27me3),
+                         "H3K27ac_reservoirs" = sum (tpm_pol2$H3K27ac),
+                         "me3_ac_overlap" = sum (H3_K27_me3_and_ac$H3_K27_me3_and_ac),
+                         "super_enhancers_reservoirs" = sum (tpm_pol2$super_enhancers),
+                          "Pol2" = sum(str_count(tpm_pol2$Pol2, pattern = "yes")))
+rownames(sum_df) <- "Number_reservoirs"
+#Save Overlap Table as CSV
+write.csv(sum_df, "results/histone_marks_se_pol2.csv")
+
+
+
+# Todo Chisquared
+
+
+
+
+
+
+
+
+
 
   
 ```
