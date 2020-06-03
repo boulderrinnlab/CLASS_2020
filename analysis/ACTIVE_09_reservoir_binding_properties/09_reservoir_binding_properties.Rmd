@@ -22,90 +22,22 @@ library(effectsize)
 # loading in peaks and promoter annotations to ulitmately make the "peak_occurence_df"
 
 ```{r}
-
-#Read in peaks
-peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/filtered_by_peaks")
-
-#Read in promoter annotations
-lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
-mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
-promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
-
-# Convert promoters (lncRNA and mRNA to data frame using gene_id, type and name)
-
-promoters_df <- promoters %>% as.data.frame() %>% dplyr::select(gene_id, gene_type, gene_name)
-
-# We are now starting to make a matrix of the number of counts a DBP has for each lncRNA and mRNA promoter
-# We are using count_peaks_per_feature function which is using "feature" attribute of "promoters" and applying it to peak_list in all cases
-
-lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
-mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
-promoter_peak_occurrence <- count_peaks_per_feature(promoters, peak_list, type = "occurrence")
-peak_occurrence_df <- data.frame("gene_id" = colnames(promoter_peak_occurrence),
-                                "number_of_tfs" = colSums(promoter_peak_occurrence))
-# Now taking these to make a data frame and bind gene expression data -- 
-# reading in RNAseq TPM from 07_binding_versus_expression
-
-tpm <- read.csv("../07_binding_versus_expression/results/k562_tpm.csv")
-
-# Putting it all back together into a handy occurence data frame :)
-peak_occurrence_df <- merge(peak_occurrence_df, tpm)
-peak_occurrence_df <- merge(peak_occurrence_df, promoters)
-
-```
-
-
-# Now that we have a handy data frame of expression and binding at each promoter let's sort out the ones that have no expression (TPM < 0.001). We will also look at DBP bindind event distribution at these non-expressed promoters. 
-
-```{r}
-# Filter on TPM < 0.001
-reservoir_exp_filter <- filter(peak_occurrence_df, tpm < 0.001)
-
-# Let's look at distribution of binding events to filter on those that have more than typical numbers of DBPs bound to promoter.
-
-#TODO zoom in on plot and figure out stat for 7 DBPs 
-g <- ggplot(reservoir_exp_filter, aes(x = number_of_tfs, fill = gene_type))
-g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
-  ggtitle("RNA-seq expressed < 0.001 TPM")
-
-
-# Filter on 7 or more binding events at promoters expressed less than 0.000 TPM.
-
-reservoir_exp_dbp_filter <- filter(reservoir_exp_filter, number_of_tfs > 7)
-
-# Putting together information to output reservoir annotations to export as .bed
-
-reservoir_promoters <- promoters[which(promoters$gene_id %in% reservoir_exp_dbp_filter$gene_id)]
-reservoir_promoters$name <- paste(reservoir_promoters$gene_id, "promoter_tss6kb", sep = "_")
-reservoir_promoters$score <- 0
-rtracklayer::export(reservoir_promoters, "results/k562_reservoir_promoters.bed")
-
-# reverting back into a data frame with specific columns 
-
-reservoir_promoters_df <- reservoir_promoters %>% 
-  as.data.frame() %>%
-  dplyr::select(gene_id, seqnames, start, end)
-names(reservoir_promoters_df) <- c("gene_id", "promoter_seqnames", "promoter_start", "promoter_end")
-
-# Printing out reservoir annotaitons with handy annotations such as gene_id, promoter_seqnames and start and stop
-
-reservoirs_w_overlaps <- merge(reservoir_exp_dbp_filter, reservoir_promoters_df)
-write_csv(reservoirs_w_overlaps, "results/k562_reservoir_promoters_info.csv")
-
+# Read in reservoir annotations combined with promoter peak occurence df. 
+peak_occurrence_df <- read_csv("../07_binding_versus_expression/results/peak_tpm_occurence_df.csv")
+reservoir_occurence_df <- read_csv("results/k562_reservoir_promoters_info.csv")
 
 # adding in expression to peak_occurence_df with a new observation "expressed" off < 0.001 TPM and on > 0.001 TPM.
 peak_occurrence_df[which(peak_occurrence_df$tpm > 0.001), "expression"] <- "expressed"
 peak_occurrence_df[which(peak_occurrence_df$tpm < 0.001), "expression"] <- "off"
-
-
 ```
 
 
-
+# We are setting up to look at the binding distribution on expressed lncRNA and mRNA vs reservoir mRNA lncRNA binding. 
 #1 Distribution of reservoir vs all subsetted by lncRNA and mRNA
 Figure 4C
 ```{r}
-
+# Let's look at distribution of binding events to filter on those that have more than typical numbers of DBPs bound to promoter.
+# first reverting back into a data frame with specific columns 
 g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs))
 g + geom_histogram(binwidth = 5)  + 
   xlim(30, 100) +
@@ -113,10 +45,11 @@ g + geom_histogram(binwidth = 5)  +
 
 ggsave("figures/exp_not_exp_binding_histogram.png")
 ggsave("figures/exp_not_exp_binding_histogram.pdf")
+
+
+
 ```
-
 ##We find that expressed or not expressed promoters still have similar distributions of DBP binding events. With some non-expressed promoters containing 100 independent DBP localization events. 
-
 
 
 #2 Chi-Squared test for DBPs enriched and depleted at reservoirs versus non-reservoir promoters.
