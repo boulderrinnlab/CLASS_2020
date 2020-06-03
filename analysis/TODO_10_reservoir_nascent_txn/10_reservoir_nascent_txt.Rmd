@@ -1,38 +1,52 @@
 ---
-title: "test"
+title: "10_reservoir_nascent_txn"
 author: "JR"
 date: "5/29/2020"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 test
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+source("../util/intersect_functions.R")
+library(tidyverse)
+library(Rsubread)
 ```
 
-## R Markdown
-
-TET{OAPJSG
-:Lmj
-a;LG
-lmadg
-;lAMDg
-;lmAd
-g;lmadg'lmad'glm}
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+# We're going to make counts just over the promoter regions so first we need to define the promoter
+# regions.
+gencode_gr <- rtracklayer::import("../../../genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+promoters_df <- get_promoter_regions(gencode_gr, biotype = "all") %>%
+  as.data.frame() %>%
+  select("gene_id", "seqnames", "start", "end", "strand") 
+names(promoters_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
+promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
+write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
+            quote = F, row.names = F)
+counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"),
+                        annot.ext = "results/gencode_v32_promoters_6kb.SAF",
+                        isPairedEnd = TRUE,
+                        nthreads = 16)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+rpk <- counts$counts / (counts$annotation$Length/1000)
+expression <- data.frame("rpk" = rpk) %>%
+  rownames_to_column("gene_id") %>%
+  pivot_longer(2:3, names_to = "sample", values_to = "rpk")
+expression_summary <- expression %>% 
+  group_by(sample) %>%
+  summarize(total_rpk = sum(rpk, na.rm = T))
+expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+expression <- merge(expression, expression_summary)
+expression$tpm <-expression$rpk / expression$rpk_m
+tpm <- expression %>% group_by(gene_id) %>%
+  summarize(tpm = mean(tpm, na.rm = T))
+genes <- gencode_gr[gencode_gr$type == "gene"] %>% as.data.frame() %>%
+  dplyr::select(gene_name, gene_id)
+tpm <- merge(tpm, genes)
+tpm <- tpm %>% dplyr::select(gene_id, gene_name, tpm)
+write_csv(tpm, "results/k562_nascent_tpm.csv")
 ```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
