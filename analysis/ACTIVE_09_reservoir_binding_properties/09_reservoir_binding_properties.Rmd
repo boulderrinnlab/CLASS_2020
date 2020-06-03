@@ -224,21 +224,18 @@ for (i in 1:nrow(pol2_occurence_df)) {
     }
     pol2 <- bind_rows(temp_df, pol2)
 }
-#merge in tpm
-#tpm_pol2 <- merge(pol2, hm_se_nascent)
-#table with total numbers of reservoirs overlapping with the different histone marks/superenhancers
-sum_df <- data.frame("H3K27me3_reservoirs" = sum (tpm_pol2$H3K27me3),
-                         "H3K27ac_reservoirs" = sum (tpm_pol2$H3K27ac),
-                         "me3_ac_overlap" = sum (H3_K27_me3_and_ac$H3_K27_me3_and_ac),
-                         "super_enhancers_reservoirs" = sum (tpm_pol2$super_enhancers),
-                          "Pol2" = sum(str_count(tpm_pol2$Pol2, pattern = "yes")))
+
+
+
+#TODO 
+sum_df <- data.frame("Pol2" = sum(str_count(Pol2, pattern = "yes")))
 rownames(sum_df) <- "Number_reservoirs"
 #Save Overlap Table as CSV
 write.csv(sum_df, "results/histone_marks_se_pol2.csv")
 
 
 
-# Todo Chisquared
+#TODO Chisquared
 
 
 
