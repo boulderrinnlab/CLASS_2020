@@ -75,10 +75,9 @@ for(i in 1:length(consensus_peaks)) {
 
 
 ## Summary of consensus peaks
+Here we'll look at a few characteristics of DBPs that were consistent across replicates and have at least 250 binding events.
 
-Here we'll look at a few characteristics of the remaining peaksets.
-
-#### Total peak length
+#### Goal: Investigate Peak width properties 
 
 ```{r total-peak-length}
 # Subset to remaining peaks
@@ -116,7 +115,6 @@ g + stat_ecdf() +
 ks.test(x = num_peaks_df[which(num_peaks_df$egfp_labeled),"num_peaks"],
         y = num_peaks_df[which(!num_peaks_df$egfp_labeled),"num_peaks"])
 ```
-
 There is not a difference in peak counts for eGFP labelled proteins.
 
 #### Peak width distributions
@@ -226,41 +224,55 @@ ggplot(num_peaks_df,
   ylim(0,60100) +
   xlim(0,60100)
 
-
-
-
 ```
 
 
-
+# Goal: let's bring all of these data together into a dataframe, that we will keep adding columns to as we go (rows are promoters).
 
 ```{r count-peaks-per-promoter}
+
+# First we will establish the promoter peak occurence matrix (rows = promoters, cols = dbp binding {0,1})
 promoter_peak_occurence <- count_peaks_per_feature(lncrna_mrna_promoters, consensus_peaks, 
-                                               type = "occurence")
+                                               type = "occurrence")
+# Output to promoter_peak_occurecne_matrix
 write.table(promoter_peak_occurence, "results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
+
+# Now we want to make into a data frame using the promoter annotations as rows and attributes as columns.
+# We will use lncrna_mrna_promoters to index "all promoters"
+# First make sure promoter_peak_occurence and lncrna_mrna_promoters are in the same order
+stopifnot(all(colnames(promoter_peak_occurence) == lncrna_mrna_promoters$gene_id))
 
 # Make a data frame of binding events per promoter.
 peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
-                                "number_of_tfs" = colSums(promoter_peak_occurence))
-write_csv(peak_occurence_df, "results/lncrna_mrna_promoter_peak_counts.csv")
+                                "gene_name" = lncrna_mrna_promoters$gene_name,
+                                "gene_type" = lncrna_mrna_promoters$gene_type,
+                                "3kb_up_tss_start" = lncrna_mrna_promoters@ranges@start,
+                                "strand" = lncrna_mrna_promoters@strand,
+                                "number_of_dbp" = colSums(promoter_peak_occurence))
+
+write_csv(peak_occurence_df, "results/peak_occurence_dataframe.csv")
+
 ```
 
+
+# Now that we have our consensus peaks organized, characterized and filtered above we return to our goal
+# Goal: 
 ```{r promoter-peak-distribution}
 # Make a density plot of all promoter binding events per goal #1.
-g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+g <- ggplot(peak_occurence_df, aes(x = number_of_dbp))
 g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
   theme_paperwhite() +
-  xlab(expression("Number of TFs")) +
+  xlab(expression("Number of DBPs")) +
   ylab(expression("Density")) +
   ggtitle("Promoter binding events",
           subtitle = "mRNA and lncRNA genes")
 ggsave("figures/k562_promoter_binding_density.png")
 ggsave("figures/k562_promoter_binding_density.pdf")
 
-g <- ggplot(peak_occurence_df, aes(x = number_of_tfs))
+g <- ggplot(peak_occurence_df, aes(x = number_of_dbp))
 g + geom_histogram(color = "#424242", fill = "#424242") +
   theme_paperwhite() +
-  xlab(expression("Number of TFs")) +
+  xlab(expression("Number of DBPs")) +
   ylab(expression("Count")) +
   ggtitle("Promoter binding events",
           subtitle = "mRNA and lncRNA genes")
@@ -269,21 +281,25 @@ ggsave("figures/k562_promoter_binding_histogram.pdf")
 ```
 
 ```{r unbound-promoters}
-unbound_promoters <- peak_occurence_df %>% filter(peak_occurence_df$number_of_tfs < 1)
+# just locating the unbound promoters in any experiment
+unbound_promoters <- peak_occurence_df %>% filter(peak_occurence_df$number_of_dbp < 1)
 write_csv(unbound_promoters, "results/unbound_lncrna_mrna_promoters.csv")
 ```
 
 ```{r}
-tf_promoter_ovl <- get_overlapping_peaks(lncrna_mrna_promoters, consensus_peaks)
+# Determining how many DBPs don't bind to any promoters.
+dbp_promoter_ovl <- get_overlapping_peaks(lncrna_mrna_promoters, consensus_peaks)
 num_ovl <- sapply(tf_promoter_ovl, length)
 ```
 
 There are no proteins that don't overlap any promoters and the least number of promoters bound is `r names(num_ovl)[which(num_ovl == min(num_ovl))]` which overlapped `r min(num_ovl)`
 
 ```{r}
+##TODO Refector or remove?
+
 promoter_peak_counts <- count_peaks_per_feature(lncrna_mrna_promoters, consensus_peaks,                                               type = "counts")
 
-num_peaks_df$peaks_overlapping_lncrna_promoters <- rowSums(promoter_peak_counts[,lncrna_promoters$gene_id])
+num_peaks_df$peaks_overlapping_lncrna_promoters <- rowSums(promoter_peak_counts[, lncrna_mrna_promoters$gene_id])
 num_peaks_df$peaks_overlapping_mrna_promoters <- rowSums(promoter_peak_counts[,mrna_promoters$gene_id])
 num_peaks_dfl <- num_peaks_df %>% pivot_longer(4:5, names_to = "promoter_type",
                                                values_to = "peaks_overlapping_promoters")
