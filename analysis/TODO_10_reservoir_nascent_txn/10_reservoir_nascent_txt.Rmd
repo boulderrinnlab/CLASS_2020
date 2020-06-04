@@ -14,27 +14,45 @@ library(tidyverse)
 library(Rsubread)
 ```
 
+#Goal: To analyze nascent RNA-sequencing data by PRO-SEQ methods at reservoir promoters. We are reasoning that althought there is not a "mature transcript" produced from these promoters that "nascent transcription = transcripts being produced by PolR2 but may not finalize to a "mature transcript"
+
+
+#First we will count the "nascent" reads in the promoter regions defined across this study (note: nascent transcripts are often found in promoters and in equal amounts on + and - strand of DNA)
+
+
+BUG > can't get promoters_df to populate and makes no sense after lots of trouble shooting.
 ```{r}
-# We're going to make counts just over the promoter regions so first we need to define the promoter
-# regions.
-gencode_gr <- rtracklayer::import("../../../genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-promoters_df <- get_promoter_regions(gencode_gr, biotype = "all") %>%
+#Defining promoter transcriptional start sites from gencode_gr
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+#Organizing to get' 'all' promoters (lncRNA and mRNA) +/- 3Kb from start site (from get_promoter_regions function)
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf") %>%
   as.data.frame() %>%
   select("gene_id", "seqnames", "start", "end", "strand") 
-names(promoters_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
-promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
+names(promoters) <- c("GeneID", "Chr", "Start", "End", "Strand")
+#promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
 write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
             quote = F, row.names = F)
-#Rsubread
-counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"),
-                        annot.ext = "results/gencode_v32_promoters_6kb.SAF",
-                        isPairedEnd = TRUE,
-                        nthreads = 16)
+
 ```
 
 
 #converting to nascent TPMs
 ```{r}
+
+
+#Rsubread
+counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"),
+                        annot.ext = "results/gencode_v32_promoters_6kb.SAF",
+                        isPairedEnd = TRUE,
+                        nthreads = 16)
+
+
+
+
+
+
+
 rpk <- counts$counts / (counts$annotation$Length/1000)
 expression <- data.frame("rpk" = rpk) %>%
   rownames_to_column("gene_id") %>%
