@@ -7,6 +7,16 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(GenomicRanges)
+library(GenomicFeatures)
+library(rtracklayer)
+library(ggrepel)
+library(ggpubr)
+library(regioneR)
+
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
 ```
 
 ```{r}

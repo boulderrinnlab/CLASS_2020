@@ -22,6 +22,9 @@ source("../util/_setup.R")
 ```{r setup-slurm-permutations}
 
 #### IMPORT peaks and features to test overlaps during the randomizations(permutations) ####
+
+
+#TODO minimize to 01_peak_occurence_data frame?
 peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/")
 
 lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
@@ -50,7 +53,7 @@ for(i in 1:length(region_list)) {
   region_list[[i]] <- region_list[[i]][which(seqnames(region_list[[i]]) %in% canonical_chr)]
 }
 
-#### DEFINE TESTS ####
+#### DEFINE Permutation TESTS ####
 pars <- expand.grid(1:length(region_list), 1:length(peak_list)) %>% 
   as.data.frame()
 names(pars) <- c("region_index", "peak_index")
@@ -115,7 +118,7 @@ if(length(fl) < 3) {
   length(region_list)
   perm_res$padj <- p.adjust(perm_res$pval, method = "BH", n = length(region_list)*length(peak_list))
   
-  
+  # Let's write out the permutaiton of promoter overlaps for each DBP. So we don't have to run again :)
   perm_res_family <- perm_res %>%
     filter(grepl("family", region),
            !grepl("\\?", region))
@@ -210,7 +213,7 @@ tf_clust <- hclust(dist(t(sig_matrix)))
 plot(region_clust)
 ```
 
-Hmm, well that's interesting. It looks like in terms of enrichment, lncRNA promoters are not clustered with mRNA promoters, but rather with the MIR family, tRNAs, and simple repeats. I think that may be due to the lower magnitude of enrichment. 
+It looks like in terms of enrichment, lncRNA promoters are not clustered with mRNA promoters, but rather with the MIR family, tRNAs, and simple repeats. Thus, lncRNA promoters appear to be closser to other noncoding genes than protein coding genes wrt/ repeat content.
 
 ```{r, fig.width=10, fig.height=15}
 sig_df_long <- sig_df %>%
