@@ -218,14 +218,17 @@ get_promoter_regions <- function(gencode_gr, biotype, upstream = 3e3, downstream
 #' 
 #' @param gencode_gr
 #'  set of genomic features as a GRanges object
-
-get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0) {
+overlapping_promoters <- function(gencode_gr, upstream = 1000, downstream = 0) {
   
   genes <- gencode_gr[gencode_gr$type == "gene"]
   proms <- GenomicRanges::promoters(genes, upstream = upstream, downstream = downstream)
   
-  reduced_proms <- GenomicRanges::reduce(proms)
-  suppressWarnings(ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE))
+  reduced_proms <- GenomicRanges::reduce(proms, ignore.strand = T)
+  
+  reduced_widths <- data.frame(width = width(reduced_proms),
+                               index = 1:length(reduced_proms))
+  
+  ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE)
   ov_proms <- data.frame("gene_promoters_from" = ov_proms@from,
                          "reduced_promoters_to" = ov_proms@to)
   
@@ -240,22 +243,46 @@ get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0
   overlapped$gene_id <- proms$gene_id[overlapped$gene_promoters_from]
   overlapped$gene_name <- proms$gene_name[overlapped$gene_promoters_from]
   overlapped$gene_type <- proms$gene_type[overlapped$gene_promoters_from]
-  overlapped$strand <- strand(proms[overlapped$gene_promoters_from])
+  overlapped$strand <- as.character(strand(proms[overlapped$gene_promoters_from]))
   
   overlapped_metadata <- overlapped %>% 
+    arrange(strand) %>%
     group_by(reduced_promoters_to, count) %>%
-    summarize(gene_id = paste(gene_id, collapse = ";"),
-              gene_name = paste(gene_name, collapse = ";"),
-              gene_type = paste(gene_type, collapse = ";"),
-              strand = paste(as.character(strand), collapse = ";"))
+    summarize(nearby_promoter_gene_ids = paste(gene_id, collapse = ";"),
+              nearby_promoter_gene_names = paste(gene_name, collapse = ";"),
+              nearby_promoter_gene_type = paste(gene_type, collapse = ";"),
+              nearby_promoter_gene_strands = paste(strand, collapse = ";"))
   
-  reduced_promoters_overlapping$num_overlaps <- overlapped_metadata$count
-  reduced_promoters_overlapping$gene_id <- overlapped_metadata$gene_id
-  reduced_promoters_overlapping$gene_name <- overlapped_metadata$gene_name
-  reduced_promoters_overlapping$gene_type <- overlapped_metadata$gene_type
-  reduced_promoters_overlapping$gene_type <- overlapped_metadata$gene_type
+  # Okay, I think I want to merge this all back into overlapped. 
+  overlapped_merge <- merge(overlapped, overlapped_metadata)
+  names(overlapped_merge)[2] <- "num_nearby_promoters"
   
-  return(reduced_promoters_overlapping) 
+  # Let's now filter to just the lncRNA and mRNA genes since that's
+  # the subject of our analysis.
+  overlapped_merge <- overlapped_merge %>% filter(gene_type %in% c("lncRNA", "protein_coding"))
+  
+  # Clean up to just the columns we need to add to peak_occurrence_df
+  overlapped_merge <- overlapped_merge %>% dplyr::select("gene_id", "strand",
+                                                         "num_nearby_promoters",
+                                                         "nearby_promoter_gene_ids",
+                                                         "nearby_promoter_gene_names",
+                                                         "nearby_promoter_gene_type",
+                                                         "nearby_promoter_gene_strands")
+  
+  # Finally let's annotate the bidirectionals
+  # So these will be genes that have only two two nearby promoters with
+  # opposite direction of transcription.
+  # Since we ordered by strand, we only need to account for "-;+" 
+  # (and not "+;-")
+  overlapped_merge[overlapped_merge$nearby_promoter_gene_strands == "-;+", 
+                   "shared_promoter_type"] <- "bidirectional"
+  overlapped_merge[overlapped_merge$nearby_promoter_gene_strands == "-;-" |
+                     overlapped_merge$nearby_promoter_gene_strands == "+;+"  , 
+                   "shared_promoter_type"] <- "nearby_same_strand"
+  overlapped_merge[overlapped_merge$num_nearby_promoters > 2, 
+                   "shared_promoter_type"] <- "multiple_nearby_promoters"
+  
+  return(overlapped_merge) 
 }
 
 
