@@ -29,28 +29,34 @@ Here we want to find a cut off of binding events at promoters that are expressed
 
 ```{r import}
 # Read in reservoir annotations combined with promoter peak occurence df. 
-peak_occurrence_df <- read_csv("../07_binding_versus_expression/results/peak_tpm_occurence_df.csv")
+peak_occurrence_df <- read_csv("../07_binding_versus_expression/results/peak_occurrence_df_exp_added.csv")
 ```
 
 Density plots of binding events for lncRNAs and mRNAs expressed above 0.001 TPM
 We see similar distributions with a slight shift of lncRNA promoters having more promoters with > 60 DBPs bound
 
 ```{r}
-g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs))
+# Plotting the density distribution of number of dbps bound R all promoters.
+g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
 g + geom_density(alpha = 0.2, fill = "#a8404c") +
   ggtitle("Distribution of promoter DBP binding",
           subtitle = "All genes") + 
   geom_vline(xintercept = 7, lty = 2)
 ggsave("figures/all_genes_binding_distribution.pdf")
 
+# Comparing the density distribution above for non-expressed promoters seperately. 
+# Interestingly, mRNA and lncRNA promoters that are not expressed have similar DBP density distributions. 
+# Unlike that was seen 07_binding_versus_expression
 off_genes <- peak_occurrence_df %>% filter(tpm < 0.001)
-g <- ggplot(off_genes, aes(x = number_of_tfs, fill = gene_type))
+g <- ggplot(off_genes, aes(x = number_of_dbp, fill = gene_type))
 g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
   ggtitle("Distribution of promoter DBP binding",
           subtitle = "Zero expression RNA-seq") 
 ggsave("figures/off_genes_binding_distribution.pdf")
 
-g <- ggplot(peak_occurrence_df %>% filter(tpm > 0.001), aes(x = number_of_tfs, fill = gene_type))
+# Density distribution of expressed genes with perhaps enrichment of lncNRAs in the 30:60 range of dbp binding events
+#TODO something off with coloring :) 
+g <- ggplot(peak_occurrence_df %>% filter(tpm > 0.001), aes(x = number_of_dbp, fill = gene_type))
 g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
     ggtitle("Distribution of promoter DBP binding",
           subtitle = "TPM > 0.001 RNA-seq") 
@@ -60,14 +66,14 @@ ggsave("figures/expressed_genes_binding_distribution.pdf")
 ```{r}
 ### Supplemental 4D
 num_peaks_threshold <- 7
-g <- ggplot(peak_occurrence_df, aes(x = number_of_tfs))
+g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
 g + stat_ecdf() + 
   geom_vline(xintercept = num_peaks_threshold, lty = 2, color = "#a8404c") +
   ggtitle("ECDF of promoter binding events")
 ggsave("figures/ecdf_promoter_binding_events.pdf")
 
 # Percentile of cutoff
-round(ecdf(peak_occurrence_df$number_of_tfs)(num_peaks_threshold)*100,1)
+round(ecdf(peak_occurrence_df$number_of_dbp)(num_peaks_threshold)*100,1)
 ```
 
 
@@ -77,14 +83,15 @@ We defined 7 DBPs as 54% percentile and now we will define "reservoirs" as havin
 
 ```{r define-reservoirs}
 # Let's set a new column defining reservoirs in our peak_occurrence data frame
-peak_occurrence_df$reservoir <- FALSE
-peak_occurrence_df[peak_occurrence_df$number_of_tfs > 7 &
-                     peak_occurrence_df$tpm < 0.001, "reservoir"] <- TRUE
-table(peak_occurrence_df$reservoir)
+
+peak_occurrence_df$reservoir <- as.numeric(peak_occurrence_df$number_of_dbp > 7 & peak_occurrence_df$tpm < 0.001)
+write_csv(peak_occurrence_df, "results/peak_occurence_df_resvoirs_add.csv")
+
 ```
 
 ```{r percent-lncrna}
 #### Supplemental 4E
+# Todo add reservoir yes or no to x axis (i should have been able to get this :) added xlab argument at end
 reservoirs_by_gene_type <- peak_occurrence_df %>%
   group_by(gene_type, reservoir) %>%
   summarize(count = n())
@@ -92,7 +99,8 @@ g <- ggplot(reservoirs_by_gene_type, aes(x = reservoir, y = count, fill = gene_t
 g + geom_bar(position = "fill", stat = "identity") +
   scale_fill_manual(values = c("#a8404c", "#424242")) +
   ggtitle("Reservoir status by gene type") + 
-  ylab("Fraction")
+  ylab("Fraction") +
+  xlab(peak_occurrence_df$reservoir)
 ggsave("figures/reservoir_status_by_gene_type.pdf")
 ```
 
@@ -122,7 +130,14 @@ se_hg38 <- liftOver(se_hg19, ch)
 
 # Subset just to contiguously liftedOver regions
 se_hg38 <- se_hg38[sapply(width(se_hg38), length) == 1]
+# Exporting .bed file of se_hg38 (super-enhancers with contigious overlap in hg38)
 rtracklayer::export(se_hg38, "results/k562_superenhancers_hg38.bed")
+
+# Let's also add super_enhancers to our peak_occurence_df
+#se_hg38 <- rtracklayer::import("results/k562_superenhancers_hg38.bed")
+#peak_occurrence_df$super_enhancer <- merge(peak_occurrence_df, )
+
+?findOverlaps
 ```
 
 ```{r overlap-ses-reservoirs}

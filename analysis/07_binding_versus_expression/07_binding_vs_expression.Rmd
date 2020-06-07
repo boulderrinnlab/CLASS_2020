@@ -85,7 +85,7 @@ peak_occurrence_df <- peak_occurrence_df[ -c(7)]
 
 #Adding expression to the new peak occurence data frame nomenclature that will be used as a starting point in 08_defining_reservoirs.
 
-write_csv(peak_occurrence_df, "results/peak_occurence_df_exp_added.csv")
+write_csv(peak_occurrence_df, "results/peak_occurrence_df_exp_added.csv")
 
 
 ```
