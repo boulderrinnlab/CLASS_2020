@@ -72,6 +72,23 @@ if(!file.exists("results/k562_tpm.csv")) {
 tpm <- read_csv("results/k562_tpm.csv")
 ```
 
+
+# Let's add the expression data to our peak_occurence_df generated in 01_consensus_peaks.
+# Our strategy will be to keep adding variables to our observations (promoters). We can then plot from this data frame as it grows. 
+```{r}
+peak_occurrence_df <- read_csv("../01_consensus_peaks/results/peak_occurence_dataframe.csv")
+expression_occurrence_df <- read_csv("results/peak_tpm_occurence_df.csv")
+peak_occurrence_df <- merge(peak_occurrence_df, expression_occurrence_df)
+#filtering out an old column used to be called number_tfs is now number_of_dbp.
+peak_occurrence_df <- peak_occurrence_df[ -c(7)]
+
+#Adding expression to the new peak occurence data frame nomenclature that will be used as a starting point in 08_defining_reservoirs.
+
+write_csv(peak_occurrence_df, "results/peak_occurence_df_exp_added.csv")
+
+
+```
+
 # Loading in the needed files (lncRNA/mRNA promoters, consensus peaks, then organizing into a data frame for plotting)
 ```{r}
 
@@ -98,7 +115,7 @@ FIGURE 4A
 # Plotting binding of lncRNAs and mRNAs versus expression
 We see a lineaer trend in both lncRNA and mRNA promoters between number of binding events and expression output
 ```{r, message=FALSE, warning=FALSE}
-g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_tfs, color = gene_type))
+g <- ggplot(peak_occurrence_df, aes(y = log10(tpm), x = number_of_dbp, color = gene_type))
 g + 
   geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), alpha = 0.2) +
   geom_smooth() + 
@@ -123,7 +140,7 @@ peak_occurrence_df$expression <- cut(peak_occurrence_df$tpm, breaks = c(-1, 0.00
                                     labels = c("off", "low", "med", "high"))
 table(peak_occurrence_df$expression)
 
-g <- ggplot(peak_occurrence_df, aes(x = expression, y = number_of_tfs, color = gene_type))
+g <- ggplot(peak_occurrence_df, aes(x = expression, y = number_of_dbp, color = gene_type))
 g + geom_boxplot() + stat_compare_means() + 
   scale_color_manual(values = c("#a8404c", "#424242"))  
 ggsave("figures/bin-exp_binding_vs_expression_density.png")
