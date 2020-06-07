@@ -74,7 +74,8 @@ tpm <- read_csv("results/k562_tpm.csv")
 
 
 # Let's add the expression data to our peak_occurence_df generated in 01_consensus_peaks.
-# Our strategy will be to keep adding variables to our observations (promoters). We can then plot from this data frame as it grows. 
+# Our strategy will be to keep adding variables to our observations (promoters). 
+# We can then plot from this data frame as it grows. 
 ```{r}
 peak_occurrence_df <- read_csv("../01_consensus_peaks/results/peak_occurence_dataframe.csv")
 expression_occurrence_df <- read_csv("results/peak_tpm_occurence_df.csv")
@@ -89,27 +90,6 @@ write_csv(peak_occurrence_df, "results/peak_occurence_df_exp_added.csv")
 
 ```
 
-# Loading in the needed files (lncRNA/mRNA promoters, consensus peaks, then organizing into a data frame for plotting)
-```{r}
-
-peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/filtered_by_peaks")
-
-lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
-mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
-promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
-promoters_df <- promoters %>% as.data.frame() %>% dplyr::select(gene_id, gene_type, gene_name)
-
-lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
-mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
-promoter_peak_occurrence <- count_peaks_per_feature(promoters, peak_list, type = "occurrence")
-
-peak_occurrence_df <- data.frame("gene_id" = colnames(promoter_peak_occurrence),
-                                "number_of_tfs" = colSums(promoter_peak_occurrence))
-peak_occurrence_df <- merge(peak_occurrence_df, tpm)
-peak_occurrence_df <- merge(peak_occurrence_df, promoters_df)
-
-write_csv(peak_occurrence_df, "results/peak_tpm_occurence_df.csv")
-```
 
 FIGURE 4A
 # Plotting binding of lncRNAs and mRNAs versus expression
