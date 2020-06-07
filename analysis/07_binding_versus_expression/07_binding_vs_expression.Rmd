@@ -24,7 +24,7 @@ source("../util/_setup.R")
 
 
 # Purpose: Compare expression of genes to binding in promoter regions
-
+ 
 This script extracts expression counts from K562 RNA-seq data and identifies DNA-binding events at promoters from the K562 ChIP-seq consensus peak dataset. We have included further analysis on promoters that contain ≥7 DNA-binding events but are not expressed.
 
 
