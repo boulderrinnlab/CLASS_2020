@@ -151,7 +151,20 @@ se_promoters <- subsetByOverlaps(promoters, se_hg38)
 # Annotate in data.frame
 peak_occurrence_df$annotated_superenhancer <- FALSE
 peak_occurrence_df[peak_occurrence_df$gene_id %in% se_promoters$gene_id, "annotated_superenhancer"] <- TRUE
+
+#let's write this out as a specific .csv here per our goal of adding new variables (SE in this case) to peak_occurence_df (observations == promoters)
+write_csv(peak_occurrence_df, "results/peak_occurrence_df_super_enhancers_added")
+
+
+```
+
+```{r}
+
+# Let's count how many reservoirs overlap super-enhancers.
 table(peak_occurrence_df$annotated_superenhancer)
+
+
+#Plotting 
 
 se_res_summary <- peak_occurrence_df %>% group_by(reservoir, annotated_superenhancer) %>%
   summarize(count = n())
@@ -161,6 +174,7 @@ g + geom_bar(position = "fill", stat = "identity") +
   ggtitle("Reservoir status by Superenhancer annotation") +
   ylab("Fraction")
 ggsave("figures/reservoir_status_by_SE_annotation.pdf")
+
 ```
 
 
@@ -169,7 +183,7 @@ ggsave("figures/reservoir_status_by_SE_annotation.pdf")
 ```{r}
 res_overlapping_se <- length(reservoirs_overlapping_ses)
 t <- length(which(peak_occurrence_df$reservoir == T & peak_occurrence_df$annotated_superenhancer == T))
-num_promoters_w_gt7_dbps <- nrow(peak_occurrence_df %>% filter(number_of_tfs > 7))
+num_promoters_w_gt7_dbps <- nrow(peak_occurrence_df %>% filter(number_of_dbp > 7))
 n <- num_promoters_w_gt7_dbps
 number_of_reservoirs <- length(which(peak_occurrence_df$reservoir == T))
 a <- number_of_reservoirs
@@ -200,6 +214,7 @@ Where the gene has to be on the opposite strand within 1000bp.
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
 # Define that the potential "bidirectional promoter is on the opposite strand and less than 1000bp in distance"
+# Note this is a newly defined function in ../util/intersect_functions.R 
 shared_promoters <- overlapping_promoters(gencode_gr, upstream = 1000, downstream = 0)
 
 # Merge in shared promoters to the peak_occurrence_df
@@ -219,7 +234,7 @@ ggsave("figures/reservoir_status_by_shared_promoter_status.pdf")
 
 
 g <- ggplot(peak_occurrence_df %>% filter(reservoir == T),
-            aes(x = shared_promoter_type, y = number_of_tfs))
+            aes(x = shared_promoter_type, y = number_of_dbp))
 g + geom_boxplot() +
   ggtitle("Number of binding events vs. shared promoter types",
            subtitle = "In reservoirs")
@@ -229,7 +244,14 @@ prop.table(table(peak_occurrence_df$reservoir, peak_occurrence_df$shared_promote
 chisq.test(peak_occurrence_df$shared_promoter_type, peak_occurrence_df$reservoir)
 
 
-write_csv(peak_occurrence_df, "results/peak_occurrence_df.csv")
+
+```
+
+```{r}
+# Per usual we are going to now add the promoter_properties variable(s) bidirectional, closeby etc .
+# Importantly this is what will be read into 09_reservoir_binding_properties 
+write_csv(peak_occurrence_df, "results/peak_occurrence_df_adding_lots_cool_promoter_properties.csv")
+
 ```
 
 
@@ -269,7 +291,7 @@ expression_window_df <- peak_occurrence_df %>%
   arrange(chr, tss) %>%
   group_by(chr) %>%
   mutate(window_5 = assign_windows(n(), window_size)) %>%
-  dplyr::select(number_of_tfs, tpm, reservoir, annotated_superenhancer, shared_promoter_type,
+  dplyr::select(number_of_dbp, tpm, reservoir, annotated_superenhancer, shared_promoter_type,
                 chr, window_5) %>%
   separate_rows(window_5, sep = ";") %>%
   mutate(window_5 = as.numeric(window_5)) %>%
@@ -277,10 +299,10 @@ expression_window_df <- peak_occurrence_df %>%
   summarize(mean_tpm = mean(tpm),
             n_reservoirs = sum(as.numeric(reservoir)),
             n_se = sum(as.numeric(annotated_superenhancer)),
-            total_dbps_bound = sum(number_of_tfs),
-            mean_dbps_bound = mean(number_of_tfs),
-            n_occupied_promoters = length(which(number_of_tfs > 0)),
-            dbps_bound = paste(number_of_tfs, collapse = ";"),
+            total_dbps_bound = sum(number_of_dbp),
+            mean_dbps_bound = mean(number_of_dbp),
+            n_occupied_promoters = length(which(number_of_dbp > 0)),
+            dbps_bound = paste(number_of_dbp, collapse = ";"),
             shared_promoter_types = paste(shared_promoter_type, collapse = ";"))
 
 
@@ -298,7 +320,7 @@ g + geom_violin() +
   stat_summary(fun.data=data_summary) +
   stat_compare_means() +
   ggtitle("Mean expression in five gene windows")
-ggave("figures/mean_expression_in_5_gene_windows_res_vs_nonres.pdf")
+ggsave("figures/mean_expression_in_5_gene_windows_res_vs_nonres.pdf")
 
 res_exp_windows <- expression_window_df %>%
   mutate(contains_reservoir = n_reservoirs > 0) %>%
@@ -319,6 +341,7 @@ g + geom_violin() +
   stat_compare_means()
 
 # When windowed does expression correlate bettwer with binding
+# Cool finding that number of DBPs bound in five gene windows also correlates with expression in 5 gene window. 
 g <- ggplot(expression_window_df, aes(x = total_dbps_bound, y = log10(mean_tpm)))
 g + geom_point() + stat_cor() +
   geom_smooth() +
