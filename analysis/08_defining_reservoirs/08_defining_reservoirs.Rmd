@@ -85,7 +85,7 @@ We defined 7 DBPs as 54% percentile and now we will define "reservoirs" as havin
 # Let's set a new column defining reservoirs in our peak_occurrence data frame
 
 peak_occurrence_df$reservoir <- as.numeric(peak_occurrence_df$number_of_dbp > 7 & peak_occurrence_df$tpm < 0.001)
-write_csv(peak_occurrence_df, "results/peak_occurence_df_resvoirs_add.csv")
+write_csv(peak_occurrence_df, "results/08_peak_occurence_df_resvoirs.csv")
 
 ```
 
@@ -133,11 +133,7 @@ se_hg38 <- se_hg38[sapply(width(se_hg38), length) == 1]
 # Exporting .bed file of se_hg38 (super-enhancers with contigious overlap in hg38)
 rtracklayer::export(se_hg38, "results/k562_superenhancers_hg38.bed")
 
-# Let's also add super_enhancers to our peak_occurence_df
-#se_hg38 <- rtracklayer::import("results/k562_superenhancers_hg38.bed")
-#peak_occurrence_df$super_enhancer <- merge(peak_occurrence_df, )
 
-?findOverlaps
 ```
 
 ```{r overlap-ses-reservoirs}
@@ -153,7 +149,7 @@ peak_occurrence_df$annotated_superenhancer <- FALSE
 peak_occurrence_df[peak_occurrence_df$gene_id %in% se_promoters$gene_id, "annotated_superenhancer"] <- TRUE
 
 #let's write this out as a specific .csv here per our goal of adding new variables (SE in this case) to peak_occurence_df (observations == promoters)
-write_csv(peak_occurrence_df, "results/peak_occurrence_df_super_enhancers_added")
+write_csv(peak_occurrence_df, "results/08_peak_occurrence_df_super_enhancers")
 
 
 ```
@@ -214,13 +210,17 @@ Where the gene has to be on the opposite strand within 1000bp.
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
 # Define that the potential "bidirectional promoter is on the opposite strand and less than 1000bp in distance"
-# Note this is a newly defined function in ../util/intersect_functions.R 
+# Note this is a newly defined function in 'overlapping_promoters' ../util/intersect_functions.R 
 shared_promoters <- overlapping_promoters(gencode_gr, upstream = 1000, downstream = 0)
 
 # Merge in shared promoters to the peak_occurrence_df
 peak_occurrence_df <- merge(peak_occurrence_df, shared_promoters, all.x = TRUE)
 # Annotate non overlapping promoters
 peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type), "shared_promoter_type"] <- "None"
+
+
+# Plotting percentage of promoters that are "bidirectional", "mutliple_nearby_promoters", "nearby and on same strand"
+# TODO add xlab peak_occurence_df$reservoir
 
 reservoir_status_by_shared_promoters <- peak_occurrence_df %>%
   group_by(reservoir, shared_promoter_type) %>%
@@ -233,6 +233,8 @@ g + geom_bar(position = "fill", stat = "identity") +
 ggsave("figures/reservoir_status_by_shared_promoter_status.pdf")
 
 
+# Plotting the number of dbps at each type of promoter
+
 g <- ggplot(peak_occurrence_df %>% filter(reservoir == T),
             aes(x = shared_promoter_type, y = number_of_dbp))
 g + geom_boxplot() +
@@ -242,15 +244,15 @@ ggsave("figures/num_binding_events_vs_shared_promoter_type_reservoirs.pdf")
 
 prop.table(table(peak_occurrence_df$reservoir, peak_occurrence_df$shared_promoter_type), margin = 1)*100
 chisq.test(peak_occurrence_df$shared_promoter_type, peak_occurrence_df$reservoir)
-
-
+ 
+# Todo anova or some multi group test -- I think the stat above is saying that there is a difference in means but not for each promoter type
 
 ```
 
 ```{r}
 # Per usual we are going to now add the promoter_properties variable(s) bidirectional, closeby etc .
 # Importantly this is what will be read into 09_reservoir_binding_properties 
-write_csv(peak_occurrence_df, "results/peak_occurrence_df_adding_lots_cool_promoter_properties.csv")
+write_csv(peak_occurrence_df, "results/08_peak_occurrence_df_promoter_types.csv")
 
 ```
 
@@ -306,7 +308,7 @@ expression_window_df <- peak_occurrence_df %>%
             shared_promoter_types = paste(shared_promoter_type, collapse = ";"))
 
 
-
+# Plotting the summary of expression window measurements to see if there is a difference between reservoir and non-res windows.
 
 data_summary <- function(x) {
    m <- mean(x)
@@ -327,6 +329,16 @@ res_exp_windows <- expression_window_df %>%
   group_by(contains_reservoir) %>%
   summarize(mean_tpm = mean(mean_tpm))
 knitr::kable(res_exp_windows)
+
+# We find that reservoirs tend to be in less highly expressed gene-windows. However the effect is small but significant. 
+
+
+
+
+
+
+
+
 
 
 

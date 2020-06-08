@@ -19,7 +19,7 @@ library(effectsize)
 
 
 
-# loading in peaks and promoter annotations to ulitmately make the "peak_occurence_df"
+# Loading in peak_occuence_data_
 
 ```{r}
 
