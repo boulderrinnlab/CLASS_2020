@@ -41,21 +41,31 @@ write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
 ```{r}
 
 # Rsubread to make counts on features.
+
+#TODO Does not run I have the BAMs
+counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam", annot.ext = "results/gencode_v32_promoters_6kb.SAF", isPairedEnd = TRUE, nthreads = 16))
+
+# This runs
 counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"))
+
+# This now runs and seems to produce the right file.
+annot.ext = "results/gencode_v32_promoters_6kb.SAF"
                         
-                        
-                        
-                        annot.ext = "results/gencode_v32_promoters_6kb.SAF"
-                        isPairedEnd = TRUE
-                        nthreads = 16)
+#?rownames_to_column
 
 # Converting to RPKM
-
+# This works
 rpk <- counts$counts / (counts$annotation$Length/1000)
+
+# This runs
 expression <- data.frame("rpk" = rpk) %>%
+  
+# Something here maybe off
   rownames_to_column("gene_id") %>%
+  
   pivot_longer(2:3, names_to = "sample", values_to = "rpk")
 expression_summary <- expression %>% 
+  
   group_by(sample) %>%
   summarize(total_rpk = sum(rpk, na.rm = T))
 expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
