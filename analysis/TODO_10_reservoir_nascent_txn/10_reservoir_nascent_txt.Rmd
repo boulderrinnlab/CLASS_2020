@@ -28,28 +28,24 @@ gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode
 #Organizing to get' 'all' promoters (lncRNA and mRNA) +/- 3Kb from start site (from get_promoter_regions function)
 promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf") %>%
   as.data.frame() %>%
-  select("gene_id", "seqnames", "start", "end", "strand") 
+  dplyr::select("gene_id", "seqnames", "start", "end", "strand") 
 names(promoters) <- c("GeneID", "Chr", "Start", "End", "Strand")
 #promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
 write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
             quote = F, row.names = F)
 
+?select
 ```
 
 
-#converting to nascent TPMs
+# Using Rsubread to quantify the nascent epxression over promoter windows (3kb +/- start)
 ```{r}
-
 
 #Rsubread
 counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"),
                         annot.ext = "results/gencode_v32_promoters_6kb.SAF",
                         isPairedEnd = TRUE,
                         nthreads = 16)
-
-
-
-
 
 
 
