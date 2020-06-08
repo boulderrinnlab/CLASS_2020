@@ -95,9 +95,12 @@ create_consensus_peaks <- function(broadpeakfilepath = "/Shares/rinn_class/data/
 }
 
 # TODO: refactor
-read_peaks <- function(broad_peak_file) {
+read_peaks <- function(broad_peak_file, filter_to_canonical_chr = FALSE) {
   # A broad peak file is just a tab separated file 
   dat <- read.table(broad_peak_file, sep = "\t")
+  if(filter_to_canonical_chr == TRUE) {
+    dat <- dat[dat$V1 %in% c(paste0("chr", 1:22), "chrM", "chrX", "chrY"),]
+  }
   gr <- GRanges(seqnames = dat$V1,
                 ranges = IRanges(start=dat$V2,end=dat$V3))
   return(gr)
