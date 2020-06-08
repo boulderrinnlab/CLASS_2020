@@ -23,7 +23,11 @@ library(GenomicRanges)
 peak_occurrence_matrix <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
 
 # Read in reservoir annotations combined with promoter peak occurence df. 
-peak_occurrence_df <- read_csv("../07_binding_versus_expression/results/peak_tpm_occurence_df.csv")
+peak_occurrence_df <- read_csv("../
+                               
+# This will come from 10 with nascent TPM adding
+                               
+                               08_defining_reservoirs/results/08_peak_occurrence_df_promoter_types.csv")
 
 
 
