@@ -1,6 +1,5 @@
 ---
 title: "10_reservoir_nascent_txn"
-author: "JR"
 date: "5/29/2020"
 output: html_document
 editor_options: 
@@ -37,10 +36,12 @@ write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
 ```
 
 
-# Using Rsubread to quantify the nascent epxression over promoter windows (3kb +/- start)
+# Using Rsubread to quantify the nascent epxression over promoter windows (3kb +/- start) for analysis in 11_reservoir_chromatin_properties.
 ```{r}
 
 # Rsubread to make counts on features.
+
+#TODO add BAM URLS from master version
 
 #TODO Does not run I have the BAMs
 counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"), 
@@ -71,8 +72,12 @@ write_csv(tpm, "results/k562_nascent_tpm.csv")
 ```
 
 
-#TO DO defining Ghosts and Zombies
+```{r}
+# Let's now add nascent_tpm to our 'peak_occurrence_df' saving as "peak_occurrence_df_nascent"
 
->>>> goto  11_
+
+#TODO
+```
+
 
 
