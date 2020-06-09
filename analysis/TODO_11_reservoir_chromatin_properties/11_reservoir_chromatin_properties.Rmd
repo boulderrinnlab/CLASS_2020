@@ -17,35 +17,14 @@ library(GenomicRanges)
 #Goal: to determine the chromatin environment of reservoir promoters using histone modification ChIP data. Specifically, Histone H3 (H3) Lysine 27 tri-methylation (H3K27me3) that represents heterochraomtic regions / and H3 lysine 27 acetylation that represents euchromatin.
 
 ```{r} 
-# Loading in common features to make a data frame of histone marks
 
-# Peak occurence of promoters and DBPs bound
+# Read our compiled peak_occurence data frame from 10_reservoir_nascent_txn (with all the variables for each promoter observation). 
+peak_occurrence_df <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
+
+# We alos need the peak occurence of promoters and DBPs bound as a matrix.
 peak_occurrence_matrix <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
 
-# Read in reservoir annotations combined with promoter peak occurence df. 
-peak_occurrence_df <- read_csv("../
-                               
-# This will come from 10 with nascent TPM adding
-                               
-                               08_defining_reservoirs/results/08_peak_occurrence_df_promoter_types.csv")
 
-
-
-
-
-
-
-
-
-
-
-promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
-reservoir_promoters <- rtracklayer::import ("../ACTIVE_09_reservoir_binding_properties/results/k562_reservoir_promoters_info.csv")
-peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis", full.names = TRUE, pattern = ".bed"),
-                         "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
-```
-
-```{r}
 # Histone mark overlaps
 # K27me3 - https://www.encodeproject.org/files/ENCFF031FSF/@@download/ENCFF031FSF.bed.gz
 # K27ac - https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz
@@ -71,51 +50,20 @@ hmark_granges <- lapply(hmark_peaks, function(peaks) {
           ranges = IRanges(start = peaks$V2,
                            end = peaks$V3))
 })
+
+
+
+plot(peak_occurrence_df$nascentTpm ~peak_occurrence_df$tpm)
 ```
 
 
 
 
 
-
-
-
-```{r setup, include=FALSE}
-options(stringsAsFactors = FALSE)
-knitr::opts_chunk$set(echo = TRUE)
-# install.packages("tidyverse")
-library(tidyverse)
-library(GenomicRanges)
-library(ChIPseeker)
-#library(valr)
-```
-```{r retrieve-encode-peak-files}
-# K9me1 - https://www.encodeproject.org/files/ENCFF285EKW/@@download/ENCFF285EKW.bed.gz
-# K27me3 - https://www.encodeproject.org/files/ENCFF031FSF/@@download/ENCFF031FSF.bed.gz
-# K27ac - https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz
-# K9me3 - https://www.encodeproject.org/files/ENCFF371GMJ/@@download/ENCFF371GMJ.bed.gz
-# K4me1 - https://www.encodeproject.org/files/ENCFF159VKJ/@@download/ENCFF159VKJ.bed.gz
-```
-```{r}
-# Note, you'll need to append /Shares/rinn_class/data/CLASS_2020/analysis" to the files paths to get the files.
-promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
-reservoir_promoters <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/04_correlation_with_expression/results/k562_ghost_promoters.bed")
-peak_files <- data.frame("file" = list.files("/Shares/rinn_class/data/CLASS_2020/analysis", full.names = TRUE, pattern = ".bed"),
-                         "histone_mark" = c("H3K27me3", "H3K27ac", "H3K4me1", "H3K9me1", "H3K9me3"))
-# Read in peaks
-se_hg19 <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/data/K562.bed")
-hmark_peaks <- lapply(peak_files$file, read.table)
-names(hmark_peaks) <- peak_files$histone_mark
-hmark_granges <- lapply(hmark_peaks, function(peaks) {
-  GRanges(seqnames = peaks$V1,
-          ranges = IRanges(start = peaks$V2,
-                           end = peaks$V3))
-})
-```
 ```{r}
 # create a matrix indicating whether each chromatin mark overlaps each promoter
-hmark_occurence <- matrix(0, nrow = length(reservoir_promoters), ncol = nrow(peak_files))
-rownames(hmark_occurence) <- reservoir_promoters$name
+hmark_occurence <- matrix(0, nrow = length(peak_occurrence_df$reservoir), ncol = nrow(peak_files))
+rownames(hmark_occurence) <- peak_occurrence_df$reservoir
 colnames(hmark_occurence) <- peak_files$histone_mark
 # Fill in the matrix with overlaps
 # First column 1
