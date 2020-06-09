@@ -29,7 +29,7 @@ gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode
 promoters_df <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf") %>%
   as.data.frame() %>%
   dplyr::select("gene_id", "seqnames", "start", "end", "strand") 
-names(promoters) <- c("GeneID", "Chr", "Start", "End", "Strand")
+names(promoters_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
 promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
 write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
             quote = F, row.names = F)
@@ -43,15 +43,9 @@ write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
 # Rsubread to make counts on features.
 
 #TODO Does not run I have the BAMs
-counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam", annot.ext = "results/gencode_v32_promoters_6kb.SAF", isPairedEnd = TRUE, nthreads = 16))
-
-# This runs
-counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"))
-
-# This now runs and seems to produce the right file.
-annot.ext = "results/gencode_v32_promoters_6kb.SAF"
-                        
-#?rownames_to_column
+counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"), 
+                          annot.ext = "results/gencode_v32_promoters_6kb.SAF", 
+                          isPairedEnd = TRUE, nthreads = 16)
 
 # Converting to RPKM
 # This works
@@ -59,13 +53,9 @@ rpk <- counts$counts / (counts$annotation$Length/1000)
 
 # This runs
 expression <- data.frame("rpk" = rpk) %>%
-  
-# Something here maybe off
   rownames_to_column("gene_id") %>%
-  
   pivot_longer(2:3, names_to = "sample", values_to = "rpk")
 expression_summary <- expression %>% 
-  
   group_by(sample) %>%
   summarize(total_rpk = sum(rpk, na.rm = T))
 expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
@@ -78,9 +68,6 @@ genes <- gencode_gr[gencode_gr$type == "gene"] %>% as.data.frame() %>%
 tpm <- merge(tpm, genes)
 tpm <- tpm %>% dplyr::select(gene_id, gene_name, tpm)
 write_csv(tpm, "results/k562_nascent_tpm.csv")
-
-
-
 ```
 
 
