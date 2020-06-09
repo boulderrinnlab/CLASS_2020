@@ -18,8 +18,6 @@ library(Rsubread)
 
 #First we will count the "nascent" reads in the promoter regions defined across this study (note: nascent transcripts are often found in promoters and in equal amounts on + and - strand of DNA)
 
-
-BUG > can't get promoters_df to populate and makes no sense after lots of trouble shooting.
 ```{r}
 #Defining promoter transcriptional start sites from gencode_gr
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
@@ -39,20 +37,20 @@ write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
 # Using Rsubread to quantify the nascent epxression over promoter windows (3kb +/- start) for analysis in 11_reservoir_chromatin_properties.
 ```{r}
 
+#TODO add BAMS to GEO?
+
 # Rsubread to make counts on features.
-
-#TODO add BAM URLS from master version
-
-#TODO Does not run I have the BAMs
 counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"), 
                           annot.ext = "results/gencode_v32_promoters_6kb.SAF", 
                           isPairedEnd = TRUE, nthreads = 16)
 
-# Converting to RPKM
-# This works
+# Converting to Reads Per Kilobase of gene length.
 rpk <- counts$counts / (counts$annotation$Length/1000)
 
-# This runs
+# Making an expression summary data frame 
+# rpk_m > first RPK is converted to rpk_M (rpk per millions of reads run)
+# TPM > second rpk_m is converted to TPM (Transcripts per millions of reads run )
+
 expression <- data.frame("rpk" = rpk) %>%
   rownames_to_column("gene_id") %>%
   pivot_longer(2:3, names_to = "sample", values_to = "rpk")
@@ -72,11 +70,20 @@ write_csv(tpm, "results/k562_nascent_tpm.csv")
 ```
 
 
-```{r}
+```{r} 
 # Let's now add nascent_tpm to our 'peak_occurrence_df' saving as "peak_occurrence_df_nascent"
+# First loading the 'peak_occurence_df' data frame we created in 08_defining reservoirs
 
+peak_occurrence_df_08 <- read_csv("../08_defining_reservoirs/results/08_peak_occurrence_df_promoter_types.csv")
+peak_occurrence_nascent <- read_csv("results/k562_nascent_tpm.csv")
 
-#TODO
+# Adding in nascent by gene_id (and gene name) -- double checked k562_nascent_tpm vs output and is all good --
+peak_occurrence_df_08$nascentTpm <- peak_occurrence_nascent$tpm
+
+# Writting out .csv of peak_occurrence
+write_csv(peak_occurrence_df_08, "results/peak_occurrence_df_nascent_added.csv")
+
+# This .csv will be read into 11_reservoir_chromatin_properties.
 ```
 
 
