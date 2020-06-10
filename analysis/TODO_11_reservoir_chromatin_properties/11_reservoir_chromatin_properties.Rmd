@@ -39,6 +39,36 @@ system("cd data;
            wget https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz",
            intern = FALSE, ignore.stdout = TRUE, ignore.stderr = TRUE)
 
+system("cd data;
+       gunzip *.gz")
+
+
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+
+k27me_ov <- read("data/ENCFF031FSF.bed")
+k27ac_ov <- rtracklayer::import("data/ENCFF038DDS.bed")
+
+findOverlaps(peak_occurrence_df, k27me_df)
+
+
+peak_occurrence_df <- read.csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
+k27me_df <- read.table("data/ENCFF031FSF.bed")
+k27ac_df <- read.table("data/ENCFF038DDS.bed")
+
+write.csv(k27me_df, "")
+
+
+
+peak_occurrence_df <- merge(peak_occurrence_df,
+
+?readBed
+
+ReadBed
+
+
+
+makeGRangesFromDataFrame(peak_occurrence_df,
+                         )
 
 
 peak_files <- data.frame("file" = c("data/ENCFF031FSF.bed", "data/ENCFF038DDS.bed"),
@@ -49,10 +79,17 @@ hmark_granges <- lapply(hmark_peaks, function(peaks) {
   GRanges(seqnames = peaks$V1,
           ranges = IRanges(start = peaks$V2,
                            end = peaks$V3))
+  
+ k27me3_ov <- findOverlaps(hmark_granges$H3K27me3@ranges, promoters@ranges)
+ k27ac_ov <- findOverlaps(hmark_granges$H3K27ac@ranges, promoters@ranges)
+ 
+ write.csv(k27me3_ov, "results/k27me3_ov.csv")
+ write.csv(k27ac_ov, "results/k27ac_ov.csv")
 })
 
+install.packages(Biostrings)
 
-
+BiocManager::install(Biostrings)
 
 plot(density(peak_occurrence_df$nascentTpm))
 ```
@@ -80,6 +117,10 @@ table(hmark_occurence[,2])
 
 
 
+
+use promoters from 01 as gRanges and granges of histone marks to make peak occurence df
+
+merge into peak_occurence df
 
 
 
