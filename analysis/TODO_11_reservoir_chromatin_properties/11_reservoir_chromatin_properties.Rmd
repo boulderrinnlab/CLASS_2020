@@ -53,7 +53,8 @@ hmark_granges <- lapply(hmark_peaks, function(peaks) {
 
 
 
-plot(peak_occurrence_df$nascentTpm ~peak_occurrence_df$tpm)
+
+plot(density(peak_occurrence_df$nascentTpm))
 ```
 
 
@@ -76,21 +77,19 @@ ov2 <- findOverlaps(reservoir_promoters, hmark_granges[[2]])
 res_overlaps <- unique(ov2@from)
 hmark_occurence[res_overlaps,2] <- 1
 table(hmark_occurence[,2])
-# Repeat for the next histone marks
-ov3 <- findOverlaps(reservoir_promoters, hmark_granges[[3]])
-res_overlaps <- unique(ov3@from)
-hmark_occurence[res_overlaps,3] <- 1
-table(hmark_occurence[,3])
-# Repeat for the next histone marks
-ov4 <- findOverlaps(reservoir_promoters, hmark_granges[[4]])
-res_overlaps <- unique(ov4@from)
-hmark_occurence[res_overlaps,4] <- 1
-table(hmark_occurence[,4])
-# Repeat for the next histone marks
-ov5 <- findOverlaps(reservoir_promoters, hmark_granges[[5]])
-res_overlaps <- unique(ov5@from)
-hmark_occurence[res_overlaps,5] <- 1
-table(hmark_occurence[,5])
+
+
+
+
+
+
+
+
+
+
+
+
+
 #make super enhancers data frame
 # create a matrix indicating whether each super enhancer overlaps each promoter
 super_enhacer_res_ov <- rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/07_reservoirs/results/reservoirs_overlapping_ses.bed")
