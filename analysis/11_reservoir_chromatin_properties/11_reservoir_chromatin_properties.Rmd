@@ -40,10 +40,10 @@ system("cd data;
 
 # Organzing the histone mark data into a data frame and then granges of start and stop of peaks in .bed files
 
-peak_files <- data.frame("file" = c("data/ENCFF031FSF.bed", "data/ENCFF038DDS.bed"),
+peak_files <- data.frame("file" = c(as.character("data/ENCFF031FSF.bed"), as.character("data/ENCFF038DDS.bed")),
                          "histone_mark" = c("H3K27me3", "H3K27ac"))
-hmark_peaks <- lapply(peak_files$file, read.table)
-names(hmark_peaks) <- peak_files$histone_mark
+hmark_peaks <- lapply(as.character(peak_files$file), read.table)
+names(hmark_peaks) <- as.character(peak_files$histone_mark)
 hmark_granges <- lapply(hmark_peaks, function(peaks) {
   GRanges(seqnames = peaks$V1,
           ranges = IRanges(start = peaks$V2,
@@ -56,35 +56,33 @@ promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_prom
 # Read our compiled peak_occurrence data frame from 10_reservoir_nascent_txn (with all the variables for each promoter observation). 
 peak_occurrence_df <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
-# create a matrix indicating whether each chromatin mark overlaps each promoter
-hmark_occurrence <- matrix(0, nrow = length(peak_occurrence_df$gene_id), ncol = nrow(peak_files))
-rownames(hmark_occurrence) <- peak_occurrence_df$gene_id
-colnames(hmark_occurrence) <- peak_files$histone_mark
-
-
 
 # K27me3 Promoter overlaps
 ov1 <- findOverlaps(promoters, hmark_granges[[1]])
 overlaps <- unique(ov1@from)
-hmark_occurrence[overlaps,1] <- 1
-table(hmark_occurrence[,1])
+overlapping_genes <- promoters$gene_id[overlaps]
+peak_occurrence_df$h3k27me3 <- peak_occurrence_df$gene_id %in% overlapping_genes
+table(peak_occurrence_df$h3k27me3)
 
 # K27ac Promoter overlaps
 ov2 <- findOverlaps(promoters, hmark_granges[[2]])
 overlaps <- unique(ov2@from)
-hmark_occurrence[overlaps,2] <- 1
-table(hmark_occurrence[,2])
+overlapping_genes <- promoters$gene_id[overlaps]
+peak_occurrence_df$h3k27ac <- peak_occurrence_df$gene_id %in% overlapping_genes
+table(peak_occurrence_df$h3k27ac)
 
-# Making a data frame of all promoters K27me3 and K27ac status as binary integers.
-# Changing row names to be compatible with peak_occurrence_df
-hmark_occurrence_df <- as.data.frame(hmark_occurrence) %>% rownames_to_column("gene_id")
-
-# merging into peak_occurence_df histone calls by gene_id
-peak_occurrence_df_histone <- merge(peak_occurrence_df, hmark_occurrence_df, by = "gene_id")
 
 # Writting out final peak_occurrence_df !
+# First have to change histone mark overlaps to numeric from logical
+peak_occurrence_df$k27me3 <- as.numeric(peak_occurrence_df$h3k27me3)
+peak_occurrence_df$k27ac <- as.numeric(peak_occurrence_df$h3k27ac)
 
-write.csv(peak_occurrence_df_histone, "results/peak_occurence_df.csv")
+#remove old histone logical call columns
+peak_occurrence_df <- subset(peak_occurrence_df, select= -c(18,19))
+
+# Here it is: the final peak_occurrence_df
+
+write.csv(peak_occurrence_df, "results/peak_occurence_df.csv")
 
 ```
 
@@ -105,8 +103,6 @@ I looked up coordinates in UCSC and then tried to find a window in bed file -- d
 library(eulerr)
 genes.venn <- euler(hmark_se_occurrence_matrix[,c(-3,-4,-5)])
 plot(genes.venn, quantities = TRUE)
-
-
 
 
 ```
