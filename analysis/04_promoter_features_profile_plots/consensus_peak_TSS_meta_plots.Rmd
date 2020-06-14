@@ -142,6 +142,8 @@ tc3  <- tag_count_df %>% filter(dbp == "eGFP-ZNF507")
 g3 <- plot_profile(tc3, "eGFP-ZNF507")
 
 gridExtra::grid.arrange(g2, g1, g6, g3, nrow = 2)
+
+#TODO this only saves last example eGFP-ZNF507
 ggsave("figures/example_cluster_profiles.pdf")
 ggsave("figures/example_cluster_profiles.png")
 ```

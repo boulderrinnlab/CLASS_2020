@@ -18,15 +18,11 @@ source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
 
-# Global clustering
+# Global clustering of DBPs by binding profiles
 
 ```{r import-data}
-# We are going to start out with a function to import files called "import_peaks"
-# This the filtered consensus_peaks; final list of 161 TFs after filtering
-# consensus_peaks <- import_peaks("../01_consensus_peaks/results/consensus_peaks")
 
 # Let's grab both the lncRNA and mRNA promoters
-# proms <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
 lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
 mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
 

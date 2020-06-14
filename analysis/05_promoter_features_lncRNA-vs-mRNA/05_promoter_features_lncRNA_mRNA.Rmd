@@ -6,6 +6,7 @@ editor_options:
 ---
 
 ``` {r setup, include=FALSE}
+
 options(stringsAsFactors = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 source("../util/intersect_functions.R")
@@ -17,17 +18,13 @@ library(regioneR)
 ```
 
 
-Some of these results don't make sense in the last chunck of enrichment of mRNA vs lncRNA 
-How come egfp-ZNF507 didn't come up in the previous plots 
-I think we just need some consistency with the text in outputs -- simple :)
-Or I am simply confusing that BRCA1 and ZNF507 both bind mRNA and lncNRA more than permutation chance. But bind to lncRNAs more than mRNA promoters when comparing the peak counts on these promoters in observed space.
 
 
-# Also missing the slope plots of mRNA vs lncRNA binding events? It's all in 02_ permutations -- we may want to dissect out the mRNA vs lncRNA aspects to be consistent with the text.
+# Loading in our promoter features for lncRNA and mRNA to compare seperately
 
 ```{r}
 # Import peaks
-consensus_peaks <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks/")
+peak_list <- import_peaks("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/consensus_peaks/filtered_by_peaks/")
 # Import gencode
 lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
 mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
@@ -41,9 +38,9 @@ mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurr
 # This plots the number of overlaps with lncRNA and mRNA promoter
 ```{r}
 # Check that the order is the same.
-stopifnot(all(names(consensus_peaks) == rownames(lncrna_matrix)))
+stopifnot(all(names(peak_list) == rownames(lncrna_matrix)))
 num_peaks_df <- data.frame("dbp" = rownames(lncrna_matrix),
-                           "total_number_of_peaks" = sapply(consensus_peaks, length),
+                           "total_number_of_peaks" = sapply(peak_list, length),
                            "lncrna" = rowSums(lncrna_matrix),
                            "mrna" = rowSums(mrna_matrix))
 
@@ -101,23 +98,25 @@ plot_perm_test <- function(row, df) {
             subtitle = paste0("padj = ", padj, " nperms = ", nperm))
   return(g)
 }
+
+#Plotting DBPs that are depleted for promoters relative to permutations
 pl <- lapply(1:nrow(depleted_on_promoters), plot_perm_test, df = depleted_on_promoters)
 gridExtra::grid.arrange(grobs = pl, ncol = 1)
+
+ggsave("figures/dbps_depleted_on_promoters.pdf")
 ```
 
-TODO: Depleted on promoters:
 
 `r paste(paste(depleted_on_promoters$region, depleted_on_promoters$tf, sep = "-"), collapse = " ")`
 
-#TODO Somehting seems odd BRCA1 is that is more enriched on lncRNA vs mRNA but in general BRCA1 binds to lncRNA and mRNA promoters more than expected by permutations
-And a few were neither enriched or depleted.
-Thus, some proteins bind equally to mRNA and lncRNA promoters BRCA1 would have to be one of these cases based on above.
-Where it was found to be enriched on 
 
 ```{r, fig.width=7, fig.height=13}
+
+#Plotting examples of genes that are neither enriched nor depleted on promoters
 ns_promoters <- perm_res_promoters %>% filter(padj > 0.01)
 pl <- lapply(1:nrow(ns_promoters), plot_perm_test, df = ns_promoters)
 gridExtra::grid.arrange(grobs = pl, ncol = 1)
+ggsave("figures/dbps_no_pref_promoter_non_promoter.pdf")
 ```
 
 Not significant:

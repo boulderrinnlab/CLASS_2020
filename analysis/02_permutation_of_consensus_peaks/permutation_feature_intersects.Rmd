@@ -21,17 +21,15 @@ source("../util/_setup.R")
 # Our goal here is take the consensus peaks for each DBP and randomize them around the genome 1,000 times. Each time we will count how it overlaps a feature tested in this study (e.g. promoters)
 ```{r setup-slurm-permutations}
 
-#### IMPORT peaks and features to test overlaps during the randomizations(permutations) ####
+# IMPORT peaks and features to test overlaps during the randomizations(permutations) ####
 
-
-#TODO minimize to 01_peak_occurence_data frame?
-peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/")
+peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/filtered_by_peaks/")
 
 lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
 mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
 
-lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurence")
-mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurence")
+lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
+mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
 
 rmsk <- import_repeatmasker()
 rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
