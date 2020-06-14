@@ -44,6 +44,8 @@ First, we need to filter out those DBPs that don't have any peaks common in repl
 # Plotting distributions of number of peaks that concur between replicates (note many @ 0)
 num_peaks_df <- data.frame("dbp" = names(consensus_peaks),
                            "num_peaks" = sapply(consensus_peaks, length))
+
+# Plotting the number of consensus peaks per DBP.
 g <- ggplot(num_peaks_df, aes(x = num_peaks))
 g + geom_histogram(bins = 70) +
   xlab("Number of consensus peaks") +
@@ -204,8 +206,11 @@ And it does seem that RFX1 has just `r nrow(peak_widths_df[which(peak_widths_df$
 ### Example of RFX1 peak
 
 ```{r}
-# TODO: consider moving to a setup file.
-# Let's make a gencode "genemodel"
+
+# Loading in Gencode annotaitons to start intersecting with genomic features
+
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
 gencode_gm <- gencode_gr %>%
   as.data.frame() %>%
   filter(type == "exon") %>%
@@ -217,45 +222,14 @@ names(gencode_gm) <- c("chromosome", "start", "end", "width", "strand",
 write_csv(gencode_gm, "../util/gencode_genemodel_for_Gviz.csv")
 ```
 
-```{r rfx1-track}
-# Let's choose the largest RFX1 peak to plot
-largest_rfx1_peak <- filtered_consensus_peaks[["RFX1"]][which.max(width(filtered_consensus_peaks[["RFX1"]]))]
-
-plot_replicate_peaks("RFX1", 
-                     largest_rfx1_peak, 
-                     bw_axis_limits = list(c(0,0.6)),
-                     plot_title = "RFX1 largest peak",
-                     save_pdf = T,
-                     height_per_dbp = 4,
-                     fixed_height = 3,
-                     pdf_path = "figures/RFX1_largest_peak_track.pdf",
-                     display_plot = F)
-
-# Just as an example of plotting multiple dbps, let's add in another here
-# in this same region
-# TODO: clean this up later. 
-plot_replicate_peaks(c("RFX1", "AFF1"), 
-                     region, 
-                     bw_axis_limits = list(c(0,0.6), c(0,1)),
-                     plot_title = "RFX1 AFF1 peaks",
-                     height_per_dbp = 4,
-                     fixed_height = 3,
-                     save_pdf = T,
-                     pdf_path = "figures/RFX1_AFF1_peak_track.pdf",
-                     display_plot = F)
-```
-
-
-
-
 
 #### DNA binding protein distribution at promoters
 
 The purpose of this code is to determine the distribution of DNA-binding proteins (DBPs) at promoters. We will look at the number of DBPs bound at a given promoter as well as whether there are any promoters which are not bound by any DBPs. We will also ask whether any DBPs do not bind to any promoters.
 
 ```{r gencode-import}
-gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-# For convenience, we'll export these lists to read in the following analyses. 
+
+# We are going to make promoter annotation lists for lncRNA and mRNA together and seperate
 # We are using the function 'get_promoter_regions' see "../util/intersect_functions.R"
 lncrna_mrna_promoters <- get_promoter_regions(gencode_gr, biotype = c("lncRNA", "protein_coding"))
 rtracklayer::export(lncrna_mrna_promoters, "results/lncrna_mrna_promoters.gtf")
@@ -319,6 +293,7 @@ stopifnot(all(colnames(promoter_peak_occurence) == lncrna_mrna_promoters$gene_id
 peak_occurence_df <- data.frame("gene_id" = colnames(promoter_peak_occurence),
                                 "gene_name" = lncrna_mrna_promoters$gene_name,
                                 "gene_type" = lncrna_mrna_promoters$gene_type,
+                                "chr" = lncrna_mrna_promoters@seqnames,   
                                 "3kb_up_tss_start" = lncrna_mrna_promoters@ranges@start,
                                 "strand" = lncrna_mrna_promoters@strand,
                                 "number_of_dbp" = colSums(promoter_peak_occurence))
@@ -344,6 +319,7 @@ g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
 ggsave("figures/k562_promoter_binding_density.png")
 ggsave("figures/k562_promoter_binding_density.pdf")
 
+#Histogram of the smae
 g <- ggplot(peak_occurence_df, aes(x = number_of_dbp))
 g + geom_histogram(color = "#424242", fill = "#424242") +
   theme_paperwhite() +
@@ -353,37 +329,45 @@ g + geom_histogram(color = "#424242", fill = "#424242") +
           subtitle = "mRNA and lncRNA genes")
 ggsave("figures/k562_promoter_binding_histogram.png")
 ggsave("figures/k562_promoter_binding_histogram.pdf")
+
+
+summary(peak_occurence_df)
 ```
-
-#TODO : Print, min, max, range, deriviative around 15? Kinda cool result to include
-
 
 
 ```{r unbound-promoters}
 # just locating the unbound promoters in any experiment
 unbound_promoters <- peak_occurence_df %>% filter(peak_occurence_df$number_of_dbp < 1)
 write_csv(unbound_promoters, "results/unbound_lncrna_mrna_promoters.csv")
+
+# 7 promoters are not bound
+length(unbound_promoters)
 ```
 
 ```{r}
 # Determining how many DBPs don't bind to any promoters.
 dbp_promoter_ovl <- get_overlapping_peaks(lncrna_mrna_promoters, filtered_consensus_peaks)
 num_ovl <- sapply(dbp_promoter_ovl, length)
+
+
+#TODO when I do length num_ovl
+length(num_ovl)
+summary(num_ovl)
 ```
 
 There are no proteins that don't overlap any promoters and the least number of promoters bound is `r names(num_ovl)[which(num_ovl == min(num_ovl))]` which overlapped `r min(num_ovl)`
 
 ```{r}
-##TODO Refector or remove?
+##TODO Help just starting with GGplot
 
-promoter_peak_counts <- count_peaks_per_feature(lncrna_mrna_promoters, filtered_consensus_peaks,                                               type = "counts")
 
-num_peaks_df$peaks_overlapping_lncrna_promoters <- rowSums(promoter_peak_counts[, lncrna_mrna_promoters$gene_id])
-num_peaks_df$peaks_overlapping_mrna_promoters <- rowSums(promoter_peak_counts[,mrna_promoters$gene_id])
-num_peaks_dfl <- num_peaks_df %>% pivot_longer(4:5, names_to = "promoter_type",
-                                               values_to = "peaks_overlapping_promoters")
+ggplot(num_peaks_df, aes(x = num_peaks, y = peaks_overlapping_promoters, col = peaks_overlapping_mrna_promoters, fill = peaks_overlapping_lncrna_promoters)) +
+         geom_point() +
+         geom_abline(slope = 1, linetype="dashed") +
+  geom_smooth()
 
-ggplot(num_peaks_dfl,
+
+
        aes(x = num_peaks, y = peaks_overlapping_promoters, color = promoter_type)) +
   scale_color_manual(values = c("#424242", "#a8404c"))+
   xlab("Peaks per TF") +
