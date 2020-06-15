@@ -21,7 +21,6 @@ source("../util/_setup.R")
 # Global clustering of DBPs by binding profiles
 
 ```{r import-data}
-
 # Let's grab both the lncRNA and mRNA promoters
 lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
 mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
@@ -84,7 +83,7 @@ labels <- hdbscan(umap_fit$layout, minPts = 6)
 umap_df$cluster <- factor(labels$cluster)
 write_csv(umap_df, "results/umap_lncrna_mrna_promoters.csv")
 
-
+#### FIGURE: Figure 2A
 col_pal <- c("#653EB3", "#B3823E", "#78B33E", "#3E9FB3", "#666666", "#fd8d3c", "#B33E52")
 g <- ggplot(umap_df, aes(x = V1, y = V2, label = dbp, color = cluster))
 g + geom_point() + 
@@ -111,53 +110,7 @@ clusters_df <- umap_df %>%
   mutate(dbp = gsub("eGFP-","", dbp))
 write_csv(clusters_df, "results/umap_clusters.csv")
 knitr::kable(clusters_df)
-```
 
-
-
-#TODO : go terms of each cluster, Highlight features (egfp Pol II etc )
-
-### Sub clustering of largest cluster
-
-#```{r umap-large-cluster, fig.height=10, fig.width=10.5}
-dbps_in_large_cluster <- umap_df[umap_df$cluster == 7, "dbp"]
-lc_peak_occurence <- promoter_peak_occurence[dbps_in_large_cluster,]
-
-umap_params <- umap.defaults
-umap_params$n_neighbors <- 4
-umap_params$min_dist <- 0.1
-umap_params$spread <- 0.15
-umap_params$random_state <- 2187
-
-umap_fit <- umap(lc_peak_occurence, config = umap_params)
-umap_sub <- umap_fit$layout %>% as.data.frame() %>%
-  rownames_to_column("dbp")
-
-labels <- hdbscan(umap_fit$layout, minPts = 4)
-umap_sub$cluster <- factor(labels$cluster)
-write_csv(umap_sub, "results/umap_largest_subcluster.csv")
-
-
-col_pal <- c("#666666", "#9e9ac8", "#6b6ecf", "#B3823E", "#fd8d3c", "#78B33E", "#653EB3", "#6baed6", "#d6616b", "#3E9FB3")
-g <- ggplot(umap_sub, aes(x = V1, y = V2, label = dbp, color = cluster))
-g + geom_point()  +
-    ggtitle("UMAP: large subcluster",
-          subtitle = "mRNA and lncRNA promoters") +
-  theme_paperwhite() +
-  theme(axis.title = element_blank(),
-        axis.text = element_blank(),
-        axis.ticks = element_blank()) +
-  scale_color_manual(values = col_pal) + 
-  geom_text_repel()
-ggsave("figures/umap_large_subcluster_promoters.png", height = 11, width = 11.5)
-ggsave("figures/umap_large_subcluster_promoters.pdf", height = 11, width = 11.5)
-
-clusters_df <- umap_sub %>%
-  dplyr::select(cluster, dbp) %>%
-  group_by(cluster) %>%
-  summarize(dbp = paste(dbp, collapse = " ")) %>%
-  mutate(dbp = gsub("eGFP-","", dbp))
-write_csv(clusters_df, "results/umap_clusters.csv")
-knitr::kable(clusters_df)
+# TODO : go terms of each cluster, Highlight features (egfp Pol II etc )
 ```
 
