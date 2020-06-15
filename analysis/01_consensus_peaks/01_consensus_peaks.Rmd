@@ -232,14 +232,12 @@ plot_replicate_peaks("RFX1",
                      save_pdf = T,
                      height_per_dbp = 4,
                      fixed_height = 3,
-                     pdf_path = "figures/RFX1_largest_peak_track.pdf")
+                     pdf_path = "figures/RFX1_largest_peak_track.pdf",
+                     png_path = "figures/RFX1_largest_peak_track.png")
 ```
 
 
-<object data="figures/RFX1_largest_peak_track.pdf" type="application/pdf" width="900px" height="600px">
-    <embed src="figures/RFX1_largest_peak_track.pdf">
-    </embed>
-</object>
+![](figures/RFX1_largest_peak_track.png)
 
 #### DNA binding protein distribution at promoters
 

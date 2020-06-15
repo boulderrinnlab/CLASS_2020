@@ -15,7 +15,7 @@
 #' documentation. 
 #' @param plot_title Main plot title
 plot_replicate_peaks <- function(dbps, region, bw_axis_limits, plot_title,
-                                 save_pdf = T, pdf_path, 
+                                 save_pdf = T, pdf_path, png_path,
                                  height_per_dbp = 5,
                                  fixed_height = 3,
                                  width = 12,
@@ -97,7 +97,13 @@ plot_replicate_peaks <- function(dbps, region, bw_axis_limits, plot_title,
     }
     # The pdf height should be about +5 in per dbp
     total_height <- fixed_height + (height_per_dbp * length(dbps))
+    # PDF
     pdf(pdf_path, height = total_height, width = width)
+    eval(parse(text = full_plot_call))
+    dev.off()
+    # PNG
+    png(png_path, height = total_height, width = width, units = "in",
+        res = 300)
     eval(parse(text = full_plot_call))
     dev.off()
   }

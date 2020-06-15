@@ -273,17 +273,15 @@ plot_replicate_peaks("RFX1",
                      save_pdf = T,
                      height_per_dbp = 4,
                      fixed_height = 3,
-                     pdf_path = "figures/RFX1_largest_peak_track.pdf")
+                     pdf_path = "figures/RFX1_largest_peak_track.pdf",
+                     png_path = "figures/RFX1_largest_peak_track.png")
 ```
 
     ## RStudioGD 
     ##         2
 
-<object data="figures/RFX1_largest_peak_track.pdf" type="application/pdf" width="900px" height="600px">
-    <embed src="figures/RFX1_largest_peak_track.pdf">
-    </embed>
+![](figures/RFX1_largest_peak_track.png)
 
-</object>
 #### DNA binding protein distribution at promoters
 
 The purpose of this code is to determine the distribution of DNA-binding proteins (DBPs) at promoters. We will look at the number of DBPs bound at a given promoter as well as whether there are any promoters which are not bound by any DBPs. We will also ask whether any DBPs do not bind to any promoters.
