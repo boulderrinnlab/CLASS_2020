@@ -23,10 +23,31 @@ First, we need to filter out those DBPs that don't have any peaks common in repl
 # Plotting distributions of number of peaks that concur between replicates (note many @ 0)
 num_peaks_df <- data.frame("dbp" = names(consensus_peaks),
                            "num_peaks" = sapply(consensus_peaks, length))
+```
 
+#### DBPs that did not have a single peak in common in replicates
+
+The proteins with zero consensus peaks are: MCM2 MCM5 MCM7 NR3C1 TRIM25
+
+``` r
+# We're going to apply a cutoff at 250 peaks           
+num_peaks_threshold <- 250
+threshold_percentile <- round(ecdf(num_peaks_df$num_peaks)(num_peaks_threshold)*100,1)
+
+filtered_consensus_peaks <- consensus_peaks[num_peaks_df$num_peaks > num_peaks_threshold]
+```
+
+``` r
+### FIGURE: Supplemental 1A
 # Plotting the number of consensus peaks per DBP.
 g <- ggplot(num_peaks_df, aes(x = num_peaks))
 g + geom_histogram(bins = 70) +
+  geom_vline(xintercept = num_peaks_threshold, lty = 2,
+             size = 1.1, color = "#a8404c") +
+  annotate(geom = "text", x = num_peaks_threshold + 3e3, y = 35, 
+           color = "#a8404c", label = paste0("t=", num_peaks_threshold)) +
+    annotate(geom = "text", x = num_peaks_threshold + 2.2e3, y = 32, 
+           color = "#a8404c", label = paste0(round(threshold_percentile,0), "%")) +
   xlab("Number of consensus peaks") +
   ylab("Count") +
   ggtitle("Distribution of number of consensus peaks")
@@ -40,19 +61,7 @@ ggsave("figures/consensus_peaks_histogram.pdf")
 
     ## Saving 7 x 5 in image
 
-#### DBPs that did not have a single peak in common in replicates
-
-The proteins with zero consensus peaks are: MCM2 MCM5 MCM7 NR3C1 TRIM25
-
 Now that we have replicate concordance, we note that 85% of DPBs have &gt;250 peaks in common across replicates, so we make a cutoff there at the 15th percentile.
-
-``` r
-# We're going to apply a cutoff at 250 peaks           
-num_peaks_threshold <- 250
-threshold_percentile <- round(ecdf(num_peaks_df$num_peaks)(num_peaks_threshold)*100,1)
-
-filtered_consensus_peaks <- consensus_peaks[num_peaks_df$num_peaks > num_peaks_threshold]
-```
 
 Since this captures the majority of DPBs and still provides a reasonable number of peaks to work with, we chose a cutoff of 250 peaks. This corresponds to a cutoff at the 15.3th percentile and results in losing the following proteins: ARNT BCLAF1 COPS2 CSDE1 DNMT1 eGFP-ETS2 FOXA1 KAT8 KDM4B MCM2 MCM5 MCM7 NCOA1 NCOA2 NCOA4 NR0B1 NR3C1 NUFIP1 PYGO2 THRA TRIM25 TRIP13 XRCC3 YBX1 YBX3 ZBTB8A ZC3H8 ZNF318 ZNF830
 
@@ -312,16 +321,17 @@ num_peaks_df$peaks_overlapping_promoters <- rowSums(promoter_peak_counts)
 num_peaks_df$peaks_overlapping_lncrna_promoters <- rowSums(promoter_peak_counts[,lncrna_promoters$gene_id])
 num_peaks_df$peaks_overlapping_mrna_promoters <- rowSums(promoter_peak_counts[,mrna_promoters$gene_id])
 
+#### FIGURE: Figure 1C
 # Plotting the number of peaks per DBP and how many promoters were overlapped.
 ggplot(num_peaks_df,
        aes(x = num_peaks, y = peaks_overlapping_promoters)) +
-  scale_color_manual(values = c("#424242", "#a8404c"))+
   xlab("Peaks per DBP") +
   ylab("Number of peaks overlapping promoters") +
   ggtitle("Relationship Between Number of DBP Peaks and Promoter Overlaps")+
   geom_point() +
   geom_abline(slope = 1, linetype="dashed") +
-  geom_smooth(method = "lm", se=F, formula = 'y ~ x') +
+  geom_smooth(method = "lm", se=F, formula = 'y ~ x',
+              color = "#a8404c") +
   stat_regline_equation(label.x = 35000, label.y = 18000) +
   ylim(0,60100) +
   xlim(0,60100)
@@ -379,6 +389,43 @@ ggplot(num_peaks_df,
 ```
 
 ![](01_consensus_peaks_files/figure-markdown_github/peaks_vs_promoter_overlaps-3.png)
+
+``` r
+# Get gene body regions for lncRNA and mRNA
+lncrna_mrna_genebody <- gencode_gr[gencode_gr$type == "gene" & 
+                                     gencode_gr$gene_type %in% c("lncRNA", "protein_coding")]
+
+genebody_peak_counts <- count_peaks_per_feature(lncrna_mrna_genebody, 
+                                                filtered_consensus_peaks, 
+                                                type = "counts")
+
+# Check ordering
+stopifnot(all(rownames(genebody_peak_counts) == num_peaks_df$dbp))
+num_peaks_df$peaks_overlapping_genebody <- rowSums(genebody_peak_counts)
+
+#### FIGURE: Figure 1D
+# Plotting the number of peaks per DBP and how many gene bodies were overlapped.
+ggplot(num_peaks_df,
+       aes(x = num_peaks, y = peaks_overlapping_genebody)) +
+  xlab("Peaks per DBP") +
+  ylab("Number of peaks overlapping genes") +
+  ggtitle("Relationship Between Number of DBP Peaks and Gene Body Overlaps")+
+  geom_point() +
+  geom_abline(slope = 1, linetype="dashed") +
+  geom_smooth(method = "lm", se=F, formula = 'y ~ x',
+              color = "#a8404c") +
+  stat_regline_equation(label.x = 35000, label.y = 18000) +
+  ylim(0,60100) +
+  xlim(0,60100)
+```
+
+![](01_consensus_peaks_files/figure-markdown_github/gene-body-overlap-1.png)
+
+``` r
+ggsave("figures/peak_number_vs_gene_overlap.pdf")
+```
+
+    ## Saving 7 x 5 in image
 
 #### Goal: let's bring all of these data together into a dataframe, that we will keep adding columns to as we go (rows are promoters).
 
