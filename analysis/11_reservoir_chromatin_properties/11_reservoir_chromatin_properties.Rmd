@@ -1,6 +1,5 @@
 ---
 title: "11_reservoir_chromatin_properties"
-author: "JR"
 date: "5/29/2020"
 output: html_document
 editor_options: 
@@ -11,6 +10,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(GenomicRanges)
+library(eulerr)
 source("../util/intersect_functions.R")
 source("../util/_setup.R")
 
@@ -78,7 +78,7 @@ peak_occurrence_df$k27me3 <- as.numeric(peak_occurrence_df$h3k27me3)
 peak_occurrence_df$k27ac <- as.numeric(peak_occurrence_df$h3k27ac)
 
 #remove old histone logical call columns
-peak_occurrence_df <- subset(peak_occurrence_df, select= -c(18,19))
+peak_occurrence_df <- subset(peak_occurrence_df, select= -c(19,20))
 
 # Here it is: the final peak_occurrence_df
 
@@ -86,23 +86,47 @@ write.csv(peak_occurrence_df, "results/peak_occurence_df.csv")
 
 ```
 
-#TODO I spot checked and couldn't find the first test example :
 
-	
-ENSG00000002822.15
+# Figure 5a DBP-vs-Nascent TPM
+```{r}
+# Let's plot the density of nascent transcription relative to the number of DBPs bound.
 
-I looked up coordinates in UCSC and then tried to find a window in bed file -- didn't seem to overlap?
+ggplot(peak_occurrence_df, aes(x=number_of_dbp, y= log10(nascentTpm))) +
+       geom_point() 
+
+ggsave("figures/DBP_vs_nascent.pdf")
+
+
+```
+
+# Define Ghost and Zombies and write to peak occurence df
+```{r}
+ghost <-
+zombie <-
+  
+  hypergeometric of zhombie lncRNA/mRNA representaiton
+  
+  
+ write to peak_occurrence_df
+```
+
+# Figure 5b: # DBP distribution of DBPs between ghost and zombie
+```{r}
 
 
 
 
-#START HERE
+```
+
+
+
 
 ```{r}
 #plotting histone occurrence and super enhancer occurrence
-library(eulerr)
-genes.venn <- euler(hmark_se_occurrence_matrix[,c(-3,-4,-5)])
+
+genes.venn <- euler(peak_occurrence_df[,c(10,19,20)])
 plot(genes.venn, quantities = TRUE)
+ggsave("figures/venn_chroamtin_ov_resvoirs.pdf")
 
 
 ```

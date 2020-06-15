@@ -44,6 +44,8 @@ g + geom_density(alpha = 0.2, fill = "#a8404c") +
   geom_vline(xintercept = 7, lty = 2)
 ggsave("figures/all_genes_binding_distribution.pdf")
 
+summary(peak_occurrence_df)
+
 # Comparing the density distribution above for non-expressed promoters seperately. 
 # Interestingly, mRNA and lncRNA promoters that are not expressed have similar DBP density distributions. 
 # Unlike that was seen 07_binding_versus_expression
@@ -64,7 +66,7 @@ ggsave("figures/expressed_genes_binding_distribution.pdf")
 ```
 
 ```{r}
-### Supplemental 4D
+### Supplemental 4B
 num_peaks_threshold <- 7
 g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
 g + stat_ecdf() + 
@@ -90,7 +92,7 @@ write_csv(peak_occurrence_df, "results/08_peak_occurence_df_resvoirs.csv")
 ```
 
 ```{r percent-lncrna}
-#### Supplemental 4E
+#### Supplemental 4C
 # Todo add reservoir yes or no to x axis (i should have been able to get this :) added xlab argument at end
 reservoirs_by_gene_type <- peak_occurrence_df %>%
   group_by(gene_type, reservoir) %>%
