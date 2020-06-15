@@ -58,9 +58,8 @@ ggsave("figures/consensus_peaks_histogram.pdf")
 
 The proteins with zero consensus peaks are: `r paste(num_peaks_df[which(num_peaks_df$num_peaks == 0), "dbp"], collapse = " ")`
 
-#### Peaks cutoff: now that we have replicate concordance, we next filter on having at least 250 peaks in common, based on distribution of 
 
-#TODO what quartile is 250 peaks we should justify above.
+Now that we have replicate concordance, we note that 85% of DPBs have >250 peaks in common across replicates, so we make a cutoff there at the 15th percentile. 
 
 ```{r min-peaks-cutoff}
 # We're going to apply a cutoff at 250 peaks           
@@ -98,7 +97,8 @@ write_csv(num_peaks_df, "results/number_of_peaks_per_dbp.csv")
 
 g <- ggplot(num_peaks_df, aes(x = num_peaks, y = total_peak_length, label = dbp))
 g + geom_point() + 
-  geom_smooth(method = "lm", se = FALSE, color = "black", lty = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", lty = 2,
+              formula = 'y ~ x') +
   geom_text() +
   ylab("BP covered") +
   xlab("Number of peaks") +
@@ -201,14 +201,12 @@ g + geom_histogram(bins = 100) +
 ggsave("figures/peak_width_distribution_RFX1.pdf")
 ```
 
-And it does seem that RFX1 has just `r nrow(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),])` peaks which are above 3000 bps which is skewing the distribution. With one peak that has a width of `r max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])`.
+RFX1 has just `r nrow(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),])` peaks which are above 3000 bps which is skewing the distribution. With one peak that has a width of `r max(peak_widths_df[which(peak_widths_df$dbp == "RFX1" & peak_widths_df$peak_width > 3000),"peak_width"])`.
 
 ### Example of RFX1 peak
 
-```{r}
-
+```{r track-plotting-setup}
 # Loading in Gencode annotaitons to start intersecting with genomic features
-
 gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
 gencode_gm <- gencode_gr %>%
@@ -222,6 +220,26 @@ names(gencode_gm) <- c("chromosome", "start", "end", "width", "strand",
 write_csv(gencode_gm, "../util/gencode_genemodel_for_Gviz.csv")
 ```
 
+```{r rfx1-track}
+# Let's choose the largest RFX1 peak to plot
+lg_rfx1_peak_index <- which.max(width(filtered_consensus_peaks[["RFX1"]]))
+largest_rfx1_peak <- filtered_consensus_peaks[["RFX1"]][lg_rfx1_peak_index]
+
+plot_replicate_peaks("RFX1", 
+                     region = largest_rfx1_peak, 
+                     bw_axis_limits = list(c(0,0.6)),
+                     plot_title = "RFX1 largest peak",
+                     save_pdf = T,
+                     height_per_dbp = 4,
+                     fixed_height = 3,
+                     pdf_path = "figures/RFX1_largest_peak_track.pdf")
+```
+
+
+<object data="figures/RFX1_largest_peak_track.pdf" type="application/pdf" width="900px" height="600px">
+    <embed src="figures/RFX1_largest_peak_track.pdf">
+    </embed>
+</object>
 
 #### DNA binding protein distribution at promoters
 
@@ -241,11 +259,9 @@ mrna_promoters <- get_promoter_regions(gencode_gr, biotype = "protein_coding")
 rtracklayer::export(mrna_promoters, "results/mrna_promoters.gtf")
 ```
 
+#### Promoter overlaps compared to toal number of peaks for each DBP
 
-# Promoter overlaps compared to toal number of peaks for each DBP
-# Goal: first to count the number of DBPs on each promoter (this uses 'count_peaks_per_feature' function "../util/intersect_funcitons.R")
-
-```{r}
+```{r peaks_vs_promoter_overlaps}
 num_peaks_df <- data.frame("dbp" = names(filtered_consensus_peaks),
                            "num_peaks" = sapply(filtered_consensus_peaks, length))
 # Getting number of overlaps of DBPs per promoter(type)
@@ -265,18 +281,50 @@ ggplot(num_peaks_df,
   ggtitle("Relationship Between Number of DBP Peaks and Promoter Overlaps")+
   geom_point() +
   geom_abline(slope = 1, linetype="dashed") +
-  geom_smooth(method = "lm", se=FALSE) +
-  stat_regline_equation(label.x = 35000, label.y = 16000) + 
+  geom_smooth(method = "lm", se=F, formula = 'y ~ x') +
+  stat_regline_equation(label.x = 35000, label.y = 18000) +
   ylim(0,60100) +
   xlim(0,60100)
 
 ggsave("figures/peak_number_vs_promoter_overlap.pdf")
+
+
+# While a linear fit broadly captures the trend, 
+# the DBPs with a large number of peaks tends to skew
+# the trend as there are proportionately more 
+# non-promoter binding events in those DPBs with many peaks.
+# The trend is much more linear for DBPs with few binding events.
+ggplot(num_peaks_df,
+       aes(x = num_peaks, y = peaks_overlapping_promoters)) +
+  scale_color_manual(values = c("#424242", "#a8404c"))+
+  xlab("Peaks per DBP") +
+  ylab("Number of peaks overlapping promoters") +
+  ggtitle("Relationship Between Number of DBP Peaks and Promoter Overlaps")+
+  geom_point() +
+  geom_abline(slope = 1, linetype="dashed") +
+  geom_smooth(method = "lm", se = TRUE, formula = 'y ~ x') +
+  ylim(0,2000) + xlim(0,2000) + 
+  stat_regline_equation()
+
+# A loess fit shows illustrates this quite well.
+# In short, that's why the intercept is pulled up
+# to ~1200 vs. the ~250 that you might expect.
+ggplot(num_peaks_df,
+       aes(x = num_peaks, y = peaks_overlapping_promoters)) +
+  scale_color_manual(values = c("#424242", "#a8404c"))+
+  xlab("Peaks per DBP") +
+  ylab("Number of peaks overlapping promoters") +
+  ggtitle("Relationship Between Number of DBP Peaks and Promoter Overlaps")+
+  geom_point() +
+  geom_abline(slope = 1, linetype="dashed") +
+  geom_smooth(method = "lm", se = TRUE, formula = 'y ~ x') +
+  geom_smooth(method = "loess", color = "#a8404c", formula = 'y ~ x') 
 ```
 
 
-# Goal: let's bring all of these data together into a dataframe, that we will keep adding columns to as we go (rows are promoters).
+#### Goal: let's bring all of these data together into a dataframe, that we will keep adding columns to as we go (rows are promoters).
 
-```{r count-peaks-per-promoter}
+```{r peak-occurrence-per-promoter}
 
 # First we will establish the promoter peak occurence matrix (rows = promoters, cols = dbp binding {0,1})
 promoter_peak_occurence <- count_peaks_per_feature(lncrna_mrna_promoters, filtered_consensus_peaks, 
@@ -304,9 +352,10 @@ write_csv(peak_occurence_df, "results/peak_occurence_dataframe.csv")
 
 ```
 
+Now that we have our consensus peaks organized, characterized and filtered above we return to our goal
 
-# Now that we have our consensus peaks organized, characterized and filtered above we return to our goal
-# Goal: density plot the number of DBPs per promoter 
+#### Goal: density plot the number of DBPs per promoter 
+
 ```{r promoter-peak-distribution}
 # Make a density plot of all promoter binding events per goal #1.
 g <- ggplot(peak_occurence_df, aes(x = number_of_dbp))
@@ -315,28 +364,27 @@ g + geom_density(alpha = 0.2, color = "#424242", fill = "#424242") +
   xlab(expression("Number of DBPs")) +
   ylab(expression("Density")) +
   ggtitle("Promoter binding events",
-          subtitle = "mRNA and lncRNA genes")
+          subtitle = "mRNA and lncRNA genes") 
 ggsave("figures/k562_promoter_binding_density.png")
 ggsave("figures/k562_promoter_binding_density.pdf")
 
-#Histogram of the smae
+# Histogram of the same data
 g <- ggplot(peak_occurence_df, aes(x = number_of_dbp))
-g + geom_histogram(color = "#424242", fill = "#424242") +
+g + geom_histogram(color = "#424242", fill = "#424242", bins = 30) +
   theme_paperwhite() +
   xlab(expression("Number of DBPs")) +
   ylab(expression("Count")) +
   ggtitle("Promoter binding events",
-          subtitle = "mRNA and lncRNA genes")
+          subtitle = "mRNA and lncRNA genes") 
 ggsave("figures/k562_promoter_binding_histogram.png")
 ggsave("figures/k562_promoter_binding_histogram.pdf")
-
 
 summary(peak_occurence_df)
 ```
 
 
 ```{r unbound-promoters}
-# just locating the unbound promoters in any experiment
+# Just locating the unbound promoters in any experiment
 unbound_promoters <- peak_occurence_df %>% filter(peak_occurence_df$number_of_dbp < 1)
 write_csv(unbound_promoters, "results/unbound_lncrna_mrna_promoters.csv")
 
@@ -344,40 +392,38 @@ write_csv(unbound_promoters, "results/unbound_lncrna_mrna_promoters.csv")
 length(unbound_promoters)
 ```
 
-```{r}
+```{r non-promoter-binding-dpbs}
 # Determining how many DBPs don't bind to any promoters.
 dbp_promoter_ovl <- get_overlapping_peaks(lncrna_mrna_promoters, filtered_consensus_peaks)
 num_ovl <- sapply(dbp_promoter_ovl, length)
 
-
-#TODO when I do length num_ovl
-length(num_ovl)
+min(num_ovl)
 summary(num_ovl)
 ```
 
 There are no proteins that don't overlap any promoters and the least number of promoters bound is `r names(num_ovl)[which(num_ovl == min(num_ovl))]` which overlapped `r min(num_ovl)`
 
-```{r}
-##TODO Help just starting with GGplot
+```{r lncRNA-mRNA-overlaps}
+# Arrange the lncRNA and mRNA overlaps in long data format.
+num_peaks_dfl <- num_peaks_df %>%
+  dplyr::select(-peaks_overlapping_promoters) %>%
+  pivot_longer(cols = peaks_overlapping_lncrna_promoters:peaks_overlapping_mrna_promoters,
+               names_to = "gene_type",
+               values_to = "peaks_overlapping_promoters") %>%
+  mutate(gene_type = gsub("peaks_overlapping_", "", gene_type))
 
-
-ggplot(num_peaks_df, aes(x = num_peaks, y = peaks_overlapping_promoters, col = peaks_overlapping_mrna_promoters, fill = peaks_overlapping_lncrna_promoters)) +
+ggplot(num_peaks_dfl, aes(x = num_peaks, y = peaks_overlapping_promoters, 
+                         col = gene_type)) +
          geom_point() +
          geom_abline(slope = 1, linetype="dashed") +
-  geom_smooth()
-
-
-
-       aes(x = num_peaks, y = peaks_overlapping_promoters, color = promoter_type)) +
-  scale_color_manual(values = c("#424242", "#a8404c"))+
-  xlab("Peaks per TF") +
+  geom_smooth(method = "lm", se = FALSE, formula = "y ~ x") +
+  stat_regline_equation() +
+  scale_color_manual(values = c("#a8404c", "#424242"))+
+  xlab("Peaks per DBP") +
   ylab("Peaks Overlapping Promoters") +
-  ggtitle("Relationship Between Number of TF Peaks and Promoter Overlaps")+
-  geom_point() +
-  geom_abline(slope = 1, linetype="dashed") +
-  geom_smooth(method = "lm", se=FALSE)
-ggsave("figures/peaks_overlaps_relationship.png", height = 5, width = 8)
-ggsave("figures/peaks_overlaps_relationship.pdf", height = 5, width = 8)
+  ggtitle("Number of DBP Peaks and Promoter Overlaps")
+ggsave("figures/peaks_overlaps_relationship_by_gene_type.png", height = 5, width = 8)
+ggsave("figures/peaks_overlaps_relationship_by_gene_type.pdf", height = 5, width = 8)
 ```
 
 
