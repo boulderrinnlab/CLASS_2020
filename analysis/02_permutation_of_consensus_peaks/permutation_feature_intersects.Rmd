@@ -59,6 +59,40 @@ perm_res_promoters <- read.csv("results/permutation_results_promoters.csv")
 
 Nearly all DBPs were enriched on both lncRNA and mRNA promoters. A few however, were significantly depleted.
 
+```{r sig-promoter-overlaps}
+
+perm_res_summary <- perm_res_promoters %>%
+  mutate(significant = padj < 0.01) %>%
+  group_by(alternative, region, significant) %>%
+  summarize(count = n(),
+            dbps = paste(tf, collapse = ";"))
+
+# Clarify labels for plot
+perm_res_summary$alternative <- gsub("greater", "Enriched", perm_res_summary$alternative)
+perm_res_summary$alternative <- gsub("less", "Depleted", perm_res_summary$alternative)
+
+perm_res_summary[perm_res_summary$significant == T, "sig"] <- "padj < 0.01"
+perm_res_summary[perm_res_summary$significant == F, "sig"] <- "padj >= 0.01"
+
+
+#### FIGURE: Supplemental Figure 1B
+g <- ggplot(perm_res_summary, aes(x = sig, y = count))
+g + geom_bar(stat = "identity") + 
+  ylim(0,180) +
+  geom_text(stat='identity', aes(label=count), vjust=-0.2) +
+  geom_text(data = perm_res_summary %>% filter(count < 4),
+            aes(label = dbps,
+                y = count + 50),
+            size = 3) +
+  facet_grid(region ~ alternative) +
+  xlab("") +
+  ylab("Count") +
+  ggtitle("DBP enrichment on promoters")
+ggsave("figures/dbp_enrichment_on_promoters.png")
+ggsave("figures/dbp_enrichment_on_promoters.pdf")
+```
+
+
 ```{r promoter-depletion, fig.width=7, fig.height=10}
 depleted_on_promoters <- perm_res_promoters %>% filter(alternative == "less", padj <= 0.01)
 
