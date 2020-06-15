@@ -69,7 +69,7 @@ if(!file.exists("results/k562_tpm.csv")) {
     summarize(tpm = mean(tpm, na.rm = T))
   write_csv(tpm, "results/k562_tpm.csv")
 }
-tpm <- read_csv("results/k562_tpm.csv")
+tpm <- read.csv("results/k562_tpm.csv")
 ```
 
 
@@ -77,60 +77,60 @@ tpm <- read_csv("results/k562_tpm.csv")
 # Our strategy will be to keep adding variables to our observations (promoters). 
 # We can then plot from this data frame as it grows. 
 ```{r}
-peak_occurrence_df <- read_csv("../01_consensus_peaks/results/peak_occurence_dataframe.csv")
-expression_occurrence_df <- read_csv("results/peak_tpm_occurence_df.csv")
+peak_occurrence_df <- read.csv("../01_consensus_peaks/results/peak_occurence_dataframe.csv")
+expression_occurrence_df <- read.csv("results/peak_tpm_occurence_df.csv")
 peak_occurrence_df <- merge(peak_occurrence_df, expression_occurrence_df)
 #filtering out an old column used to be called number_tfs is now number_of_dbp.
-peak_occurrence_df <- peak_occurrence_df[ -c(8)]
+peak_occurrence_df <- peak_occurrence_df %>% dplyr::select(-number_of_tfs)
 
 #Adding expression to the new peak occurence data frame nomenclature that will be used as a starting point in 08_defining_reservoirs.
 
 write_csv(peak_occurrence_df, "results/peak_occurrence_df_exp_added.csv")
-
-
 ```
 
+#### Plotting binding of lncRNAs and mRNAs versus expression
 
-FIGURE 4A
-# Plotting binding of lncRNAs and mRNAs versus expression
-We see a lineaer trend in both lncRNA and mRNA promoters between number of binding events and expression output
+We see an upward trend in both lncRNA and mRNA promoters between number of binding events and expression output
+
 ```{r, message=FALSE, warning=FALSE}
-g <- ggplot(peak_occurrence_df, aes(y = log2(tpm), x = number_of_dbp, color = gene_type))
-g + 
-  geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), alpha = 0.2) +
-  geom_smooth() + 
-  scale_y_continuous(expand = c(0,0)) + 
-  scale_x_continuous(expand = c(0,0)) + 
-  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") + 
+### FIGURE: Figure 4A
+## NOTE: The GAM smoothing (s) uses a shrinkage version of the cubic regression spline.
+## The dip in lncRNA may be a result of the smoothing basis, but I still need to figure
+## out how this is determined theoretically and whether it makes sense in this context. 
+g <- ggplot(peak_occurrence_df, aes(y = log2(tpm+0.001), x = number_of_dbp, color = gene_type))
+g + geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001),
+             shape = 17, alpha = 0.7) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs")) +
+  scale_x_continuous(expand = c(0,0)) +
+  scale_color_manual(values = c("#a8404c", "#424242"), name = "Gene type") + 
   ggtitle("Expression vs. promoter binding events") + 
   xlab(expression('Number of TFs')) +
   ylab(expression(log[2](TPM)))
 ggsave("figures/k562_expression_vs_lncRNA_mRNA_promoter_binding.png")
 ggsave("figures/k562_expression_vs_lncRNA_mRNA_promoter_binding.pdf")
-
 ```
 
 # Supplemental Figure 4a all promoters together versus expression
 
 ```{r, message=FALSE, warning=FALSE}
-g <- ggplot(peak_occurrence_df, aes(y = log2(tpm), x = number_of_dbp))
-g + 
-  geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), alpha = 0.2) +
-  geom_smooth() + 
-  scale_y_continuous(expand = c(0,0)) + 
+g <- ggplot(peak_occurrence_df, aes(y = log2(tpm+0.001), x = number_of_dbp))
+g + geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), 
+               shape = 17, alpha = 0.7) +
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs"),
+              color = "#424242") +
   scale_x_continuous(expand = c(0,0)) + 
-  scale_color_manual(values = c("#424242","#a8404c"), name = "Gene type") + 
-  ggtitle("Expression vs. promoter binding events") + 
+  ggtitle("Expression vs. promoter binding events",
+          subtitle = "lncRNA and mRNA promoters") + 
   xlab(expression('Number of TFs')) +
   ylab(expression(log[2](TPM)))
 ggsave("figures/k562_expression_vs_all_promoter_binding.png")
 ggsave("figures/k562_expression_vs_all_promoter_binding.pdf")
-
 ```
 
 FIGURE 4B
 Here we will plot the binding events as a funciton of off, low, medium and high expression
 We find that at off and low expressed promoters there is no difference in bding events (including hundreds at a single promoter). 
+
 ```{r, message=FALSE, warning=FALSE}
 ## let's try a binned approach
 quantile(peak_occurrence_df$tpm)
@@ -365,6 +365,38 @@ g + geom_point(colour = "#424242") +
 
 ggsave("figures/k562_polII_reservoirs_chisquare.png")
 ggsave("figures/k562_polII_reservoirs_chisquare.pdf")
+```
+
+
+## THIS IS FOR umap_with_metadata.
+# Median expression of bound promoters per TF
+
+```{r}
+binding_df <- promoter_peak_occurence %>%
+  as.data.frame() %>%
+  rownames_to_column("tf") %>%
+  pivot_longer(cols = 2:ncol(.), names_to = "gene_id", values_to = "bound") %>%
+  filter(bound > 0)
+binding_df <- merge(binding_df, rnaseq_exp, all.x = T)
+
+
+binding_summary <- binding_df %>% group_by(tf) %>%
+  summarize(mean_expression = mean(tpm, na.rm = T),
+            median_expression = median(tpm, na.rm = T),
+            sd_expression = sd(tpm, na.rm = T),
+            cv_expression = (sd_expression/mean_expression)*100,
+            num_promoters_bound = n(),
+            promoters_bound = paste(gene_id, collapse = ";"))
+
+binding_summary <- binding_summary %>% arrange(-cv_expression)
+binding_summary$index <- 1:nrow(binding_summary)
+
+g <- ggplot(binding_summary, aes(x = index, y = cv_expression, label = tf))
+g + geom_point() + geom_text()
+
+write_csv(binding_summary, "results/expression_summary_per_tf.csv")
+```
+
 ```
 
 
