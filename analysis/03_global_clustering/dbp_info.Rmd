@@ -1,0 +1,19 @@
+---
+title: "DBP info"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(curl)
+req <- curl_fetch_memory("http://amp.pharm.mssm.edu/Harmonizome/api/1.0/gene/ATF1")
+req
+jsonlite::prettify(rawToChar(req$content))
+mydf <- jsonlite::fromJSON(rawToChar(req$content)) %>%
+  as.data.frame()
+
+```
+
