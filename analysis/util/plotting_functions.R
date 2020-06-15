@@ -47,18 +47,18 @@ plot_replicate_peaks <- function(dbps, region, bw_axis_limits, plot_title,
   names(dbps) <- dbps
   
   # Peak tracks
-  ptracks <- lapply(dbps, create_peak_tracks)
+  ptracks <- lapply(dbps, create_peak_tracks, region = region)
   
   # Bigwig tracks
   bwtracks <- list()
   for(i in 1:length(dbps)) {
-    bwtracks <- c(bwtracks, list(create_bigwig_tracks(dbps[[i]], 
+    bwtracks <- c(bwtracks, list(create_bigwig_tracks(dbps[[i]], region = region,
                                                       axis_limits = bw_axis_limits[[i]])))
   }
   names(bwtracks) <- names(dbps)
   
   # Consensus peak tracks
-  cptracks <- lapply(dbps, create_consensus_track)
+  cptracks <- lapply(dbps, create_consensus_track, region = region)
   
   # Info tracks
   itrack <- IdeogramTrack(genome = "hg38", chromosome = as.character(seqnames(region)))
@@ -103,7 +103,7 @@ plot_replicate_peaks <- function(dbps, region, bw_axis_limits, plot_title,
   }
 }
 
-create_peak_tracks <- function(dbp, 
+create_peak_tracks <- function(dbp, region,
                                peak_files_path = "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/") {
   # Read in peaks 
   peak_files <- list.files(peak_files_path, full.names = T)
@@ -128,7 +128,7 @@ create_peak_tracks <- function(dbp,
 }
 
 
-create_consensus_track <- function(dbp, 
+create_consensus_track <- function(dbp, region,
                                    consensus_peak_files_path = "../01_consensus_peaks/results/consensus_peaks/filtered_by_peaks/") {
   # Read in peaks 
   peak_files <- list.files(consensus_peak_files_path, full.names = T)
@@ -147,7 +147,7 @@ create_consensus_track <- function(dbp,
 }
 
 
-create_bigwig_tracks <- function(dbp, axis_limits, bigwig_files_path = "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/") {
+create_bigwig_tracks <- function(dbp, region, axis_limits, bigwig_files_path = "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/") {
   
   # Read in bigwigs 
   bws <- list.files(bigwig_files_path, full.names = T)
