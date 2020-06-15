@@ -17,90 +17,10 @@ source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
 
+# Peak permutation
 
-# Our goal here is take the consensus peaks for each DBP and randomize them around the genome 1,000 times. Each time we will count how it overlaps a feature tested in this study (e.g. promoters)
-```{r setup-slurm-permutations}
+Our goal here is take the consensus peaks for each DBP and randomize them around the genome 1,000 times. Each time we will count how it overlaps a feature tested in this study (e.g. promoters)
 
-# IMPORT peaks and features to test overlaps during the randomizations(permutations) ####
-
-peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/filtered_by_peaks/")
-
-lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
-mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
-
-lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
-mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
-
-rmsk <- import_repeatmasker()
-rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
-names(rmsk_family) <- paste(names(rmsk_family), "family", sep = "_")
-rmsk_class <- subset_rmsk(rmsk, rep_level = "class")
-names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
-
-hg38 <- getGenome("hg38")
-
-
-region_list <- c("lncrna_promoters" = list(lncrna_promoters), 
-                 "mrna_promoters" = list(mrna_promoters), 
-                 rmsk_family, rmsk_class)
-
-
-canonical_chr <- as.character(unique(seqnames(region_list[[1]])))
-# Sanitize RMSK to only those repeats on canonical chromosomes
-for(i in 1:length(region_list)) {
-  region_list[[i]] <- region_list[[i]][which(seqnames(region_list[[i]]) %in% canonical_chr)]
-}
-
-#### DEFINE Permutation TESTS ####
-pars <- expand.grid(1:length(region_list), 1:length(peak_list)) %>% 
-  as.data.frame()
-names(pars) <- c("region_index", "peak_index")
-
-
-
-#### TEST FUNCTION ####
-perm_test <- function(region_index, peak_index, npermutations = 1000) {
-  
-  set.seed(12044593)
-  region <- names(region_list)[[region_index]]
-  tf <- names(peak_list)[[peak_index]]
-  
-  cat("Running overlap test for ", region, "  & ", tf, "\n\n")
-  a_regions <- region_list[[region_index]]
-  b_regions <- peak_list[[peak_index]]
-  
-  suppressWarnings(pt <- overlapPermTest(A = a_regions, 
-                        B = b_regions, 
-                        ntimes = npermutations, 
-                        non.overlapping = FALSE, 
-                        verbose = FALSE,
-                        genome = hg38,
-                        alternative =  "auto", 
-                        mc.cores = 1))
-
-  ptdf <- data.frame("region" = region,
-                     "tf" = tf,
-                     "pval" = pt$numOverlaps$pval,
-                     "zscore" = pt$numOverlaps$zscore,
-                     "nperm" = pt$numOverlaps$ntimes,
-                     "alternative" = pt$numOverlaps$alternative,
-                     "observed" = pt$numOverlaps$observed,
-                     "permuted" = paste(pt$numOverlaps$permuted, collapse = ";"))
-  return(ptdf)
-}
-
-# Note this took about 400 hours to run
-# TODO: re-write to be faster
-res_files <- list.files("_rslurm_perm_overlaps/", full.names = T, pattern = "results")
-if(length(res_files) == 0) {
-  sjob <- slurm_apply(perm_test, pars, jobname = 'perm_overlaps',
-                    add_objects = c("region_list", "peak_list", "hg38", "overlapPermTest"),
-                    nodes = 22, cpus_per_node = 30, 
-                    slurm_options = list(time = '400:00:00'),
-                    submit = FALSE)
-}
-
-```
 
 ```{r import-export-results}
 fl <- list.files("results/", pattern = "permutation_results", full.names = T)
@@ -131,9 +51,10 @@ if(length(fl) < 3) {
     filter(grepl("promoters", region))
   write_csv(perm_res_promoters, "results/permutation_results_promoters.csv")
 }
-perm_res_family <- read_csv("results/permutation_results_repeat_families.csv")
-perm_res_class <- read_csv("results/permutation_results_repeat_classes.csv")
-perm_res_promoters <- read_csv("results/permutation_results_promoters.csv")
+perm_res <- read.csv("results/permutation_results_all.csv")
+perm_res_family <- read.csv("results/permutation_results_repeat_families.csv")
+perm_res_class <- read.csv("results/permutation_results_repeat_classes.csv")
+perm_res_promoters <- read.csv("results/permutation_results_promoters.csv")
 ```
 
 Nearly all DBPs were enriched on both lncRNA and mRNA promoters. A few however, were significantly depleted.
@@ -232,6 +153,7 @@ g + geom_tile() + scale_fill_gradient2()
 ```
 
 # Diving deeper into lncRNA and mRNA promoter overlaps
+
 ```{r, fig.width=5, fig.height=20, fig.show=FALSE}
 # Just look at mRNA and lncRNA
 sig_df_family <- sig_df_long %>%
@@ -352,6 +274,13 @@ ggsave("figures/repeat_families_vs_tf_peaks_pointmap.png", height = 28, width = 
 ```{r}
 
 # Look at number of observed versus expected peaks in lncRNA and mRNA promoters for each DNA binding protein (TF); compare to chi square p-value result in plots below
+lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
+mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
+
+peak_occurrence_matrix <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
+lncrna_matrix <- peak_occurrence_matrix[,lncrna_promoters$gene_id]
+mrna_matrix <- peak_occurrence_matrix[,mrna_promoters$gene_id]
+peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/filtered_by_peaks/")
 
 lncrna_num_overlaps <- rowSums(lncrna_matrix)
 mrna_num_overlaps <- rowSums(mrna_matrix)
