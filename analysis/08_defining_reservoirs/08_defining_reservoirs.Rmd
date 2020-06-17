@@ -1,13 +1,11 @@
 ---
-title: "defining_reservoirs"
+title: "Defining Reservoirs"
 author: "JR"
 date: "5/27/2020"
 output: html_document
 editor_options: 
   chunk_output_type: console
 ---
-
-
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -22,21 +20,28 @@ source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
 
-#Goal: to characterize the hundreds of promoters that have numerous DBPs bound, but do not result in expression.
+# Defining Reservoirs
 
-Here we want to find a cut off of binding events at promoters that are expressed less than 0.001 TPM.
+##### Goal: to characterize the hundreds of promoters that have numerous 
+DBPs bound, but do not result in expression.
+
+Here we want to find a cut off of binding events at promoters 
+that are expressed less than 0.001 TPM.
 
 
 ```{r import}
 # Read in reservoir annotations combined with promoter peak occurence df. 
-peak_occurrence_df <- read_csv("../07_binding_versus_expression/results/peak_occurrence_df_exp_added.csv")
+base_path <- "../07_binding_versus_expression/results"
+peak_occurrence_df <- read.csv(file.path(base_path,
+                                         "peak_occurrence_df_exp_added.csv"))
 ```
 
 Density plots of binding events for lncRNAs and mRNAs expressed above 0.001 TPM
-We see similar distributions with a slight shift of lncRNA promoters having more promoters with > 60 DBPs bound
+We see similar distributions with a slight shift of lncRNA promoters having 
+more promoters with > 60 DBPs bound
 
-```{r}
-# Plotting the density distribution of number of dbps bound R all promoters.
+```{r dbp-tpm-density-plots, message=FALSE}
+# Plotting the density distribution of number of dbps bound for all promoters.
 g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
 g + geom_density(alpha = 0.2, fill = "#a8404c") +
   ggtitle("Distribution of promoter DBP binding",
@@ -44,29 +49,34 @@ g + geom_density(alpha = 0.2, fill = "#a8404c") +
   geom_vline(xintercept = 7, lty = 2)
 ggsave("figures/all_genes_binding_distribution.pdf")
 
-summary(peak_occurrence_df)
 
-# Comparing the density distribution above for non-expressed promoters seperately. 
-# Interestingly, mRNA and lncRNA promoters that are not expressed have similar DBP density distributions. 
+# Comparing the density distribution above for non-expressed 
+# promoters seperately. 
+# Interestingly, mRNA and lncRNA promoters that are not expressed 
+# have similar DBP density distributions. 
 # Unlike that was seen 07_binding_versus_expression
 off_genes <- peak_occurrence_df %>% filter(tpm < 0.001)
 g <- ggplot(off_genes, aes(x = number_of_dbp, fill = gene_type))
-g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+g + geom_density(alpha = 0.2) + 
+  scale_fill_manual(values = c("#424242","#a8404c"))  + 
   ggtitle("Distribution of promoter DBP binding",
           subtitle = "Zero expression RNA-seq") 
 ggsave("figures/off_genes_binding_distribution.pdf")
 
-# Density distribution of expressed genes with perhaps enrichment of lncNRAs in the 30:60 range of dbp binding events
-#TODO something off with coloring :) 
-g <- ggplot(peak_occurrence_df %>% filter(tpm > 0.001), aes(x = number_of_dbp, fill = gene_type))
-g + geom_density(alpha = 0.2) + scale_fill_manual(values = c("#424242","#a8404c"))  + 
+
+# Density distribution of expressed genes with perhaps enrichment of
+# lncNRAs in the 30:60 range of dbp binding events
+g <- ggplot(peak_occurrence_df %>% filter(tpm > 0.001), 
+            aes(x = number_of_dbp, fill = gene_type))
+g + geom_density(alpha = 0.5) + 
+  scale_fill_manual(values = c("#424242","#a8404c"))  + 
     ggtitle("Distribution of promoter DBP binding",
           subtitle = "TPM > 0.001 RNA-seq") 
 ggsave("figures/expressed_genes_binding_distribution.pdf")
 ```
 
-```{r}
-### Supplemental 4B
+```{r ecdf-promoter-binding, message=FALSE}
+#### FIGURE: Supplemental 4B
 num_peaks_threshold <- 7
 g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
 g + stat_ecdf() + 
@@ -78,156 +88,163 @@ ggsave("figures/ecdf_promoter_binding_events.pdf")
 round(ecdf(peak_occurrence_df$number_of_dbp)(num_peaks_threshold)*100,1)
 ```
 
+We defined 7 DBPs as 54% percentile and now we will define "reservoirs" 
+as having 7 binding events and expression less than 0.001 TPM
 
-We defined 7 DBPs as 54% percentile and now we will define "reservoirs" as having 7 binding events and expression less than 0.001 TPM
-
-# Goal: define reservoirs and write out to .csv
+#### define reservoirs and write out to .csv
 
 ```{r define-reservoirs}
 # Let's set a new column defining reservoirs in our peak_occurrence data frame
-
-peak_occurrence_df$reservoir <- as.numeric(peak_occurrence_df$number_of_dbp > 7 & peak_occurrence_df$tpm < 0.001)
+peak_occurrence_df$reservoir <- 
+  as.numeric(peak_occurrence_df$number_of_dbp > 7 & 
+               peak_occurrence_df$tpm < 0.001)
 write_csv(peak_occurrence_df, "results/08_peak_occurence_df_resvoirs.csv")
-
 ```
 
-```{r percent-lncrna}
-#### Supplemental 4C
-# Todo add reservoir yes or no to x axis (i should have been able to get this :) added xlab argument at end
+```{r percent-lncrna, message=FALSE}
+#### FIGURE: Supplemental 4C
 reservoirs_by_gene_type <- peak_occurrence_df %>%
   group_by(gene_type, reservoir) %>%
   summarize(count = n())
-g <- ggplot(reservoirs_by_gene_type, aes(x = reservoir, y = count, fill = gene_type))
+g <- ggplot(reservoirs_by_gene_type, 
+            aes(x = factor(reservoir, labels = c("Non-reservoir", "Reservoir")), 
+                y = count, fill = gene_type))
 g + geom_bar(position = "fill", stat = "identity") +
   scale_fill_manual(values = c("#a8404c", "#424242")) +
   ggtitle("Reservoir status by gene type") + 
   ylab("Fraction") +
-  xlab(peak_occurrence_df$reservoir)
+  xlab("")
 ggsave("figures/reservoir_status_by_gene_type.pdf")
 ```
 
 
-We still have two concerns: I. Overlap with Super Enhancer annotations that have some similar proterties (e.g. many DBPs bound)  II. Neighboring gene-expression
+We still have two concerns: I. Overlap with Super Enhancer annotations 
+that have some similar proterties (e.g. many DBPs bound)  
+II. Neighboring gene-expression
 
 # I. Overlap with super enhancers
-Goal: to determine if reservoir promoters are comprised of Super-Enhancer (SE) annotations
+Goal: to determine if reservoir promoters are comprised of 
+Super-Enhancer (SE) annotations
 We used SE annotations from the Super-Enhancer DB (Sedb) from HG19
 SEdb: https://asntech.org/dbsuper/
 
 We will further lift over these regions to HG38
 
 ```{r import-sedb}
-# http://asntech.org/dbsuper/data/bed/hg19/K562.bed
-# download super enhancer annotations
-system("cd data; wget http://asntech.org/dbsuper/data/bed/hg19/K562.bed")
-se_hg19 <- rtracklayer::import("data/K562.bed")
-
-#Dowloading liftover chain-file #
-#http://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz
-system("cd data; wget http://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz; gunzip hg19ToHg38.over.chain.gz")
-
-ch <- import.chain("data/hg19ToHg38.over.chain")
-seqlevelsStyle(se_hg19) <- "UCSC" # this is required for liftover 
-se_hg38 <- liftOver(se_hg19, ch)
-
-# Subset just to contiguously liftedOver regions
-se_hg38 <- se_hg38[sapply(width(se_hg38), length) == 1]
-# Exporting .bed file of se_hg38 (super-enhancers with contigious overlap in hg38)
-rtracklayer::export(se_hg38, "results/k562_superenhancers_hg38.bed")
-
-
+if (!file.exists("results/k562_superenhancers_hg38.bed")) {
+  
+  # download super enhancer annotations
+  url <- "http://asntech.org/dbsuper/data/bed/hg19/K562.bed"
+  system(paste0("cd data; wget ", url))
+  se_hg19 <- rtracklayer::import("data/K562.bed")
+  
+  # Dowloading liftover chain-file #
+  url <- "http://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz"
+  system(paste0("cd data; wget ",
+                url, "; gunzip hg19ToHg38.over.chain.gz"))
+  
+  
+  ch <- import.chain("data/hg19ToHg38.over.chain")
+  seqlevelsStyle(se_hg19) <- "UCSC" # this is required for liftover 
+  se_hg38 <- liftOver(se_hg19, ch)
+  
+  # Subset just to contiguously liftedOver regions
+  se_hg38 <- se_hg38[sapply(width(se_hg38), length) == 1]
+  # Exporting .bed file of se_hg38 (super-enhancers with 
+  # contigious overlap in hg38)
+  rtracklayer::export(se_hg38, "results/k562_superenhancers_hg38.bed")
+}
+se_hg38 <- rtracklayer::import("results/k562_superenhancers_hg38.bed")
 ```
 
-```{r overlap-ses-reservoirs}
+```{r overlap-ses-reservoirs, message=FALSE}
 # Reading in all promoters
-promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
-# reservoir_gene_ids <- peak_occurrence_df$gene_id[peak_occurrence_df$reservoir == T]
-# reservoir_gr <- promoters[promoters$gene_id %in% reservoir_gene_ids]
+base_path <- "../01_consensus_peaks/results"
+promoters <- rtracklayer::import(file.path(base_path,
+                                           "lncrna_mrna_promoters.gtf"))
 
 se_promoters <- subsetByOverlaps(promoters, se_hg38)
 
 # Annotate in data.frame
 peak_occurrence_df$annotated_superenhancer <- FALSE
-peak_occurrence_df[peak_occurrence_df$gene_id %in% se_promoters$gene_id, "annotated_superenhancer"] <- TRUE
+peak_occurrence_df[peak_occurrence_df$gene_id %in% se_promoters$gene_id, 
+                   "annotated_superenhancer"] <- TRUE
 
-#let's write this out as a specific .csv here per our goal of adding new variables (SE in this case) to peak_occurence_df (observations == promoters)
+# et's write this out as a specific .csv here per our goal of 
+# adding new variables (SE in this case) to peak_occurence_df 
+# (observations == promoters)
 write_csv(peak_occurrence_df, "results/08_peak_occurrence_df_super_enhancers")
-
-
-```
-
-```{r}
 
 # Let's count how many reservoirs overlap super-enhancers.
 table(peak_occurrence_df$annotated_superenhancer)
 
-
-#Plotting 
-
-se_res_summary <- peak_occurrence_df %>% group_by(reservoir, annotated_superenhancer) %>%
+# Plotting 
+se_res_summary <- peak_occurrence_df %>% 
+  group_by(reservoir, annotated_superenhancer) %>%
   summarize(count = n())
-g <- ggplot(se_res_summary, aes(x = reservoir, y = count, fill = annotated_superenhancer))
+g <- ggplot(se_res_summary, 
+            aes(x = reservoir, y = count, fill = annotated_superenhancer))
 g + geom_bar(position = "fill", stat = "identity") +
   scale_fill_manual(values = c("#a8404c", "#424242")) +
   ggtitle("Reservoir status by Superenhancer annotation") +
   ylab("Fraction")
 ggsave("figures/reservoir_status_by_SE_annotation.pdf")
-
 ```
 
+#### Hypergeometric test to see if superenhacers are enriched in reservoirs
 
-#### Hypergeometric test to see if super enhacers are enriched in reservoirs
-
-```{r}
+```{r se-enriched}
 res_overlapping_se <- length(reservoirs_overlapping_ses)
-t <- length(which(peak_occurrence_df$reservoir == T & peak_occurrence_df$annotated_superenhancer == T))
-num_promoters_w_gt7_dbps <- nrow(peak_occurrence_df %>% filter(number_of_dbp > 7))
+t <- length(which(peak_occurrence_df$reservoir == T & 
+                    peak_occurrence_df$annotated_superenhancer == T))
+num_promoters_w_gt7_dbps <- nrow(peak_occurrence_df %>% 
+                                   filter(number_of_dbp > 7))
 n <- num_promoters_w_gt7_dbps
 number_of_reservoirs <- length(which(peak_occurrence_df$reservoir == T))
 a <- number_of_reservoirs
 number_of_superenhancers <- length(se_hg38)
 b <- number_of_superenhancers
 
-dhyper(t, a, n - a, b)
 # Hypergeometric test p-value
 sum(dhyper(t:b, a, n - a, b))
 ```
 
 
-
 II. Bidirectional promoters.
-Goal: To determine if reservoir promoters are due to regulation of a neighboring or "bidirectional gene"
+Goal: To determine if reservoir promoters are due to regulation of a 
+neighboring or "bidirectional gene"
 
-We will define "Bidirectional promoters if they overlap a gene on the opposite strand within 1000 bp (PMID: 17447839 for definition)". 
+We will define "Bidirectional promoters if they overlap a gene on the 
+opposite strand within 1000 bp (PMID: 17447839 for definition)". 
 Where the gene has to be on the opposite strand within 1000bp.
 
-```{r determing promoters that could regulate a neighboring gene on opposite strand within 200bp}
-# @JR
-# TODO: Should we only consider lncRNA and mRNA promoters or all promoters?
-# We have RNA-seq values for all annotations in gencode, so we could easily make it all
-# gene types, but since we're so focused on lncRNAs and mRNAs, it might be good to focus here too.
-# I can see it both ways.
-# -M 
+```{r shared-promoters, message=FALSE}
 # Load in Gencode annotations
-gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+gencode_gr <- rtracklayer::import(
+  "../../../genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
-# Define that the potential "bidirectional promoter is on the opposite strand and less than 1000bp in distance"
-# Note this is a newly defined function in 'overlapping_promoters' ../util/intersect_functions.R 
-shared_promoters <- overlapping_promoters(gencode_gr, upstream = 1000, downstream = 0)
+# Define that the potential "bidirectional promoter is on the 
+# opposite strand and less than 1000bp in distance"
+# Note this is a newly defined function in 'overlapping_promoters' 
+# ../util/intersect_functions.R 
+shared_promoters <- overlapping_promoters(gencode_gr, 
+                                          upstream = 1000,
+                                          downstream = 0)
 
 # Merge in shared promoters to the peak_occurrence_df
 peak_occurrence_df <- merge(peak_occurrence_df, shared_promoters, all.x = TRUE)
 # Annotate non overlapping promoters
-peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type), "shared_promoter_type"] <- "None"
+peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type), 
+                   "shared_promoter_type"] <- "none"
 
 
-# Plotting percentage of promoters that are "bidirectional", "mutliple_nearby_promoters", "nearby and on same strand"
-# TODO add xlab peak_occurence_df$reservoir
-
+# Plotting percentage of promoters that are "bidirectional", 
+# "mutliple_nearby_promoters", "nearby and on same strand"
 reservoir_status_by_shared_promoters <- peak_occurrence_df %>%
   group_by(reservoir, shared_promoter_type) %>%
   summarize(count = n())
-g <- ggplot(reservoir_status_by_shared_promoters, aes(x = reservoir, y = count, fill = shared_promoter_type))
+g <- ggplot(reservoir_status_by_shared_promoters, 
+            aes(x = reservoir, y = count, fill = shared_promoter_type))
 g + geom_bar(position = "fill", stat = "identity") +
   scale_fill_manual(values = c("#a8404c","#024059","#71969F","#424242")) +
   ggtitle("Reservoir status by shared promoter status") +
@@ -236,7 +253,6 @@ ggsave("figures/reservoir_status_by_shared_promoter_status.pdf")
 
 
 # Plotting the number of dbps at each type of promoter
-
 g <- ggplot(peak_occurrence_df %>% filter(reservoir == T),
             aes(x = shared_promoter_type, y = number_of_dbp))
 g + geom_boxplot() +
@@ -244,27 +260,28 @@ g + geom_boxplot() +
            subtitle = "In reservoirs")
 ggsave("figures/num_binding_events_vs_shared_promoter_type_reservoirs.pdf")
 
-prop.table(table(peak_occurrence_df$reservoir, peak_occurrence_df$shared_promoter_type), margin = 1)*100
-chisq.test(peak_occurrence_df$shared_promoter_type, peak_occurrence_df$reservoir)
+prop.table(table(peak_occurrence_df$reservoir, 
+                 peak_occurrence_df$shared_promoter_type), margin = 1)*100
+chisq.test(peak_occurrence_df$shared_promoter_type, 
+           peak_occurrence_df$reservoir)
  
-# Todo anova or some multi group test -- I think the stat above is saying that there is a difference in means but not for each promoter type
+# TODO: ANOVA or some multi group test -- I think the stat above is 
+# saying that there is a difference in means but not for each promoter type
 
+# Per usual we are going to now add the promoter_properties variable(s) 
+# bidirectional, closeby etc . Importantly this is what will be read 
+# into 09_reservoir_binding_properties 
+write_csv(peak_occurrence_df, 
+          "results/08_peak_occurrence_df_promoter_types.csv")
 ```
 
-```{r}
-# Per usual we are going to now add the promoter_properties variable(s) bidirectional, closeby etc .
-# Importantly this is what will be read into 09_reservoir_binding_properties 
-write_csv(peak_occurrence_df, "results/08_peak_occurrence_df_promoter_types.csv")
-
-```
-
-
-
-
-# Goal: to test gene-expression levels in 5 genes that surround a reservoir promoter
-We will using a sliding window approach of windows containing 5 genes. We will compute the median TMP of each window.
-We will then slide the window one gene ... until all the gene windows of a given chromosome are measured. 
-We then ask what the differences are when a reservoir is or is not these gene windows.
+Goal: to test gene-expression levels in 5 genes that surround a 
+reservoir promoter We will using a sliding window approach of windows 
+containing 5 genes. We will compute the median TMP of each window.
+We will then slide the window one gene ... until all the gene windows 
+of a given chromosome are measured. 
+We then ask what the differences are when a reservoir is or
+is not these gene windows.
 
 ```{r expression-neighborhood}
 # Get the TSS position for ordering genes
@@ -278,7 +295,7 @@ peak_occurrence_df <- merge(peak_occurrence_df, promoter_tss)
 # Window assignment function
 window_size <- 5
 assign_windows <- function(ngenes, window_size) {
-  starts <- c(rep(1,(window_size-1)),1:(ngenes-(window_size-1)))
+  starts <- c(rep(1,(window_size - 1)), 1:(ngenes - (window_size - 1)))
   ends <- 1:ngenes
   sapply(1:length(starts), function(x) {
     paste(seq(starts[x], ends[x]), collapse = ";")
@@ -288,40 +305,70 @@ assign_windows <- function(ngenes, window_size) {
 # TODO: perhaps this should all be compared to random windows..
 # Or potentially for some analyses below, taking out the reservoir
 # to just focus on the properties of the neighborhood.
-
-
 # Calculate the mean tpm per expression window
+# We will label the neighborhoods by whether the center gene
+# is a reservoir or superenhancer
 expression_window_df <- peak_occurrence_df %>%
   arrange(chr, tss) %>%
   group_by(chr) %>%
   mutate(window_5 = assign_windows(n(), window_size)) %>%
-  dplyr::select(number_of_dbp, tpm, reservoir, annotated_superenhancer, shared_promoter_type,
+  dplyr::select(number_of_dbp, tss, tpm, reservoir, 
+                annotated_superenhancer, shared_promoter_type,
                 chr, window_5) %>%
   separate_rows(window_5, sep = ";") %>%
   mutate(window_5 = as.numeric(window_5)) %>%
   group_by(chr, window_5) %>%
-  summarize(mean_tpm = mean(tpm),
+  arrange(tss) %>%
+  mutate(index = 1:n(),
+         center = index == 3) %>%
+  # Remove the center gene in the calculation of window tpm.
+  summarize(mean_tpm = mean(tpm[center == F]),
+            res_window = reservoir[center == T],
+            se_window = annotated_superenhancer[center == T],
             n_reservoirs = sum(as.numeric(reservoir)),
             n_se = sum(as.numeric(annotated_superenhancer)),
-            total_dbps_bound = sum(number_of_dbp),
-            mean_dbps_bound = mean(number_of_dbp),
-            n_occupied_promoters = length(which(number_of_dbp > 0)),
+            total_dbps_bound = sum(number_of_dbp[center == F]),
+            mean_dbps_bound = mean(number_of_dbp[center == F]),
+            n_occupied_promoters = length(which(number_of_dbp[center == F] > 0)),
             dbps_bound = paste(number_of_dbp, collapse = ";"),
             shared_promoter_types = paste(shared_promoter_type, collapse = ";"))
 
 
-# Plotting the summary of expression window measurements to see if there is a difference between reservoir and non-res windows.
-
+# Plotting the summary of expression window measurements to see 
+# if there is a difference between reservoir and non-res windows.
 data_summary <- function(x) {
    m <- mean(x)
-   ymin <- m-sd(x)
-   ymax <- m+sd(x)
-   return(c(y=m,ymin=ymin,ymax=ymax))
+   ymin <- m - sd(x)
+   ymax <- m + sd(x)
+   return(c(y = m, ymin = ymin, ymax = ymax))
 }
 
-g <- ggplot(expression_window_df, aes(x = factor(n_reservoirs > 0), y = log10(mean_tpm)))
+# Lets format this data long per window type so that we can plot it all together
+expression_window_df$window_type <- "none"
+expression_window_df[expression_window_df$se_window == TRUE, "window_type"] <- 
+  "superenhancer"
+# Instead of making the 35 reservoir and SE containing windows a separate
+# Category, we will include them with reservoirs
+expression_window_df[expression_window_df$res_window == 1, "window_type"] <- 
+  "reservoir"
+expression_window_df[expression_window_df$res_window == 1 &
+                       expression_window_df$se_window == TRUE, "window_type"] <- 
+  "res + se"
+window_type_summary <- expression_window_df %>%
+  group_by(window_type) %>%
+  summarize(mean = mean(mean_tpm),
+            count = n()) %>%
+  arrange(mean)
+
+knitr::kable(window_type_summary)
+
+# Arrange window types by mean
+expression_window_df$window_type <- factor(expression_window_df$window_type,
+                                           levels = window_type_summary$window_type)
+g <- ggplot(expression_window_df %>% filter(window_type != "res + se"), 
+            aes(x = window_type, y = log10(mean_tpm + 0.001)))
 g + geom_violin() +
-  stat_summary(fun.data=data_summary) +
+  stat_summary(fun.data = data_summary) +
   stat_compare_means() +
   ggtitle("Mean expression in five gene windows")
 ggsave("figures/mean_expression_in_5_gene_windows_res_vs_nonres.pdf")
@@ -332,46 +379,29 @@ res_exp_windows <- expression_window_df %>%
   summarize(mean_tpm = mean(mean_tpm))
 knitr::kable(res_exp_windows)
 
-# We find that reservoirs tend to be in less highly expressed gene-windows. However the effect is small but significant. 
-
-
-
-
-
-
-
-
-
+# We find that reservoirs tend to be in less highly 
+# expressed gene-windows. However the effect is small but significant. 
 
 
 #### Just curious...
-
-g <- ggplot(expression_window_df, aes(x = factor(n_reservoirs > 0), y = n_occupied_promoters))
+g <- ggplot(expression_window_df, 
+            aes(x = factor(n_reservoirs > 0), y = n_occupied_promoters))
 g + geom_violin() +
   stat_compare_means()
 
-g <- ggplot(expression_window_df, aes(x = factor(n_reservoirs > 0), y = mean_dbps_bound))
+g <- ggplot(expression_window_df, 
+            aes(x = factor(n_reservoirs > 0), y = mean_dbps_bound))
 g + geom_violin() +
   stat_compare_means()
 
 # When windowed does expression correlate bettwer with binding
-# Cool finding that number of DBPs bound in five gene windows also correlates with expression in 5 gene window. 
+# Cool finding that number of DBPs bound in five gene 
+# windows also correlates with expression in 5 gene window. 
 g <- ggplot(expression_window_df, aes(x = total_dbps_bound, y = log10(mean_tpm)))
 g + geom_point() + stat_cor() +
   geom_smooth() +
   ggtitle("Five gene windows",
           subtitle = "mean RNA-seq TPM vs DPBs bound in window")
 ggsave("figures/five_gene_window_expression_vs_dbps.pdf")
-
 ```
-
-
-
-
-
-
-
-
-
-
 
