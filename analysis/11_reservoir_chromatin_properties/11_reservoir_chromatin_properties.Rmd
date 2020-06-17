@@ -164,7 +164,7 @@ ggplot(peak_occurrence_df, aes(x = log10(tpm + .1),
 ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + .1), 
                                color = as.logical(k27ac))) +
   geom_density()
-
+ggsave("figures/nascent_vs_k27ac_all_promoters.pdf")
 # in general k27ac correlates with higher nascent tpm as expected
 
 # Now narrowing in on only reservoirs looking at K27ac status
@@ -172,6 +172,7 @@ ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + .1),
 ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + 1), 
                                color = as.logical(k27ac & reservoir))) +
   geom_density()
+ggsave("figures/k27ac_reservoir_vs_nascent.pdf")
 
 # Suprisingly we do not see a strong enrichment of k27ac towards higher tpm.
 
@@ -181,9 +182,11 @@ ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + .1),
                                color = as.logical(k27me3 & reservoir))) +
   geom_density()
 
+ggsave("figures/k27me3_reservoir_vs_nascent.pdf")
+
 # K27me3 does seperate ghosts from zombies
 
-ggsave("figures/reservoir")
+
 
 
 ```
@@ -197,14 +200,19 @@ ggplot(peak_occurrence_df %>% filter(reservoir == 1), aes(x = number_of_dbp,
                                fill = factor(ghost))) +
   geom_density(alpha = .2)
 
+ggsave("figures/DBP-vs-ghost_zombie.pdf")
+
+# Comparing the means of distributions since they look similar
 ggplot(peak_occurrence_df %>% filter(reservoir == 1),aes(x = factor(ghost),
                                                          y = number_of_dbp)) +
   geom_boxplot() +
   stat_compare_means()
 
 
-```
 
+```
+# the distribution of number of bound DBPs is not differnet between ghosts and
+zombies (P = .064)
 
 
 
