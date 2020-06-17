@@ -4,7 +4,11 @@
 
 #### SETUP
 library(rmarkdown)
-
+# TODO: potentiall make all of these into readme.md files
+# so that they render automatically in github when the file path is
+# clicked. Alternatively, render all the markdowns into a github.io site
+# according to these instructions:
+# https://nicolas-van.github.io/easy-markdown-to-github-pages/
 
 # 01_consensus_peaks
 rmarkdown::render(file.path("01_consensus_peaks",
@@ -41,5 +45,11 @@ rmarkdown::render(file.path("05_promoter_features_lncRNA-vs-mRNA",
 # 07_binding_vs_expression
 rmarkdown::render(file.path("07_binding_versus_expression",
                             "07_binding_vs_expression.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
+
+# 08_defining_reservoirs
+rmarkdown::render(file.path("08_defining_reservoirs",
+                            "08_defining_reservoirs.Rmd"), 
                   md_document(variant = "markdown_github"))
 
