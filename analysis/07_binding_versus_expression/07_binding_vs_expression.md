@@ -1,11 +1,4 @@
----
-title: "Expression vs. DNA-binding at promoters"
-output: html_document
-editor_options:
-  chunk_output_type: console
----
-
-```{r setup}
+``` r
 knitr::opts_chunk$set(echo = TRUE)
 options(stringsAsFactors = F)
 library(tidyverse)
@@ -20,26 +13,22 @@ source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
 
-# Expression vs. DNA-binding at promoters
+Expression vs. DNA-binding at promoters
+=======================================
 
 #### Purpose: Compare expression of genes to binding in promoter regions
- 
-This script extracts expression counts from K562 RNA-seq data and identifies 
-DNA-binding events at promoters from the K562 ChIP-seq consensus peak dataset. 
-We have included further analysis on promoters that contain ≥7 DNA-binding 
-events but are not expressed.
 
+This script extracts expression counts from K562 RNA-seq data and identifies DNA-binding events at promoters from the K562 ChIP-seq consensus peak dataset. We have included further analysis on promoters that contain ≥7 DNA-binding events but are not expressed.
 
 ### Source for RNA-seq data
 
-total RNA-seq for K562 dataset: 
-https://www.encodeproject.org/experiments/ENCSR885DVH/
+total RNA-seq for K562 dataset: <https://www.encodeproject.org/experiments/ENCSR885DVH/>
 
 ### Analysis of RNA-seq data
 
 Loading in the RNAseq data and converting to TPM and saving as CSV of TPM values
 
-```{r read_counts_to_TPM}
+``` r
 if (!file.exists("results/k562_tpm.csv")) {
   
   fl <- list.files("data/", pattern = ".bam", full.names = T)
@@ -76,13 +65,9 @@ if (!file.exists("results/k562_tpm.csv")) {
 tpm <- read.csv("results/k562_tpm.csv")
 ```
 
+Let's add the expression data to our peak\_occurence\_df generated in 01\_consensus\_peaks. Our strategy will be to keep adding variables to our observations (promoters). We can then plot from this data frame as it grows.
 
-Let's add the expression data to our peak_occurence_df generated 
-in 01_consensus_peaks.
-Our strategy will be to keep adding variables to our observations (promoters). 
-We can then plot from this data frame as it grows. 
-
-```{r import}
+``` r
 base_path <- "../01_consensus_peaks/results/"
 peak_occurrence_df <- read.csv(file.path(base_path,
                                          "peak_occurence_dataframe.csv"))
@@ -101,7 +86,7 @@ write_csv(peak_occurrence_df, "results/peak_occurrence_df_exp_added.csv")
 
 We see an upward trend in both lncRNA and mRNA promoters between number of binding events and expression output
 
-```{r dbp-vs-expression-seperate, message=FALSE, warning=FALSE}
+``` r
 ### FIGURE: Figure 4A
 ## NOTE: The GAM smoothing (s) uses a shrinkage version of the cubic regression spline.
 ## The dip in lncRNA may be a result of the smoothing basis, but I still need to figure
@@ -117,13 +102,19 @@ g + geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001),
   ggtitle("Expression vs. promoter binding events") + 
   xlab(expression('Number of TFs')) +
   ylab(expression(log[2](TPM)))
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/dbp-vs-expression-seperate-1.png)
+
+``` r
 ggsave("figures/k562_expression_vs_lncRNA_mRNA_promoter_binding.png")
 ggsave("figures/k562_expression_vs_lncRNA_mRNA_promoter_binding.pdf")
 ```
 
-# Supplemental Figure 4a all promoters together versus expression
+Supplemental Figure 4a all promoters together versus expression
+===============================================================
 
-```{r dbp-vs-expression-combined, message=FALSE, warning=FALSE}
+``` r
 #### FIGURE: Supplemental 4A
 # TODO: These correlation values are with log(TPM) consider linear correlation.
 g <- ggplot(peak_occurrence_df, aes(y = log2(tpm + 0.001), x = number_of_dbp))
@@ -137,47 +128,67 @@ g + geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001),
           subtitle = "lncRNA and mRNA promoters") + 
   xlab(expression('Number of TFs')) +
   ylab(expression(log[2](TPM)))
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/dbp-vs-expression-combined-1.png)
+
+``` r
 ggsave("figures/k562_expression_vs_all_promoter_binding.png")
 ggsave("figures/k562_expression_vs_all_promoter_binding.pdf")
 ```
 
-Here we will plot the binding events as a funciton of off, low,
-medium and high expression We find that at off and low expressed promoters 
-there is no difference in binding events 
-(including hundreds at a single promoter) between lncRNA and mRNA promoters.
+Here we will plot the binding events as a funciton of off, low, medium and high expression We find that at off and low expressed promoters there is no difference in binding events (including hundreds at a single promoter) between lncRNA and mRNA promoters.
 
-```{r binned-by-expression, message=FALSE, warning=FALSE}
+``` r
 ## let's try a binned approach
 quantile(peak_occurrence_df$tpm)
+```
+
+    ##           0%          25%          50%          75%         100% 
+    ##    0.0000000    0.0000000    0.1372609    2.9048675 4546.9813891
+
+``` r
 peak_occurrence_df$expression <- cut(peak_occurrence_df$tpm, 
                                      breaks = c(-1, 0.001, 0.137, 3, 5000),
                                     labels = c("off", "low", "med", "high"))
 
 levels(cut(peak_occurrence_df$tpm, breaks = c(-1, 0.001, 0.137, 3, 5000)))
+```
 
+    ## [1] "(-1,0.001]"    "(0.001,0.137]" "(0.137,3]"     "(3,5e+03]"
+
+``` r
 table(peak_occurrence_df$expression)
+```
+
+    ## 
+    ##   off   low   med  high 
+    ## 10878  7526  9306  9104
+
+``` r
 #### FIGURE: Figure 4B
 g <- ggplot(peak_occurrence_df, 
             aes(x = expression, y = number_of_dbp, color = gene_type))
 g + geom_boxplot() + stat_compare_means() + 
   scale_color_manual(values = c("#a8404c", "#424242"))  
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/binned-by-expression-1.png)
+
+``` r
 ggsave("figures/bin-exp_binding_vs_expression_density.png")
 ggsave("figures/bin-exp_binding_vs_expression_density.pdf")
 ```
 
+Figure 4C : Browser examples
 
-Figure 4C : Browser examples 
-
-```{r}
+``` r
 # TODO: What should we plot as browser examples here?
 ```
 
+Plotting Number of DBPs versus expression on mRNA promoters as a "heat map" Note the distribution around 30-60 DBPs bound at a given mRNA promoter
 
-Plotting Number of DBPs versus expression on mRNA promoters as a 
-"heat map" Note the distribution around 30-60 DBPs bound at a given 
-mRNA promoter
-
-```{r mrna-density-plot, message=FALSE}
+``` r
 # mRNA density plot
 g <- ggplot(peak_occurrence_df %>% filter(gene_type == "protein_coding"), 
             aes(y = log10(tpm + 0.001), x = number_of_dbp, color = gene_type))
@@ -189,15 +200,18 @@ g + stat_density_2d(aes(fill = ..density..),
   ggtitle("mRNA binding vs. expression") + 
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](TPM)))
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/mrna-density-plot-1.png)
+
+``` r
 ggsave("figures/mRNA_binding_vs_expression_density.png")
 ggsave("figures/mRNA_binding_vs_expression_density.pdf")
 ```
 
-Plotting Number of DBPs versus expression on lncRNA promoters 
-as a 2D density plot 
-Note the faint distribution around 30-60 DBPs bound at a given lncRNA promoter
+Plotting Number of DBPs versus expression on lncRNA promoters as a 2D density plot Note the faint distribution around 30-60 DBPs bound at a given lncRNA promoter
 
-```{r lncrna-density-plot, message=FALSE}
+``` r
 # lncRNA density plot
 g <- ggplot(peak_occurrence_df %>% filter(gene_type == "lncRNA"), 
             aes(y = log10(tpm + 0.001), x = number_of_dbp, color = gene_type))
@@ -210,13 +224,18 @@ g + stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE, n
   ggtitle("lncRNA binding vs. expression") + 
   xlab(expression('Number of TFs')) +
   ylab(expression(log[10](TPM)))
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/lncrna-density-plot-1.png)
+
+``` r
 ggsave("figures/lncRNA_binding_vs_expression_density.png")
 ggsave("figures/lncRNA_binding_vs_expression_density.pdf")
 ```
 
 Plotting lncRNA and mRNA density plots together from above, this is consisten with lncRNA promoters being depleted in general of DBPs similar to what was observed in Figure 2C
 
-```{r}
+``` r
 # Plotting lncRNA and mRNA density together.
 g <- ggplot(peak_occurrence_df, aes(y = log2(tpm + 0.001), x = number_of_dbp))
 g + geom_hex(bins = 60) + facet_grid(~gene_type) + 
@@ -225,13 +244,25 @@ g + geom_hex(bins = 60) + facet_grid(~gene_type) +
                        oob = scales::squish) + 
   scale_y_continuous(expand = c(0,0)) + 
   scale_x_continuous(expand = c(0,0))
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/unnamed-chunk-2-1.png)
+
+``` r
 ggsave("figures/lncRNA-mRNA_binding_vs_expression_density.png")
+```
+
+    ## Saving 7 x 5 in image
+
+``` r
 ggsave("figures/lncRNA-mRNA_binding_vs_expression_density.pdf")
 ```
 
+    ## Saving 7 x 5 in image
+
 Histogram of promoters by number of DNA-binding factors bound
 
-```{r binding_histogram, message=FALSE, warning=FALSE}
+``` r
 peak_occurrence_df$expression <- "off"
 peak_occurrence_df[which(peak_occurrence_df$tpm > 0.001), "expression"] <- "expressed"
 
@@ -240,44 +271,56 @@ g + geom_density(alpha = 0.2, fill = "#424242")  +
   geom_vline(xintercept = 30, lty = 2) +
   geom_vline(xintercept = 100, lty = 2) +
   ggtitle("Promoter Density vs Number of TFs")
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/binding_histogram-1.png)
+
+``` r
 ggsave("figures/k562_binding_histogram.png")
 ggsave("figures/k562_binding_histogram.pdf")
 ```
 
-Histogram of promoters by number of DNA-binding factors bound for different 
-biotypes and expression levels
+Histogram of promoters by number of DNA-binding factors bound for different biotypes and expression levels
 
-```{r expression_histogram, message=FALSE, warning=FALSE}
+``` r
 g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
 g + geom_histogram(binwidth = 5)  + 
   xlim(30, 100) +
   facet_wrap(expression~gene_type, scales = "free_y")
-  
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/expression_histogram-1.png)
+
+``` r
 ggsave("figures/k562_binding_histogram_expression.png")
 ggsave("figures/k562_binding_histogram_expression.pdf")
 ```
 
-Histogram of promoters by gene expression for different DNA-binding factor 
-densities. In red are prommoters with fewer than 25 factors bound). 
-In black are promomters with 25 or more factors bound.
+Histogram of promoters by gene expression for different DNA-binding factor densities. In red are prommoters with fewer than 25 factors bound). In black are promomters with 25 or more factors bound.
 
-```{r plot_peak_occurrence, message=FALSE, warning=FALSE}
+``` r
 peak_occurrence_df$tf_binding <- "low"
 peak_occurrence_df[which(peak_occurrence_df$number_of_tfs > 25), "tf_binding"] <- "high"
 
 g <- ggplot(peak_occurrence_df, aes(x = log10(tpm), color = tf_binding))
 g + geom_density(alpha = 0.2) +
   scale_color_manual(values = c("#424242","#a8404c"), name = "tf_binding")
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/plot_peak_occurrence-1.png)
+
+``` r
 ggsave("figures/k562_expression_histogram.png")
 ggsave("figures/k562_expression_histogram.pdf")
 ```
 
+THIS IS FOR umap\_with\_metadata.
+---------------------------------
 
+Median expression of bound promoters per TF
+===========================================
 
-## THIS IS FOR umap_with_metadata.
-# Median expression of bound promoters per TF
-
-```{r}
+``` r
 # binding_df <- promoter_peak_occurence %>%
 #   as.data.frame() %>%
 #   rownames_to_column("tf") %>%
@@ -302,6 +345,3 @@ ggsave("figures/k562_expression_histogram.pdf")
 # 
 # write_csv(binding_summary, "results/expression_summary_per_tf.csv")
 ```
-
-
-

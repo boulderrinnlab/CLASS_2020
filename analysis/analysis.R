@@ -36,3 +36,10 @@ rmarkdown::render(file.path("05_promoter_features_lncRNA-vs-mRNA",
                             "05_promoter_features_lncRNA_mRNA.Rmd"), 
                   md_document(variant = "markdown_github"))
 
+
+
+# 07_binding_vs_expression
+rmarkdown::render(file.path("07_binding_versus_expression",
+                            "07_binding_vs_expression.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
