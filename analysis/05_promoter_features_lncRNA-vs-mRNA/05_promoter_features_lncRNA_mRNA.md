@@ -1,27 +1,9 @@
----
-title: "Promoter features: mRNA vs lncRNA"
-output: html_document
-editor_options: 
-  chunk_output_type: console
----
-
-```{r setup, include=FALSE}
-options(stringsAsFactors = FALSE)
-knitr::opts_chunk$set(echo = TRUE)
-library(GenomicRanges)
-library(tidyverse)
-library(effectsize)
-library(regioneR)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
-```
-
-
-# Promoter features: lncRNA vs mRNA
+Promoter features: lncRNA vs mRNA
+=================================
 
 Loading in our promoter features for lncRNA and mRNA to compare seperately
 
-```{r import-peaks}
+``` r
 # Import peaks
 base_path <- "../01_consensus_peaks/results/"
 peak_list <- import_peaks(file.path(base_path,
@@ -42,7 +24,7 @@ mrna_matrix <- count_peaks_per_feature(mrna_promoters,
 
 This plots the number of overlaps with lncRNA and mRNA promoter
 
-```{r promoter-overlaps-vs-peaks}
+``` r
 # Check that the order is the same.
 stopifnot(all(names(peak_list) == rownames(lncrna_matrix)))
 num_peaks_df <- data.frame("dbp" = rownames(lncrna_matrix),
@@ -68,13 +50,19 @@ ggplot(num_peaks_dfl, aes(x = total_number_of_peaks,
   geom_smooth(method = "lm", se = TRUE, formula = y ~ x) + 
   stat_regline_equation() +
   stat_cor(label.y = c(1000, 2000), label.x = 30000)
+```
+
+![](05_promoter_features_lncRNA_mRNA_files/figure-markdown_github/promoter-overlaps-vs-peaks-1.png)
+
+``` r
 ggsave("figures/peaks_overlaps_relationship.png", height = 5, width = 8)
 ggsave("figures/peaks_overlaps_relationship.pdf", height = 5, width = 8)
 ```
 
-# Permutation test of promoter overlaps -- mRNA vs lncRNA
+Permutation test of promoter overlaps -- mRNA vs lncRNA
+=======================================================
 
-```{r import-permutation-results}
+``` r
 base_path <- "../02_permutation_of_consensus_peaks/results/"
 perm_res_promoters <- read.csv(file.path(base_path,
                                          "permutation_results_promoters.csv"))
@@ -82,7 +70,7 @@ perm_res_promoters <- read.csv(file.path(base_path,
 
 #### Heatmap of lncRNA and mRNA enrichment
 
-```{r permutation-results-heatmap, fig.width=5, fig.height=20, message=FALSE}
+``` r
 # Cluster
 perm_res_promoter_matrix <- perm_res_promoters %>%
   dplyr::select(tf, region, zscore) %>%
@@ -100,17 +88,18 @@ g + geom_raster() +
                        oob = scales::squish) + 
   coord_flip() + 
   theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+```
+
+![](05_promoter_features_lncRNA_mRNA_files/figure-markdown_github/permutation-results-heatmap-1.png)
+
+``` r
 ggsave("figures/promoter_enrichment_lncrna_vs_mrna.png", height = 28, width = 5)
 ggsave("figures/promoter_enrichment_lncrna_vs_mrna.pdf", height = 28, width = 5)
 ```
 
-Nearly all DBPs were enriched on both lncRNA and mRNA promoters. 
-A few however, were significantly depleted.
-eGFP-ZNF507: depleted on both mRNA and lncRNA promoters -- 
-BRCA1 was only depelted on mRNA promoters and was neither enriched or 
-depleted for lncRNA promoters over random chance.
+Nearly all DBPs were enriched on both lncRNA and mRNA promoters. A few however, were significantly depleted. eGFP-ZNF507: depleted on both mRNA and lncRNA promoters -- BRCA1 was only depelted on mRNA promoters and was neither enriched or depleted for lncRNA promoters over random chance.
 
-```{r promoter-depletion, fig.width=7, fig.height=10, message=FALSE}
+``` r
 depleted_on_promoters <- perm_res_promoters %>% 
   filter(alternative == "less", padj <= 0.01)
 
@@ -138,32 +127,44 @@ pl <- lapply(1:nrow(depleted_on_promoters),
              plot_perm_test, df = depleted_on_promoters)
 # Show plot
 gridExtra::grid.arrange(grobs = pl, ncol = 1)
+```
 
+![](05_promoter_features_lncRNA_mRNA_files/figure-markdown_github/promoter-depletion-1.png)
+
+``` r
 # Save plot
 pdf("figures/dbps_depleted_on_promoters.pdf", height = 10, width = 7)
 gridExtra::grid.arrange(grobs = pl, ncol = 1)
 dev.off()
 ```
 
+    ## RStudioGD 
+    ##         2
 
-`r paste(paste(depleted_on_promoters$region, depleted_on_promoters$tf, sep = "-"), collapse = " ")`
+mrna\_promoters-BRCA1 lncrna\_promoters-eGFP-ZNF507 mrna\_promoters-eGFP-ZNF507
 
-
-```{r, fig.width=7, fig.height=13}
+``` r
 #Plotting examples of genes that are neither enriched nor depleted on promoters
 ns_promoters <- perm_res_promoters %>% filter(padj > 0.01)
 pl <- lapply(1:nrow(ns_promoters), plot_perm_test, df = ns_promoters)
 gridExtra::grid.arrange(grobs = pl, ncol = 1)
+```
+
+![](05_promoter_features_lncRNA_mRNA_files/figure-markdown_github/unnamed-chunk-1-1.png)
+
+``` r
 ggsave("figures/dbps_no_pref_promoter_non_promoter.pdf")
 ```
 
+    ## Saving 7 x 13 in image
+
 Not significant:
 
-`r paste(paste(ns_promoters$region, ns_promoters$tf, sep = "-"), collapse = " ")`
+lncrna\_promoters-BRCA1 lncrna\_promoters-ZNF280A mrna\_promoters-ZNF280A mrna\_promoters-eGFP-TSC22D4
 
 ### lncRNA vs mRNA binding bias
 
-```{r lncrna-vs-mrna-bias, message=FALSE}
+``` r
 lncrna_num_overlaps <- rowSums(lncrna_matrix)
 mrna_num_overlaps <- rowSums(mrna_matrix)
 num_peaks <- sapply(peak_list, length)
@@ -207,7 +208,11 @@ write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
 # Full lncRNA promoter occupancy plot
 g <- ggplot(chisq_res, aes(x = diff, y = -log10(chisq_pval) ))
 g + geom_point()  
+```
 
+![](05_promoter_features_lncRNA_mRNA_files/figure-markdown_github/lncrna-vs-mrna-bias-1.png)
+
+``` r
 # Zoom in plot
 g2 <- ggplot(chisq_res, 
              aes(x = log2(lncrna_peaks_observed / lncrna_peaks_expected), 
@@ -220,7 +225,20 @@ g2 + geom_point() +
   ggtitle("lncRNA vs mRNA binding enrichment") +
   xlab("log2(Obs/Exp)") +
   geom_hline(yintercept = -log10(0.05), lty = 2)
+```
+
+    ## Warning: Removed 113 rows containing missing values (geom_point).
+
+![](05_promoter_features_lncRNA_mRNA_files/figure-markdown_github/lncrna-vs-mrna-bias-2.png)
+
+``` r
 ggsave("figures/lncrna_vs_mrna_binding.pdf")
+```
+
+    ## Warning: Removed 113 rows containing missing values (geom_point).
+
+``` r
 ggsave("figures/lncrna_vs_mrna_binding.png")
 ```
 
+    ## Warning: Removed 113 rows containing missing values (geom_point).

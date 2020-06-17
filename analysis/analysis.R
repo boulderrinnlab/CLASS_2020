@@ -29,3 +29,10 @@ rmarkdown::render(file.path("04_promoter_features_profile_plots",
                             "consensus_peak_TSS_meta_plots.Rmd"), 
                   md_document(variant = "markdown_github"))
 
+
+
+# 05_promoter_features_lncRNA-vs-mRNA
+rmarkdown::render(file.path("05_promoter_features_lncRNA-vs-mRNA",
+                            "05_promoter_features_lncRNA_mRNA.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
