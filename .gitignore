@@ -18,3 +18,5 @@
 *.chain
 *.bed*
 *data*
+*.txt
+*.csv

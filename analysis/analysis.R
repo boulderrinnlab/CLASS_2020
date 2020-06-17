@@ -4,31 +4,52 @@
 
 #### SETUP
 library(rmarkdown)
-
+# TODO: potentiall make all of these into readme.md files
+# so that they render automatically in github when the file path is
+# clicked. Alternatively, render all the markdowns into a github.io site
+# according to these instructions:
+# https://nicolas-van.github.io/easy-markdown-to-github-pages/
 
 # 01_consensus_peaks
-rmarkdown::render("01_consensus_peaks/consensus_peak_set.Rmd", md_document(variant = "markdown_github"))
+rmarkdown::render(file.path("01_consensus_peaks",
+                            "01_consensus_peaks.Rmd"), 
+                  md_document(variant = "markdown_github"))
 
-# 02_tss_metaplots
-rmarkdown::render("02_tss_metaplots/tss_metaplots.Rmd", md_document(variant = "markdown_github"))
 
-# 03_clustering
-rmarkdown::render("03_clustering/global_clustering.Rmd", md_document(variant = "markdown_github"))
+# 02_permutation_of_consensus_peaks
+rmarkdown::render(file.path("02_permutation_of_consensus_peaks",
+                            "permutation_feature_intersects.Rmd"), 
+                  md_document(variant = "markdown_github"))
+  
 
-# 04_permutation_test
-rmarkdown::render("04_permutation_test/permutation_test_by_feature_type.Rmd", md_document(variant = "markdown_github"))
+# 03_global_clustering
+rmarkdown::render(file.path("03_global_clustering",
+                            "03_global_clustering.Rmd"), 
+                  md_document(variant = "markdown_github"))
 
-# 05_rnaseq_expression
-rmarkdown::render("05_rnaseq_expression/expression_vs_binding.Rmd", md_document(variant = "markdown_github"))
 
-# 06_nascent_expression
-rmarkdown::render("06_nascent_expression/nascent_expression.Rmd", md_document(variant = "markdown_github"))
+# 04_promoter_features_profile_plots
+rmarkdown::render(file.path("04_promoter_features_profile_plots",
+                            "consensus_peak_TSS_meta_plots.Rmd"), 
+                  md_document(variant = "markdown_github"))
 
-# 07_reservoir_properties
-rmarkdown::render("07_reservoir_properties/factors_on_reservoirs.Rmd", md_document(variant = "markdown_github"))
 
-# 08_dbp_properties
-rmarkdown::render("08_dbp_properties/umap_with_metadata.Rmd", md_document(variant = "markdown_github"))
 
-# 09_expression_regression
-rmarkdown::render("09_expression_regression/expression_regression.Rmd", md_document(variant = "markdown_github"))
+# 05_promoter_features_lncRNA-vs-mRNA
+rmarkdown::render(file.path("05_promoter_features_lncRNA-vs-mRNA",
+                            "05_promoter_features_lncRNA_mRNA.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
+
+
+# 07_binding_vs_expression
+rmarkdown::render(file.path("07_binding_versus_expression",
+                            "07_binding_vs_expression.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
+
+# 08_defining_reservoirs
+rmarkdown::render(file.path("08_defining_reservoirs",
+                            "08_defining_reservoirs.Rmd"), 
+                  md_document(variant = "markdown_github"))
+

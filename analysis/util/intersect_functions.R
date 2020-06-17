@@ -95,9 +95,12 @@ create_consensus_peaks <- function(broadpeakfilepath = "/Shares/rinn_class/data/
 }
 
 # TODO: refactor
-read_peaks <- function(broad_peak_file) {
+read_peaks <- function(broad_peak_file, filter_to_canonical_chr = FALSE) {
   # A broad peak file is just a tab separated file 
   dat <- read.table(broad_peak_file, sep = "\t")
+  if(filter_to_canonical_chr == TRUE) {
+    dat <- dat[dat$V1 %in% c(paste0("chr", 1:22), "chrM", "chrX", "chrY"),]
+  }
   gr <- GRanges(seqnames = dat$V1,
                 ranges = IRanges(start=dat$V2,end=dat$V3))
   return(gr)
@@ -218,14 +221,17 @@ get_promoter_regions <- function(gencode_gr, biotype, upstream = 3e3, downstream
 #' 
 #' @param gencode_gr
 #'  set of genomic features as a GRanges object
-
-get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0) {
+overlapping_promoters <- function(gencode_gr, upstream = 1000, downstream = 0) {
   
   genes <- gencode_gr[gencode_gr$type == "gene"]
   proms <- GenomicRanges::promoters(genes, upstream = upstream, downstream = downstream)
   
-  reduced_proms <- GenomicRanges::reduce(proms)
-  suppressWarnings(ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE))
+  reduced_proms <- GenomicRanges::reduce(proms, ignore.strand = T)
+  
+  reduced_widths <- data.frame(width = width(reduced_proms),
+                               index = 1:length(reduced_proms))
+  
+  ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE)
   ov_proms <- data.frame("gene_promoters_from" = ov_proms@from,
                          "reduced_promoters_to" = ov_proms@to)
   
@@ -240,22 +246,46 @@ get_overlapping_promoters <- function(gencode_gr, upstream = 200, downstream = 0
   overlapped$gene_id <- proms$gene_id[overlapped$gene_promoters_from]
   overlapped$gene_name <- proms$gene_name[overlapped$gene_promoters_from]
   overlapped$gene_type <- proms$gene_type[overlapped$gene_promoters_from]
-  overlapped$strand <- strand(proms[overlapped$gene_promoters_from])
+  overlapped$strand <- as.character(strand(proms[overlapped$gene_promoters_from]))
   
   overlapped_metadata <- overlapped %>% 
+    arrange(strand) %>%
     group_by(reduced_promoters_to, count) %>%
-    summarize(gene_id = paste(gene_id, collapse = ";"),
-              gene_name = paste(gene_name, collapse = ";"),
-              gene_type = paste(gene_type, collapse = ";"),
-              strand = paste(as.character(strand), collapse = ";"))
+    summarize(nearby_promoter_gene_ids = paste(gene_id, collapse = ";"),
+              nearby_promoter_gene_names = paste(gene_name, collapse = ";"),
+              nearby_promoter_gene_type = paste(gene_type, collapse = ";"),
+              nearby_promoter_gene_strands = paste(strand, collapse = ";"))
   
-  reduced_promoters_overlapping$num_overlaps <- overlapped_metadata$count
-  reduced_promoters_overlapping$gene_id <- overlapped_metadata$gene_id
-  reduced_promoters_overlapping$gene_name <- overlapped_metadata$gene_name
-  reduced_promoters_overlapping$gene_type <- overlapped_metadata$gene_type
-  reduced_promoters_overlapping$gene_type <- overlapped_metadata$gene_type
+  # Okay, I think I want to merge this all back into overlapped. 
+  overlapped_merge <- merge(overlapped, overlapped_metadata)
+  names(overlapped_merge)[2] <- "num_nearby_promoters"
   
-  return(reduced_promoters_overlapping) 
+  # Let's now filter to just the lncRNA and mRNA genes since that's
+  # the subject of our analysis.
+  overlapped_merge <- overlapped_merge %>% filter(gene_type %in% c("lncRNA", "protein_coding"))
+  
+  # Clean up to just the columns we need to add to peak_occurrence_df
+  overlapped_merge <- overlapped_merge %>% dplyr::select("gene_id", "strand",
+                                                         "num_nearby_promoters",
+                                                         "nearby_promoter_gene_ids",
+                                                         "nearby_promoter_gene_names",
+                                                         "nearby_promoter_gene_type",
+                                                         "nearby_promoter_gene_strands")
+  
+  # Finally let's annotate the bidirectionals
+  # So these will be genes that have only two two nearby promoters with
+  # opposite direction of transcription.
+  # Since we ordered by strand, we only need to account for "-;+" 
+  # (and not "+;-")
+  overlapped_merge[overlapped_merge$nearby_promoter_gene_strands == "-;+", 
+                   "shared_promoter_type"] <- "bidirectional"
+  overlapped_merge[overlapped_merge$nearby_promoter_gene_strands == "-;-" |
+                     overlapped_merge$nearby_promoter_gene_strands == "+;+"  , 
+                   "shared_promoter_type"] <- "nearby_same_strand"
+  overlapped_merge[overlapped_merge$num_nearby_promoters > 2, 
+                   "shared_promoter_type"] <- "multiple_nearby_promoters"
+  
+  return(overlapped_merge) 
 }
 
 
@@ -292,8 +322,8 @@ count_peaks_per_feature <- function(features, peak_list, type = "counts") {
   
   if(type == "occurrence") {
     peak_occurrence <- matrix(as.numeric(peak_count > 0), 
-                             nrow = dim(peak_count)[1],
-                             ncol = dim(peak_count)[2])
+                              nrow = dim(peak_count)[1],
+                              ncol = dim(peak_count)[2])
     rownames(peak_occurrence) <- rownames(peak_count)
     colnames(peak_occurrence) <- colnames(peak_count)
     peak_matrix <- peak_occurrence
@@ -400,7 +430,7 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
   if (length(unique(width(windows))) != 1) {
     stop("width of windows should be equal...")
   }
-
+  
   if (is.null(weightCol)) {
     peak.cov <- coverage(peak.gr)
   } else {
@@ -412,7 +442,7 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
                        IRanges(start=rep(1, length(cov.len)),
                                end=cov.len))
   suppressWarnings(windows <- subsetByOverlaps(windows, cov.width,
-                              type="within", ignore.strand=TRUE))
+                                               type="within", ignore.strand=TRUE))
   
   chr.idx <- intersect(names(peak.cov),
                        unique(as.character(seqnames(windows))))
@@ -440,7 +470,6 @@ get_tag_matrix <- function(peak.gr, weightCol=NULL, windows, flip_minor_strand=T
   tagMatrix <- tagMatrix[rowSums(tagMatrix)!=0,]
   return(tagMatrix)
 }
-
 
 
 

@@ -1,0 +1,116 @@
+---
+title: "10_reservoir_binding_properties"
+author: "JR"
+date: "5/29/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+library(GenomicRanges)
+library(tidyverse)
+library(effectsize)
+```
+
+# Loading in peak_occuence_df and peak_occurence_matrix
+
+```{r}
+
+peak_occurrence_matrix <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
+
+# Read in reservoir annotations combined with promoter peak occurence df. 
+peak_occurrence_df <- read_csv("../08_defining_reservoirs/results/08_peak_occurrence_df_promoter_types.csv")
+
+```
+
+
+# We are setting up to look at the binding distribution on expressed lncRNA and mRNA vs reservoir mRNA lncRNA binding. 
+#1 Distribution of reservoir vs all subsetted by lncRNA and mRNA
+Figure 4C
+```{r}
+# Let's look at distribution of binding events to filter on those that have more than typical numbers of DBPs bound to promoter.
+# first reverting back into a data frame with specific columns 
+g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
+g + geom_histogram(binwidth = 5)  + 
+  xlim(30, 100) +
+  facet_wrap(expression ~ reservoir, scales = "free_y")
+
+ggsave("figures/exp_not_exp_binding_histogram.png")
+ggsave("figures/exp_not_exp_binding_histogram.pdf")
+
+```
+# We find that expressed or not expressed promoters still have similar distributions of DBP binding events. With some non-expressed promoters containing 100 independent DBP localization events. 
+
+
+#2 Chi-Squared test for DBPs enriched and depleted at reservoirs versus non-reservoir promoters.
+```{r}
+# Subset columns to only the reservoirs
+res_occurrence_matrix <- peak_occurrence_matrix[, peak_occurrence_df$gene_id[peak_occurrence_df$reservoir == T]]
+# Non reservoirs that also have more than 7 peaks bound
+non_res_occurrence_matrix <- peak_occurrence_matrix[,  peak_occurrence_df$gene_id[peak_occurrence_df$reservoir == F & peak_occurrence_df$number_of_dbp > 7]]
+
+
+# Number of promoters bound in each category
+dbp_binding <- data.frame(dbp = rownames(peak_occurrence_matrix),
+                          "num_res_promoters_bound" = rowSums(res_occurrence_matrix),
+                          "num_nonres_promoters_bound" = rowSums(non_res_occurrence_matrix))
+
+dbp_binding <- dbp_binding %>%
+  mutate("num_res_promoters_not_bound" = ncol(res_occurrence_matrix) - num_res_promoters_bound,
+         "num_nonres_promoters_not_bound" = ncol(non_res_occurrence_matrix) - num_nonres_promoters_bound)
+
+
+
+for(i in 1:nrow(dbp_binding)) {
+  df1 <- data.frame("gene_type" = c("reservoir","reservoir", "non_res", "non_res"),
+                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
+                    "count" = c(dbp_binding$num_res_promoters_bound[i],
+                                dbp_binding$num_res_promoters_not_bound[i],
+                                dbp_binding$num_nonres_promoters_bound[i],
+                                dbp_binding$num_nonres_promoters_not_bound[i])) %>%
+    pivot_wider(names_from = gene_type, values_from = count) %>%
+    column_to_rownames("promoter_bound") %>%
+    as.matrix()
+  
+  csres <- chisq.test(df1)
+  phi_coef <- phi(df1)
+  
+  # Add the results to the data frame
+  dbp_binding[i, "chisq_stat"] <- csres$statistic
+  dbp_binding[i, "chisq_pval"] <- csres$p.value
+  dbp_binding[i, "reservoir_peaks_expected"] <- csres$expected["bound", "reservoir"]
+  dbp_binding[i, "phi_coefficient"] <- phi_coef$phi
+}
+
+
+#Adjusting P value with BH correction, observed - expected and writing this to a .csv file
+
+dbp_binding$padj <- p.adjust(dbp_binding$chisq_pval, method = "BH")
+dbp_binding$diff <- log2(dbp_binding$num_res_promoters_bound/dbp_binding$reservoir_peaks_expected)
+write_csv(dbp_binding, "results/reservoir_chi_squared_results.csv")
+
+
+#Plotting Chi-squared test results 
+g <- ggplot(dbp_binding, aes(x = diff, y = -log10(chisq_pval), label = dbp))
+g + geom_point() +
+  geom_text() +
+  geom_hline(yintercept = -log10(0.001))
+ggsave("figures/chi-squared_enrichment_depletion.pdf")
+
+# This shows that there are not any DBPs significantly enriched on reservoirs (P value < 0.01 and 2 fold enrichment)
+
+```
+
+
+
+#TODO ? UMAP reservoir promoter annotations ?
+
+
+
+
+
+
