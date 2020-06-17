@@ -124,7 +124,7 @@ ghost <- peak_occurrence_df %>% filter(nascentTpm < 0.001 & reservoir == 1)
 peak_occurrence_df$ghost <- as.numeric(peak_occurrence_df$nascentTpm < 0.001 & 
                                          peak_occurrence_df$reservoir == 1)
 
-table(peak_occurrence_df$ghost)
+ggsave("figures/ghost_vs_nascent.pdf")
 
 ```
 
