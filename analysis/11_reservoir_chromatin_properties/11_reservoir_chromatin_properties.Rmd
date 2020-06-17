@@ -16,7 +16,10 @@ source("../util/_setup.R")
 
 ```
 
-#Goal: to determine the chromatin environment of reservoir promoters using histone modification ChIP data. Specifically, Histone H3 (H3) Lysine 27 tri-methylation (H3K27me3) that represents heterochraomtic regions / and H3 lysine 27 acetylation that represents euchromatin.
+#Goal: to determine the chromatin environment of reservoir promoters using 
+histone modification ChIP data. Specifically, Histone H3 (H3) Lysine 27 
+tri-methylation (H3K27me3) that represents heterochraomtic regions / 
+and H3 lysine 27 acetylation that represents euchromatin.
 
 ```{r} 
 
@@ -78,7 +81,7 @@ peak_occurrence_df$k27me3 <- as.numeric(peak_occurrence_df$h3k27me3)
 peak_occurrence_df$k27ac <- as.numeric(peak_occurrence_df$h3k27ac)
 
 #remove old histone logical call columns
-peak_occurrence_df <- subset(peak_occurrence_df, select= -c(19,20))
+peak_occurrence_df <- subset(peak_occurrence_df, select = -c(19,20))
 
 # Here it is: the final peak_occurrence_df
 
@@ -87,33 +90,117 @@ write.csv(peak_occurrence_df, "results/peak_occurence_df.csv")
 ```
 
 
+# First plotting the density of nascent on reservoir vs non-reservoir
+```{r}
+# Let's plot nascent transcription relative to the number of DBPs bound.
+
+ggplot(peak_occurrence_df, aes( x = log10(nascentTpm + 1), 
+                                colour = as.factor(reservoir))) +
+geom_density()
+ggsave("figures/reservoir_vs_nascent.pdf")
+
+```
+
+
 # Figure 5a DBP-vs-Nascent TPM
 ```{r}
-# Let's plot the density of nascent transcription relative to the number of DBPs bound.
 
-ggplot(peak_occurrence_df, aes(x=number_of_dbp, y= log10(nascentTpm))) +
-       geom_point() 
+ggplot(peak_occurrence_df, aes(y = log10(nascentTpm + 1), x = number_of_dbp)) +
+  geom_smooth()
 
-ggsave("figures/DBP_vs_nascent.pdf")
-
-
+ggsave("figures/DBPs_vs_nascent.pdf")
 ```
+# Here we found a similar trend as RNA-seq where there is a positive 
+correlation between number of DBPs and amount of nascent expression. There is 
+also, similar to RNA-seq.
 
+
+# lets see if there are reservoirs that lack nascent txn (ghost)
 # Define Ghost and Zombies and write to peak occurence df
 ```{r}
-ghost <-
-zombie <-
-  
-  hypergeometric of zhombie lncRNA/mRNA representaiton
-  
-  
- write to peak_occurrence_df
+
+ghost <- peak_occurrence_df %>% filter(nascentTpm < 0.001 & reservoir == 1) 
+
+peak_occurrence_df$ghost <- as.numeric(peak_occurrence_df$nascentTpm < 0.001 & 
+                                         peak_occurrence_df$reservoir == 1)
+
+table(peak_occurrence_df$ghost)
+
 ```
+
+# Here we find that 355 of 1,362 (26%) of reservoirs have neither mature 
+RNA-seq expression nor nascent expression despite many DBPs bound. let's look
+at those two distributions, but first define zombies as nascent expression but
+not RNA-seq expression from these promoters. 
+
+
+```{r}
+# Adding zombies to peak occurence df.
+
+zombie <- peak_occurrence_df %>% 
+  filter(nascentTpm > 0.001 & reservoir == 1) 
+
+peak_occurrence_df$zombie <- as.numeric(peak_occurrence_df$nascentTpm > 0.001 
+                                        & peak_occurrence_df$reservoir == 1)
+
+# write out final peak_occurence_df 
+
+write_csv(peak_occurrence_df, "results/peak_occurence_df.csv")
+
+```
+
+# Now we want to explore if the lack of nascent transcripts is due to chromatin
+environment. Specifically K27me3 and K27ac states of these promoters.
+```{r}
+
+# How it compares to RNA seq
+
+ggplot(peak_occurrence_df, aes(x = log10(tpm + .1), 
+                               color = as.logical(k27ac))) +
+  geom_density()
+
+#K27ac is positively associated RNA-seq as expected
+
+ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + .1), 
+                               color = as.logical(k27ac))) +
+  geom_density()
+
+# in general k27ac correlates with higher nascent tpm as expected
+
+# Now narrowing in on only reservoirs looking at K27ac status
+
+ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + 1), 
+                               color = as.logical(k27ac & reservoir))) +
+  geom_density()
+
+# Suprisingly we do not see a strong enrichment of k27ac towards higher tpm.
+
+# Now let's look at k27me3 status
+
+ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + .1), 
+                               color = as.logical(k27me3 & reservoir))) +
+  geom_density()
+
+# K27me3 does seperate ghosts from zombies
+
+ggsave("figures/reservoir")
+
+
+```
+
+
 
 # Figure 5b: # DBP distribution of DBPs between ghost and zombie
 ```{r}
 
+ggplot(peak_occurrence_df %>% filter(reservoir == 1), aes(x = number_of_dbp, 
+                               fill = factor(ghost))) +
+  geom_density(alpha = .2)
 
+ggplot(peak_occurrence_df %>% filter(reservoir == 1),aes(x = factor(ghost),
+                                                         y = number_of_dbp)) +
+  geom_boxplot() +
+  stat_compare_means()
 
 
 ```
@@ -122,9 +209,9 @@ zombie <-
 
 
 ```{r}
-#plotting histone occurrence and super enhancer occurrence
+#plotting histone occurrence and reservoirr occurrence
 
-genes.venn <- euler(peak_occurrence_df[,c(10,19,20)])
+genes.venn <- euler(peak_occurrence_df[,c("reservoir","k27me3", "k27ac")])
 plot(genes.venn, quantities = TRUE)
 ggsave("figures/venn_chroamtin_ov_resvoirs.pdf")
 
