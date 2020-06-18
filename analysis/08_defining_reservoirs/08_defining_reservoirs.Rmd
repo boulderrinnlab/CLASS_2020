@@ -438,7 +438,8 @@ g + geom_violin() +
 # When windowed does expression correlate bettwer with binding
 # Cool finding that number of DBPs bound in five gene 
 # windows also correlates with expression in 5 gene window. 
-g <- ggplot(expression_window_df, aes(x = total_dbps_bound, y = log10(mean_tpm)))
+g <- ggplot(expression_window_df, aes(x = total_dbps_bound, 
+                                      y = log10(mean_tpm)))
 g + geom_point() + stat_cor() +
   geom_smooth() +
   ggtitle("Five gene windows",
