@@ -59,6 +59,11 @@ promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_prom
 # Read our compiled peak_occurrence data frame from 10_reservoir_nascent_txn (with all the variables for each promoter observation). 
 peak_occurrence_df <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
+#TODO DEBUG overlaps
+#TODO this is correct if I sort by res and se both sort same in current ?problematic?
+#TODO debug so it must by in findOVerlaps
+peak_occurrence_df_test <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
+
 
 # K27me3 Promoter overlaps
 ov1 <- findOverlaps(promoters, hmark_granges[[1]])
