@@ -53,3 +53,15 @@ rmarkdown::render(file.path("08_defining_reservoirs",
                             "08_defining_reservoirs.Rmd"), 
                   md_document(variant = "markdown_github"))
 
+
+# 09_reservoir_binding_properties
+rmarkdown::render(file.path("09_reservoir_binding_properties",
+                            "09_reservoir_binding_properties.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
+
+# 10_reservoir_nascent_txn
+rmarkdown::render(file.path("10_reservoir_nascent_txn",
+                            "10_reservoir_nascent_txt.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
