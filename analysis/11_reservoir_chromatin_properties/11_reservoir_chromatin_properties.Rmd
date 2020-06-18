@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(GenomicRanges)
 library(eulerr)
+library(ggpubr)
 source("../util/intersect_functions.R")
 source("../util/_setup.R")
 
@@ -65,12 +66,7 @@ promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_prom
 # Read our compiled peak_occurrence data frame from 10_reservoir_nascent_txn (with all the variables for each promoter observation). 
 peak_occurrence_df <- read.csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
-#TODO DEBUG overlaps
-#TODO this is correct if I sort by res and se both sort same in current ?problematic?
-#TODO debug so it must by in findOVerlaps
-peak_occurrence_df_test <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
-names(hmark_granges)
 # K27me3 Promoter overlaps
 ov1 <- findOverlaps(promoters, hmark_granges[[1]])
 overlaps <- unique(ov1@from)
@@ -78,7 +74,7 @@ overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27me3 <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27me3)
 
-peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE]
+
 
 # K27ac Promoter overlaps
 ov2 <- findOverlaps(promoters, hmark_granges[[2]])
@@ -86,39 +82,6 @@ overlaps <- unique(ov2@from)
 overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27ac <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27ac)
-
-
-# Okay, let's randomly sample some regions
-sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27ac == TRUE],6)
-# Let's just just the promoter regions for these sampled regions
-names(promoters) <- promoters$gene_id
-prom_sampled <- promoters[sampled]
-# Let's simplify this granges to just the basics
-prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
-                            ranges = prom_sampled@ranges)
-rtracklayer::export(prom_samples_reg, "results/h3k27ac_sampled_regions.bed")
-
-# Okay, let's randomly sample some H3k27me3 regions
-sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE],6)
-# Let's just just the promoter regions for these sampled regions
-names(promoters) <- promoters$gene_id
-prom_sampled <- promoters[sampled]
-# Let's simplify this granges to just the basics
-prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
-                            ranges = prom_sampled@ranges)
-rtracklayer::export(prom_samples_reg, "results/h3k27me3_sampled_regions.bed")
-
-# Okay, let's randomly sample some H3k27me3 regions
-sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE &
-                                               peak_occurrence_df$h3k27ac == TRUE],6)
-# Let's just just the promoter regions for these sampled regions
-names(promoters) <- promoters$gene_id
-prom_sampled <- promoters[sampled]
-# Let's simplify this granges to just the basics
-prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
-                            ranges = prom_sampled@ranges)
-rtracklayer::export(prom_samples_reg, "results/both_sampled_regions.bed")
-
 
 # Writting out final peak_occurrence_df !
 # First have to change histone mark overlaps to numeric from logical
@@ -144,15 +107,29 @@ ggplot(peak_occurrence_df, aes( x = log10(nascentTpm + 1),
 geom_density()
 ggsave("figures/reservoir_vs_nascent.pdf")
 
-```
 
+# Testing stats of means 
+ggplot(peak_occurrence_df, 
+       aes( x = factor(reservoir) ,y = log10(nascentTpm + 1), 
+                                colour = as.factor(reservoir))) +
+geom_boxplot() +
+  stat_compare_means() +
+  stat_mean() +
+  stat_summary(fun.data = function(x) 
+    data.frame(y = 4, label = paste("Mean=",mean(x))), geom="text") 
+
+
+
+ggsave("figures/global_reservoir_vs_nascent.pdf")
+```
+# Reservoirs and non res have similar distributions of nascent transcriptiono
 
 # Figure 5a DBP-vs-Nascent TPM
 ```{r}
 
 ggplot(peak_occurrence_df, aes(y = log10(nascentTpm + 1), x = number_of_dbp)) +
-  geom_smooth()
-
+  geom_smooth() +
+  stat_cor(label.y = 2)
 ggsave("figures/DBPs_vs_nascent.pdf")
 ```
 # Here we found a similar trend as RNA-seq where there is a positive 
@@ -198,41 +175,66 @@ write_csv(peak_occurrence_df, "results/peak_occurence_df.csv")
 environment. Specifically K27me3 and K27ac states of these promoters.
 ```{r}
 
-# How it compares to RNA seq
+# How k27ac presences compares to nascent TPMs
 
-ggplot(peak_occurrence_df, aes(x = log10(tpm + .1), 
+ggplot(peak_occurrence_df, aes(x = factor(k27ac), y = log10(nascentTpm + .1),
                                color = as.logical(k27ac))) +
-  geom_density()
+geom_boxplot() +
+  stat_compare_means() +
+  stat_mean() +
+  stat_summary(fun.data = function(x) 
+    data.frame(y = 4, label = paste("Mean =", mean(x))), geom ="text") 
 
-#K27ac is positively associated RNA-seq as expected
-
-ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + .1), 
-                               color = as.logical(k27ac))) +
-  geom_density()
 ggsave("figures/nascent_vs_k27ac_all_promoters.pdf")
-# in general k27ac correlates with higher nascent tpm as expected
 
-# Now narrowing in on only reservoirs looking at K27ac status
 
-ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + 1), 
-                               color = as.logical(k27ac & reservoir))) +
-  geom_density()
-ggsave("figures/k27ac_reservoir_vs_nascent.pdf")
+# How k27me3 presence compares to RNA seq
 
-# Suprisingly we do not see a strong enrichment of k27ac towards higher tpm.
+ggplot(peak_occurrence_df, aes(x = factor(k27me3), y = log10(nascentTpm + .1),
+                               color = as.logical(k27me3))) +
+geom_boxplot() +
+  stat_compare_means() +
+  stat_mean() +
+  stat_summary(fun.data = function(x) 
+    data.frame(y = 4, label = paste("Mean=",mean(x))), geom="text") 
 
-# Now let's look at k27me3 status
+ggsave("figures/nascent_vs_k27me3_all_promoters.pdf")
 
-ggplot(peak_occurrence_df, aes(x = log10(nascentTpm + .1), 
-                               color = as.logical(k27me3 & reservoir))) +
-  geom_density()
+#K27me3 is negatively associated RNA-seq as expected
+
+
+
+```
+
+
+# Now narrowing in on only reservoirs looking at K27ac and k27me3 status
+```{r}
+
+# Compare means of nascent TPM of k37me3 positive-vs-negative reservoirs 
+
+ggplot(peak_occurrence_df %>% filter(reservoir == 1), 
+       aes(x = factor(k27ac), y = log10(nascentTpm + .1))) +
+geom_boxplot() +
+  stat_compare_means() +
+  stat_mean() +
+  stat_summary(fun.data = function(x) 
+    data.frame(y = 4, label = paste("Mean=", mean(x))), geom = "text") 
 
 ggsave("figures/k27me3_reservoir_vs_nascent.pdf")
-
-# K27me3 does seperate ghosts from zombies
-
+# Perhaps as expected K72me3 is negatively correlated with nascentTpm
 
 
+# Compare means of nascent TPM of k37me3 positive-vs-negative reservoirs 
+ggplot(peak_occurrence_df %>% filter(reservoir == 1), 
+       aes(x = factor(k27me3), y = log10(nascentTpm + .1))) +
+geom_boxplot() +
+  stat_compare_means() +
+  stat_mean() +
+  stat_summary(fun.data = function(x) 
+    data.frame(y = 4, label = paste("Mean=", mean(x))), geom = "text") 
+
+ggsave("figures/k27ac_reservoir_vs_nascent.pdf")
+# Perhaps as expected K72ac is positively correlated with nascentTpm
 
 ```
 
@@ -245,22 +247,29 @@ ggplot(peak_occurrence_df %>% filter(reservoir == 1), aes(x = number_of_dbp,
                                fill = factor(ghost))) +
   geom_density(alpha = .2)
 
+
 ggsave("figures/DBP-vs-ghost_zombie.pdf")
 
 # Comparing the means of distributions since they look similar
-ggplot(peak_occurrence_df %>% filter(reservoir == 1),aes(x = factor(ghost),
-                                                         y = number_of_dbp)) +
+ggplot(peak_occurrence_df %>% filter(reservoir == 1),aes(x = factor(ghost),                                                      y = number_of_dbp)) +
   geom_boxplot() +
   stat_compare_means()
 
+# Comparing the means of # DBP on ghost vs zombies
 
-
+ggplot(peak_occurrence_df %>% filter(reservoir == 1), 
+       aes(x = factor(ghost), y = number_of_dbp)) +
+geom_boxplot() +
+  stat_compare_means() +
+  stat_mean() +
+  stat_summary(fun.data = function(x) 
+    data.frame(y = 4, label = paste("Mean=", mean(x))), geom = "text") 
+ggsave("figures/compare_means_DBP-vs-ghost_zombie.pdf")
 ```
 # the distribution of number of bound DBPs is not differnet between ghosts and
 zombies (P = .064)
 
-
-
+# VENN Diagram of reservoir chromatin status 
 ```{r}
 #plotting histone occurrence and reservoirr occurrence
 
@@ -268,6 +277,46 @@ genes.venn <- euler(peak_occurrence_df[,c("reservoir","k27me3", "k27ac")])
 plot(genes.venn, quantities = TRUE)
 ggsave("figures/venn_chroamtin_ov_resvoirs.pdf")
 
+```
+------------------------------------------------------------
+# If you want to randomly sample genes and test in UCSC browser : ENJOY !
+------------------------------------------------------------
+```{r}
+
+### I like this random sampeling :) so something is different as the DF I have
+### is numeric not logical -- maybe the true does find the 1 though?
+
+# Okay, let's randomly sample some regions
+sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27ac == TRUE],6)
+# Let's just just the promoter regions for these sampled regions
+names(promoters) <- promoters$gene_id
+prom_sampled <- promoters[sampled]
+# Let's simplify this granges to just the basics
+prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
+                            ranges = prom_sampled@ranges)
+rtracklayer::export(prom_samples_reg, "results/h3k27ac_sampled_regions.bed")
+
+# Okay, let's randomly sample some H3k27me3 regions
+sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE],6)
+# Let's just just the promoter regions for these sampled regions
+names(promoters) <- promoters$gene_id
+prom_sampled <- promoters[sampled]
+# Let's simplify this granges to just the basics
+prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
+                            ranges = prom_sampled@ranges)
+rtracklayer::export(prom_samples_reg, "results/h3k27me3_sampled_regions.bed")
+
+# Okay, let's randomly sample some H3k27me3 regions
+sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE &
+                                               peak_occurrence_df$h3k27ac == TRUE],6)
+# Let's just just the promoter regions for these sampled regions
+names(promoters) <- promoters$gene_id
+prom_sampled <- promoters[sampled]
+# Let's simplify this granges to just the basics
+prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
+                            ranges = prom_sampled@ranges)
+rtracklayer::export(prom_samples_reg, "results/both_sampled_regions.bed")
+
+
 
 ```
----------------
