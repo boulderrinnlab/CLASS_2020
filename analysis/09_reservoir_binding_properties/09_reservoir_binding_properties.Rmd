@@ -34,7 +34,6 @@ lncRNA and mRNA vs reservoir mRNA lncRNA binding.
 Distribution of reservoir vs all subsetted by lncRNA and mRNA
 
 ```{r}
-#### FIGURE: Figure 4C
 g <- ggplot(peak_occurrence_df, aes(x = number_of_dbp))
 g + geom_histogram(binwidth = 5)  + 
   xlim(30, 100) +
@@ -42,6 +41,7 @@ g + geom_histogram(binwidth = 5)  +
 ggsave("figures/many_binders_histogram.png")
 ggsave("figures/many_binders_histogram.pdf")
 
+#### FIGURE: Figure 4C
 g <- ggplot(peak_occurrence_df %>% filter(number_of_dbp > 7), 
             aes(x = number_of_dbp, 
                 fill = factor(reservoir, labels = c("Non-res", "Reservoir"))))
@@ -53,6 +53,35 @@ g + geom_density(alpha = 0.2) +
           subtitle = "Promoters w/ > 7 DBPs")
 ggsave("figures/many_binders_density_plot.png")
 ggsave("figures/many_binders_density_plot.pdf")
+
+
+data_summary <- function(x) {
+   m <- mean(x)
+   ymin <- m - sd(x)
+   ymax <- m + sd(x)
+   return(c(y = m, ymin = ymin, ymax = ymax))
+}
+
+g <- ggplot(peak_occurrence_df %>% filter(number_of_dbp > 7), 
+            aes(x = factor(reservoir, labels = c("Non-res", "Reservoir")),
+                           y = number_of_dbp))
+g + geom_violin() + stat_compare_means() +
+  facet_grid(~gene_type) +
+  stat_summary(fun.data = data_summary) +
+  stat_summary(fun.data = function(x) {
+    data.frame(y = 90, 
+               label = paste("Mean=", round(mean(x),1))) },
+               geom = "text")  +
+  ggtitle("DBP binding density",
+          subtitle = "Promoters w/ > 7 DBPs")
+
+peak_occurrence_df %>% filter(number_of_dbp > 7) %>%
+  group_by(reservoir, gene_type) %>%
+  summarize(mean_dbps = mean(number_of_dbp)) %>%
+  pivot_wider(names_from = reservoir,
+              values_from = mean_dbps) %>%
+  mutate(diff = `0` - `1`,
+         fc = `1`/`0`)
 ```
 
 We find that expressed or not expressed promoters still have similar 
@@ -139,6 +168,12 @@ ggsave("figures/reservoir_dbp_chisq_enriched.pdf")
 ggsave("figures/reservoir_dbp_chisq_enriched.png")
 ```
 
+```{r}
+res_dbp_sig <- dbp_binding %>% filter(padj < 0.001, diff < -1 | diff > 1) %>%
+  group_by(diff < 0) %>%
+  summarize(count = n())
+knitr::kable(res_dbp_sig)
+```
 
 
 ```{r reservoir-umap, message=FALSE}
