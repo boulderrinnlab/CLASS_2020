@@ -16,7 +16,7 @@ source("../util/_setup.R")
 
 ```
 
-#Goal: to determine the chromatin environment of reservoir promoters using 
+Goal: to determine the chromatin environment of reservoir promoters using 
 histone modification ChIP data. Specifically, Histone H3 (H3) Lysine 27 
 tri-methylation (H3K27me3) that represents heterochraomtic regions / 
 and H3 lysine 27 acetylation that represents euchromatin.
@@ -53,18 +53,24 @@ hmark_granges <- lapply(hmark_peaks, function(peaks) {
                            end = peaks$V3))
          })
 
+rtracklayer::export(hmark_granges[[1]], con = paste0("results/",
+                                                     names(hmark_granges)[[1]],
+                                                     ".bed"))
+rtracklayer::export(hmark_granges[[2]], con = paste0("results/",
+                                                     names(hmark_granges)[[2]],
+                                                     ".bed"))
 # To find overlaps with promoters using gRanges we will open up the GTF of promoters from 01_consensus_peaks
 promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
 
 # Read our compiled peak_occurrence data frame from 10_reservoir_nascent_txn (with all the variables for each promoter observation). 
-peak_occurrence_df <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
+peak_occurrence_df <- read.csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
 #TODO DEBUG overlaps
 #TODO this is correct if I sort by res and se both sort same in current ?problematic?
 #TODO debug so it must by in findOVerlaps
 peak_occurrence_df_test <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
-
+names(hmark_granges)
 # K27me3 Promoter overlaps
 ov1 <- findOverlaps(promoters, hmark_granges[[1]])
 overlaps <- unique(ov1@from)
@@ -72,12 +78,46 @@ overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27me3 <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27me3)
 
+peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE]
+
 # K27ac Promoter overlaps
 ov2 <- findOverlaps(promoters, hmark_granges[[2]])
 overlaps <- unique(ov2@from)
 overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27ac <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27ac)
+
+
+# Okay, let's randomly sample some regions
+sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27ac == TRUE],6)
+# Let's just just the promoter regions for these sampled regions
+names(promoters) <- promoters$gene_id
+prom_sampled <- promoters[sampled]
+# Let's simplify this granges to just the basics
+prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
+                            ranges = prom_sampled@ranges)
+rtracklayer::export(prom_samples_reg, "results/h3k27ac_sampled_regions.bed")
+
+# Okay, let's randomly sample some H3k27me3 regions
+sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE],6)
+# Let's just just the promoter regions for these sampled regions
+names(promoters) <- promoters$gene_id
+prom_sampled <- promoters[sampled]
+# Let's simplify this granges to just the basics
+prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
+                            ranges = prom_sampled@ranges)
+rtracklayer::export(prom_samples_reg, "results/h3k27me3_sampled_regions.bed")
+
+# Okay, let's randomly sample some H3k27me3 regions
+sampled <- sample(peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE &
+                                               peak_occurrence_df$h3k27ac == TRUE],6)
+# Let's just just the promoter regions for these sampled regions
+names(promoters) <- promoters$gene_id
+prom_sampled <- promoters[sampled]
+# Let's simplify this granges to just the basics
+prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
+                            ranges = prom_sampled@ranges)
+rtracklayer::export(prom_samples_reg, "results/both_sampled_regions.bed")
 
 
 # Writting out final peak_occurrence_df !
