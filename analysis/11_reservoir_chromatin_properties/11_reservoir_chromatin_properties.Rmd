@@ -65,12 +65,7 @@ promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_prom
 # Read our compiled peak_occurrence data frame from 10_reservoir_nascent_txn (with all the variables for each promoter observation). 
 peak_occurrence_df <- read.csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
-#TODO DEBUG overlaps
-#TODO this is correct if I sort by res and se both sort same in current ?problematic?
-#TODO debug so it must by in findOVerlaps
-peak_occurrence_df_test <- read_csv("../10_reservoir_nascent_txn/results/peak_occurrence_df_nascent_added.csv")
 
-names(hmark_granges)
 # K27me3 Promoter overlaps
 ov1 <- findOverlaps(promoters, hmark_granges[[1]])
 overlaps <- unique(ov1@from)
@@ -78,7 +73,7 @@ overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27me3 <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27me3)
 
-peak_occurrence_df$gene_id[peak_occurrence_df$h3k27me3 == TRUE]
+
 
 # K27ac Promoter overlaps
 ov2 <- findOverlaps(promoters, hmark_granges[[2]])
@@ -86,6 +81,26 @@ overlaps <- unique(ov2@from)
 overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27ac <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27ac)
+
+# Writting out final peak_occurrence_df !
+# First have to change histone mark overlaps to numeric from logical
+peak_occurrence_df$k27me3 <- as.numeric(peak_occurrence_df$h3k27me3)
+peak_occurrence_df$k27ac <- as.numeric(peak_occurrence_df$h3k27ac)
+
+#remove old histone logical call columns
+peak_occurrence_df <- subset(peak_occurrence_df, select = -c(19,20))
+
+# Here it is: the final peak_occurrence_df
+
+write.csv(peak_occurrence_df, "results/peak_occurence_df.csv")
+
+```
+
+```{r}
+
+### I like this random sampeling :) so something is different as the DF I have
+### is numeric not logical -- maybe the true does find the 1 though?
+
 
 
 # Okay, let's randomly sample some regions
@@ -120,17 +135,6 @@ prom_samples_reg <- GRanges(seqnames = prom_sampled@seqnames,
 rtracklayer::export(prom_samples_reg, "results/both_sampled_regions.bed")
 
 
-# Writting out final peak_occurrence_df !
-# First have to change histone mark overlaps to numeric from logical
-peak_occurrence_df$k27me3 <- as.numeric(peak_occurrence_df$h3k27me3)
-peak_occurrence_df$k27ac <- as.numeric(peak_occurrence_df$h3k27ac)
-
-#remove old histone logical call columns
-peak_occurrence_df <- subset(peak_occurrence_df, select = -c(19,20))
-
-# Here it is: the final peak_occurrence_df
-
-write.csv(peak_occurrence_df, "results/peak_occurence_df.csv")
 
 ```
 
