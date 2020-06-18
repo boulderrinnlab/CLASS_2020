@@ -91,10 +91,6 @@ expression_occurrence_df <- read.csv("results/peak_tpm_occurence_df.csv")
 peak_occurrence_df <- merge(peak_occurrence_df, expression_occurrence_df)
 #filtering out an old column used to be called number_tfs is now number_of_dbp.
 peak_occurrence_df <- peak_occurrence_df %>% dplyr::select(-number_of_tfs)
-
-#Adding expression to the new peak occurence data frame nomenclature that will be used as a starting point in 08_defining_reservoirs.
-
-write_csv(peak_occurrence_df, "results/peak_occurrence_df_exp_added.csv")
 ```
 
 #### Plotting binding of lncRNAs and mRNAs versus expression
@@ -270,6 +266,13 @@ g + geom_density(alpha = 0.2) +
   scale_color_manual(values = c("#424242","#a8404c"), name = "tf_binding")
 ggsave("figures/k562_expression_histogram.png")
 ggsave("figures/k562_expression_histogram.pdf")
+```
+
+
+```{r}
+# Adding expression to the new peak occurence data frame 
+# nomenclature that will be used as a starting point in 08_defining_reservoirs.
+write_csv(peak_occurrence_df, "results/peak_occurrence_df_exp_added.csv")
 ```
 
 
