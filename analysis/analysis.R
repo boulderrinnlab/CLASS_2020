@@ -4,7 +4,7 @@
 
 #### SETUP
 library(rmarkdown)
-# TODO: potentiall make all of these into readme.md files
+# TODO: potentially make all of these into readme.md files
 # so that they render automatically in github when the file path is
 # clicked. Alternatively, render all the markdowns into a github.io site
 # according to these instructions:
