@@ -44,7 +44,8 @@ ggsave("figures/many_binders_histogram.pdf")
 #### FIGURE: Figure 4C
 g <- ggplot(peak_occurrence_df %>% filter(number_of_dbp > 7), 
             aes(x = number_of_dbp, 
-                fill = factor(reservoir, labels = c("Non-res", "Reservoir"))))
+                fill = factor(reservoir, 
+                              labels = c("Non-res", "Reservoir"))))
 g + geom_density(alpha = 0.2) + 
   scale_fill_manual(values = c("#424242","#a8404c"),
                     name = " ") + 
@@ -108,14 +109,18 @@ dbp_binding <- data.frame(dbp = rownames(peak_occurrence_matrix),
                           "num_nonres_promoters_bound" = rowSums(non_res_occurrence_matrix))
 
 dbp_binding <- dbp_binding %>%
-  mutate("num_res_promoters_not_bound" = ncol(res_occurrence_matrix) - num_res_promoters_bound,
-         "num_nonres_promoters_not_bound" = ncol(non_res_occurrence_matrix) - num_nonres_promoters_bound)
+  mutate("num_res_promoters_not_bound" = 
+           ncol(res_occurrence_matrix) - num_res_promoters_bound,
+         "num_nonres_promoters_not_bound" = 
+           ncol(non_res_occurrence_matrix) - num_nonres_promoters_bound)
 
 
 
 for (i in 1:nrow(dbp_binding)) {
-  df1 <- data.frame("gene_type" = c("reservoir","reservoir", "non_res", "non_res"),
-                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
+  df1 <- data.frame("gene_type" = c("reservoir","reservoir", 
+                                    "non_res", "non_res"),
+                    "promoter_bound" = c("bound", "not_bound", 
+                                         "bound", "not_bound"),
                     "count" = c(dbp_binding$num_res_promoters_bound[i],
                                 dbp_binding$num_res_promoters_not_bound[i],
                                 dbp_binding$num_nonres_promoters_bound[i],
@@ -130,7 +135,8 @@ for (i in 1:nrow(dbp_binding)) {
   # Add the results to the data frame
   dbp_binding[i, "chisq_stat"] <- csres$statistic
   dbp_binding[i, "chisq_pval"] <- csres$p.value
-  dbp_binding[i, "reservoir_peaks_expected"] <- csres$expected["bound", "reservoir"]
+  dbp_binding[i, "reservoir_peaks_expected"] <- csres$expected["bound", 
+                                                               "reservoir"]
   dbp_binding[i, "phi_coefficient"] <- phi_coef$phi
 }
 
@@ -138,7 +144,8 @@ for (i in 1:nrow(dbp_binding)) {
 # Adjusting P value with BH correction, observed - expected and 
 # writing this to a .csv file
 dbp_binding$padj <- p.adjust(dbp_binding$chisq_pval, method = "BH")
-dbp_binding$diff <- log2(dbp_binding$num_res_promoters_bound/dbp_binding$reservoir_peaks_expected)
+dbp_binding$diff <- log2(dbp_binding$num_res_promoters_bound /
+                           dbp_binding$reservoir_peaks_expected)
 write_csv(dbp_binding, "results/reservoir_chi_squared_results.csv")
 
 
@@ -176,8 +183,74 @@ knitr::kable(res_dbp_sig)
 ```
 
 
+Here we would like to take the reservoirs and see if they cluster based on
+their binding profiles. 
+
 ```{r reservoir-umap, message=FALSE}
-# TODO ? UMAP reservoir promoter annotations ?
+library(umap)
+library(dbscan)
+
+res_gene_ids <- peak_occurrence_df$gene_id[peak_occurrence_df$reservoir == T]
+res_peak_occurrence <- peak_occurrence_matrix[,res_gene_ids]
+
+umap_params <- umap.defaults
+umap_params$n_neighbors <- 4
+# umap_params$random_state <- 7748
+umap_params$random_state <- 32890
+
+umap_fit <- umap(res_peak_occurrence, config = umap_params)
+umap_df <- umap_fit$layout %>% as.data.frame() %>%
+  rownames_to_column("dbp")
+
+labels <- hdbscan(umap_fit$layout, minPts = 6)
+umap_df$cluster <- factor(labels$cluster)
+# write_csv(umap_df, "results/umap_lncrna_mrna_promoters.csv")
+
+umap_df <- merge(umap_df, dbp_binding %>% dplyr::select(dbp, diff))
+#### FIGURE: ??
+# col_pal <- c("#653EB3", "#B3823E", "#78B33E", "#3E9FB3", "#666666", "#fd8d3c", "#B33E52")
+col_pal <- c("#a8404c", "#424242")
+g <- ggplot(umap_df, aes(x = V1, y = V2, label = dbp, color = cluster))
+g + geom_point() + 
+  # geom_text() +
+  geom_text_repel(data = umap_df %>% filter(dbp %in% c("POLR2A",
+                                                  "POLR2B",
+                                                  "SUPT5H",
+                                                  "eGFP-POLR2H"))) +
+  ggtitle("UMAP: DBP promoter occupancy",
+          subtitle = "Reservoir promoters") +
+  theme_paperwhite() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  scale_color_manual(values = col_pal)
+ggsave("figures/umap_reservoir_promoters.png")
+ggsave("figures/umap_reservoir_promoters.pdf")
+
+g <- ggplot(umap_df, aes(x = V1, y = V2, label = dbp, color = diff))
+g + geom_point() + 
+  # geom_text() +
+  geom_text(data = umap_df %>% filter(dbp %in% c("POLR2A",
+                                                  "POLR2B",
+                                                  "SUPT5H",
+                                                  "eGFP-POLR2H"))) +
+  ggtitle("UMAP: DBP promoter occupancy",
+          subtitle = "Reservoir promoters") +
+  theme_paperwhite() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  scale_color_gradient2()
+
+
+# Let's make a df of the clusters for naming and gene ontology
+clusters_df <- umap_df %>%
+  dplyr::select(cluster, dbp) %>%
+  group_by(cluster) %>%
+  summarize(dbp = paste(dbp, collapse = " ")) %>%
+  mutate(dbp = gsub("eGFP-","", dbp))
+write_csv(clusters_df, "results/umap_clusters.csv")
+knitr::kable(clusters_df)
 ```
 
 
