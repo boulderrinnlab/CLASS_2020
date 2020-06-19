@@ -76,3 +76,8 @@ rmarkdown::render(file.path("03_global_clustering",
                             "umap_with_metadata.Rmd"), 
                   md_document(variant = "markdown_github"))
 
+
+## 11_reservoir_chromatin_properties
+rmarkdown::render(file.path("11_reservoir_chromatin_properties",
+                            "11_reservoir_chromatin_properties.Rmd"), 
+                  md_document(variant = "markdown_github"))

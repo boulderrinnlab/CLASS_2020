@@ -1,28 +1,6 @@
----
-title: "11_reservoir_chromatin_properties"
-date: "5/29/2020"
-output: html_document
-editor_options: 
-  chunk_output_type: console
----
+Goal: to determine the chromatin environment of reservoir promoters using histone modification ChIP data. Specifically, Histone H3 (H3) Lysine 27 tri-methylation (H3K27me3) that represents heterochraomtic regions / and H3 lysine 27 acetylation that represents euchromatin.
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse)
-library(GenomicRanges)
-library(eulerr)
-library(ggpubr)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
-```
-
-Goal: to determine the chromatin environment of reservoir promoters using 
-histone modification ChIP data. Specifically, Histone H3 (H3) Lysine 27 
-tri-methylation (H3K27me3) that represents heterochraomtic regions / 
-and H3 lysine 27 acetylation that represents euchromatin.
-
-```{r} 
-
+``` r
 # First we will go get the .bed files of significant peaks determined by encode in k562
 # K27me3 - https://www.encodeproject.org/files/ENCFF031FSF/@@download/ENCFF031FSF.bed.gz
 # K27ac - https://www.encodeproject.org/files/ENCFF038DDS/@@download/ENCFF038DDS.bed.gz
@@ -68,20 +46,48 @@ peak_occurrence_df <- read.csv("../10_reservoir_nascent_txn/results/peak_occurre
 
 # K27me3 Promoter overlaps
 ov1 <- findOverlaps(promoters, hmark_granges[[1]])
+```
+
+    ## Warning in .Seqinfo.mergexy(x, y): Each of the 2 combined objects has sequence levels not in the other:
+    ##   - in 'x': chrY, chrM
+    ##   - in 'y': chr17_GL000205v2_random, chrUn_KI270744v1
+    ##   Make sure to always combine/compare objects based on the same reference
+    ##   genome (use suppressWarnings() to suppress this warning).
+
+``` r
 overlaps <- unique(ov1@from)
 overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27me3 <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27me3)
+```
 
+    ## 
+    ## FALSE  TRUE 
+    ## 27243  9571
 
-
+``` r
 # K27ac Promoter overlaps
 ov2 <- findOverlaps(promoters, hmark_granges[[2]])
+```
+
+    ## Warning in .Seqinfo.mergexy(x, y): Each of the 2 combined objects has sequence levels not in the other:
+    ##   - in 'x': chrY, chrM
+    ##   - in 'y': chr14_GL000009v2_random, chr14_GL000194v1_random, chr17_GL000205v2_random, chr1_KI270713v1_random, chr1_KI270714v1_random, chrUn_GL000195v1, chrUn_GL000219v1, chrUn_KI270442v1, chrUn_KI270744v1, chrUn_KI270745v1
+    ##   Make sure to always combine/compare objects based on the same reference
+    ##   genome (use suppressWarnings() to suppress this warning).
+
+``` r
 overlaps <- unique(ov2@from)
 overlapping_genes <- promoters$gene_id[overlaps]
 peak_occurrence_df$h3k27ac <- peak_occurrence_df$gene_id %in% overlapping_genes
 table(peak_occurrence_df$h3k27ac)
+```
 
+    ## 
+    ## FALSE  TRUE 
+    ## 21952 14862
+
+``` r
 # Writting out final peak_occurrence_df !
 # First have to change histone mark overlaps to numeric from logical
 peak_occurrence_df$k27me3 <- as.numeric(peak_occurrence_df$h3k27me3)
@@ -94,12 +100,12 @@ peak_occurrence_df <- peak_occurrence_df %>% dplyr::select(-h3k27me3,
 # Here it is: the final peak_occurrence_df
 
 write.csv(peak_occurrence_df, "results/peak_occurence_df.csv")
-
 ```
 
+First plotting the density of nascent on reservoir vs non-reservoir
+===================================================================
 
-# First plotting the density of nascent on reservoir vs non-reservoir
-```{r}
+``` r
 # Let's plot nascent transcription relative to the number of DBPs bound.
 
 ggplot(peak_occurrence_df, aes( x = log10(nascentTpm + 1), 
@@ -107,9 +113,17 @@ ggplot(peak_occurrence_df, aes( x = log10(nascentTpm + 1),
   geom_density(alpha = 0.6) + 
   scale_fill_manual(values = c("#424242","#a8404c")) + 
   ggtitle("Nascent expression: reservoirs")
+```
+
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-2-1.png)
+
+``` r
 ggsave("figures/reservoir_vs_nascent.pdf")
+```
 
+    ## Saving 7 x 5 in image
 
+``` r
 # Testing stats of means 
 ggplot(peak_occurrence_df, 
        aes(x = factor(reservoir), 
@@ -120,44 +134,65 @@ ggplot(peak_occurrence_df,
   stat_summary(fun.data = function(x) 
     data.frame(y = 4, label = paste("Mean=", round(mean(x),2))), geom = "text")  +
   ggtitle("Nascent TPM of reservoirs")
-ggsave("figures/global_reservoir_vs_nascent.pdf")
-
 ```
-# Reservoirs and non res have similar distributions of nascent transcriptiono
 
-# Figure 5a DBP-vs-Nascent TPM
-```{r}
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-2-2.png)
+
+``` r
+ggsave("figures/global_reservoir_vs_nascent.pdf")
+```
+
+    ## Saving 7 x 5 in image
+
+Reservoirs and non res have similar distributions of nascent transcriptiono
+===========================================================================
+
+Figure 5a DBP-vs-Nascent TPM
+============================
+
+``` r
 ggplot(peak_occurrence_df, aes(y = log10(nascentTpm + 1), x = number_of_dbp)) +
   geom_smooth(color = "black", method = 'gam', formula = y ~ s(x, bs = "cs")) +
   stat_cor(label.y = 1) +
   ggtitle("DBP binding vs nascent expression")
+```
+
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-3-1.png)
+
+``` r
 ggsave("figures/DBPs_vs_nascent.pdf")
 ```
-# Here we found a similar trend as RNA-seq where there is a positive 
-correlation between number of DBPs and amount of nascent expression. There is 
-also, similar to RNA-seq.
 
+    ## Saving 7 x 5 in image
 
-# lets see if there are reservoirs that lack nascent txn (ghost)
-# Define Ghost and Zombies and write to peak occurence df
-```{r}
+Here we found a similar trend as RNA-seq where there is a positive
+==================================================================
 
+correlation between number of DBPs and amount of nascent expression. There is also, similar to RNA-seq.
+
+lets see if there are reservoirs that lack nascent txn (ghost)
+==============================================================
+
+Define Ghost and Zombies and write to peak occurence df
+=======================================================
+
+``` r
 ghost <- peak_occurrence_df %>% filter(nascentTpm < 0.001 & reservoir == 1) 
 
 peak_occurrence_df$ghost <- as.numeric(peak_occurrence_df$nascentTpm < 0.001 & 
                                          peak_occurrence_df$reservoir == 1)
 
 ggsave("figures/ghost_vs_nascent.pdf")
-
 ```
 
-# Here we find that 355 of 1,362 (26%) of reservoirs have neither mature 
-RNA-seq expression nor nascent expression despite many DBPs bound. let's look
-at those two distributions, but first define zombies as nascent expression but
-not RNA-seq expression from these promoters. 
+    ## Saving 7 x 5 in image
 
+Here we find that 355 of 1,362 (26%) of reservoirs have neither mature
+======================================================================
 
-```{r}
+RNA-seq expression nor nascent expression despite many DBPs bound. let's look at those two distributions, but first define zombies as nascent expression but not RNA-seq expression from these promoters.
+
+``` r
 # Adding zombies to peak occurence df.
 
 zombie <- peak_occurrence_df %>% 
@@ -169,13 +204,14 @@ peak_occurrence_df$zombie <- as.numeric(peak_occurrence_df$nascentTpm > 0.001
 # write out final peak_occurence_df 
 
 write_csv(peak_occurrence_df, "results/peak_occurence_df.csv")
-
 ```
 
-# Now we want to explore if the lack of nascent transcripts is due to chromatin
-environment. Specifically K27me3 and K27ac states of these promoters.
-```{r}
+Now we want to explore if the lack of nascent transcripts is due to chromatin
+=============================================================================
 
+environment. Specifically K27me3 and K27ac states of these promoters.
+
+``` r
 # How k27ac presences compares to nascent TPMs
 
 ggplot(peak_occurrence_df, aes(x = factor(k27ac), y = log10(nascentTpm + .1))) +
@@ -186,10 +222,17 @@ ggplot(peak_occurrence_df, aes(x = factor(k27ac), y = log10(nascentTpm + .1))) +
     data.frame(y = 4, label = paste("Mean=", round(mean(x),2))), geom = "text") + 
   ggtitle("H3K27ac status vs. nascent expression",
           subtitle = "mRNA and lncRNA genes")
+```
 
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-6-1.png)
+
+``` r
 ggsave("figures/nascent_vs_k27ac_all_promoters.pdf")
+```
 
+    ## Saving 7 x 5 in image
 
+``` r
 # How k27me3 presence compares to Nascent seq
 
 ggplot(peak_occurrence_df, aes(x = factor(k27me3), y = log10(nascentTpm + .1))) +
@@ -200,19 +243,24 @@ ggplot(peak_occurrence_df, aes(x = factor(k27me3), y = log10(nascentTpm + .1))) 
     data.frame(y = 4, label = paste("Mean=", round(mean(x),2))), geom = "text") + 
   ggtitle("H3K27me3 status vs. nascent expression",
           subtitle = "mRNA and lncRNA genes")
-
-ggsave("figures/nascent_vs_k27me3_all_promoters.pdf")
-
-#K27me3 is negatively associated RNA-seq as expected
-
-
-
 ```
 
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-6-2.png)
 
-# Now narrowing in on only reservoirs looking at K27ac and k27me3 status
-```{r}
+``` r
+ggsave("figures/nascent_vs_k27me3_all_promoters.pdf")
+```
 
+    ## Saving 7 x 5 in image
+
+``` r
+#K27me3 is negatively associated RNA-seq as expected
+```
+
+Now narrowing in on only reservoirs looking at K27ac and k27me3 status
+======================================================================
+
+``` r
 # Compare means of nascent TPM of k37me3 positive-vs-negative reservoirs 
 
 ggplot(peak_occurrence_df %>% filter(reservoir == 1), 
@@ -224,8 +272,17 @@ ggplot(peak_occurrence_df %>% filter(reservoir == 1),
     data.frame(y = 3.2, label = paste("Mean=", round(mean(x),2))), geom = "text") + 
   ggtitle("H3K27ac status vs. nascent expression",
           subtitle = "Reservoir promoters")
+```
 
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-7-1.png)
+
+``` r
 ggsave("figures/k27ac_reservoir_vs_nascent.pdf")
+```
+
+    ## Saving 7 x 5 in image
+
+``` r
 # Perhaps as expected K72me3 is negatively correlated with nascentTpm
 
 
@@ -239,26 +296,41 @@ geom_boxplot() +
     data.frame(y = 3.2, label = paste("Mean=", round(mean(x),2))), geom = "text") + 
   ggtitle("H3K27me3 status vs. nascent expression",
           subtitle = "Reservoir promoters")
-ggsave("figures/k27me3_reservoir_vs_nascent.pdf")
-# Perhaps as expected K72ac is positively correlated with nascentTpm
-
 ```
 
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-7-2.png)
 
+``` r
+ggsave("figures/k27me3_reservoir_vs_nascent.pdf")
+```
 
-# Figure 5b: # DBP distribution of DBPs between ghost and zombie
-```{r}
+    ## Saving 7 x 5 in image
 
+``` r
+# Perhaps as expected K72ac is positively correlated with nascentTpm
+```
+
+Figure 5b: \# DBP distribution of DBPs between ghost and zombie
+===============================================================
+
+``` r
 ggplot(peak_occurrence_df %>% filter(reservoir == 1), 
        aes(x = number_of_dbp, fill = factor(ghost))) +
   geom_density(alpha = 0.6) + 
   scale_fill_manual(values = c("#424242","#a8404c")) + 
   ggtitle("DBP binding: ghosts",
           subtitle = "Ghost promoters == no nascent exp")
+```
 
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-8-1.png)
 
+``` r
 ggsave("figures/DBP-vs-ghost_zombie.pdf")
+```
 
+    ## Saving 7 x 5 in image
+
+``` r
 # Comparing the means of distributions since they look similar
 ggplot(peak_occurrence_df %>% filter(reservoir == 1),aes(x = factor(ghost),                                                      y = number_of_dbp)) +
   geom_boxplot() +
@@ -266,7 +338,11 @@ ggplot(peak_occurrence_df %>% filter(reservoir == 1),aes(x = factor(ghost),     
   stat_summary(fun.data = function(x) 
     data.frame(y = 115, label = paste("Mean=", round(mean(x),2))), geom = "text") + 
   ggtitle("Ghosts (no nascent txn) DBP binding")
+```
 
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-8-2.png)
+
+``` r
 # Comparing the means of # DBP on ghost vs zombies
 
 ggplot(peak_occurrence_df %>% filter(reservoir == 1), 
@@ -276,25 +352,44 @@ geom_boxplot() +
   stat_mean() +
   stat_summary(fun.data = function(x) 
     data.frame(y = 4, label = paste("Mean=", mean(x))), geom = "text") 
+```
+
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-8-3.png)
+
+``` r
 ggsave("figures/compare_means_DBP-vs-ghost_zombie.pdf")
 ```
-# the distribution of number of bound DBPs is not differnet between ghosts and
+
+    ## Saving 7 x 5 in image
+
+the distribution of number of bound DBPs is not differnet between ghosts and
+============================================================================
+
 zombies (P = .064)
 
-# VENN Diagram of reservoir chromatin status 
-```{r}
+VENN Diagram of reservoir chromatin status
+==========================================
+
+``` r
 #plotting histone occurrence and reservoirr occurrence
 
 genes.venn <- euler(peak_occurrence_df[,c("reservoir","k27me3", "k27ac")])
 plot(genes.venn, quantities = TRUE)
-ggsave("figures/venn_chroamtin_ov_resvoirs.pdf")
-
 ```
-------------------------------------------------------------
-# If you want to randomly sample genes and test in UCSC browser : ENJOY !
-------------------------------------------------------------
-```{r}
 
+![](11_reservoir_chromatin_properties_files/figure-markdown_github/unnamed-chunk-9-1.png)
+
+``` r
+ggsave("figures/venn_chroamtin_ov_resvoirs.pdf")
+```
+
+    ## Saving 7 x 5 in image
+
+|                                                                            |
+|----------------------------------------------------------------------------|
+| \# If you want to randomly sample genes and test in UCSC browser : ENJOY ! |
+
+``` r
 # ### I like this random sampeling :) so something is different as the DF I have
 # ### is numeric not logical -- maybe the true does find the 1 though?
 # 
@@ -329,6 +424,4 @@ ggsave("figures/venn_chroamtin_ov_resvoirs.pdf")
 #                             ranges = prom_sampled@ranges)
 # rtracklayer::export(prom_samples_reg, "results/both_sampled_regions.bed")
 # 
-
-
 ```
