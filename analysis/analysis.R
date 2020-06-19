@@ -70,3 +70,9 @@ rmarkdown::render(file.path("10_reservoir_nascent_txn",
                             "10_reservoir_nascent_txt.Rmd"), 
                   md_document(variant = "markdown_github"))
 
+
+# 03_umap_with_metadata
+rmarkdown::render(file.path("03_global_clustering",
+                            "umap_with_metadata.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
