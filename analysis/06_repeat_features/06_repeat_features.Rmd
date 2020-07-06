@@ -129,6 +129,13 @@ rmsk_sva_all_ov <- rmsk_sva[rmsk_sva$CBFA2T2_ov &
                               rmsk_sva$CBFA2T3_ov]
 rtracklayer::export(rmsk_sva_all_ov,
                     "results/sva_dbp_top3_overlaps.bed")
+
+promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+
+sva_promoter_ov <- findOverlaps(rmsk_sva_all_ov, promoters)
+sva_dbp_promoter <- rmsk_sva_all_ov[unique(sva_promoter_ov@from)]
+rtracklayer::export(sva_dbp_promoter, 
+                    "results/sva_dbp_top3_promoter_overlaps.bed")
 ```
 
 
