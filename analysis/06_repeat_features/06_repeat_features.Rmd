@@ -85,3 +85,50 @@ ggsave("figures/dbp_binding_on_repeat_family.png", height = 9, width = 25)
 ggsave("figures/dbp_binding_on_repeat_family.pdf", height = 9, width = 25)
 ```
 
+# SVA family enriched DBPs
+
+```{r sva-family}
+sva_enriched <- subset_family %>% 
+  filter(region == "SVA_family",
+         padj < 0.01) %>%
+  arrange(-zscore)
+
+# Let's take the top three
+sva_enriched_dbp <- sva_enriched %>%
+  slice(1:3) %>%
+  pull("tf") %>%
+  as.character()
+sva_enriched_dbp
+
+# Let's look at some overlaps with SVA and thes DBPs
+peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/filtered_by_peaks/")
+poi <- peak_list[sva_enriched_dbp]
+
+rmsk <- import_repeatmasker()
+rmsk_sva <- rmsk[rmsk$rep_family == "SVA"]
+
+rmsk_CBFA2T3_ov <- findOverlaps(rmsk_sva,
+                                peak_list[[sva_enriched_dbp[[1]]]])
+rmsk_sva$CBFA2T3_ov <- FALSE
+rmsk_sva$CBFA2T3_ov[unique(rmsk_CBFA2T3_ov@from)] <- TRUE
+
+rmsk_ZBTB33_ov <- findOverlaps(rmsk_sva,
+                                peak_list[[sva_enriched_dbp[[2]]]])
+rmsk_sva$ZBTB33_ov <- FALSE
+rmsk_sva$ZBTB33_ov[unique(rmsk_ZBTB33_ov@from)] <- TRUE
+
+
+rmsk_CBFA2T2_ov <- findOverlaps(rmsk_sva,
+                                peak_list[[sva_enriched_dbp[[3]]]])
+rmsk_sva$CBFA2T2_ov <- FALSE
+rmsk_sva$CBFA2T2_ov[unique(rmsk_CBFA2T2_ov@from)] <- TRUE
+
+
+rmsk_sva_all_ov <- rmsk_sva[rmsk_sva$CBFA2T2_ov & 
+                              rmsk_sva$ZBTB33_ov & 
+                              rmsk_sva$CBFA2T3_ov]
+rtracklayer::export(rmsk_sva_all_ov,
+                    "results/sva_dbp_top3_overlaps.bed")
+```
+
+
