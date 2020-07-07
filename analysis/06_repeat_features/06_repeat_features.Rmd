@@ -14,6 +14,7 @@ library(rtracklayer)
 library(ggrepel)
 library(ggpubr)
 library(regioneR)
+library(Rsubread)
 source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
@@ -137,5 +138,132 @@ sva_dbp_promoter <- rmsk_sva_all_ov[unique(sva_promoter_ov@from)]
 rtracklayer::export(sva_dbp_promoter, 
                     "results/sva_dbp_top3_promoter_overlaps.bed")
 ```
+
+## SVA expression levels in RNA-seq and Nascent-seq
+
+```{r sva-erv-saf}
+sva_erv_list <- c("ERVL-MaLR", "ERV1", "ERVK", "ERVL", "SVA")
+# Let's make a SAF file for SVAs and ERVs
+repeats_sva_erv <- rmsk[rmsk$rep_family %in% sva_erv_list] %>%
+  as.data.frame()
+
+# Let's see if the widths are comparable
+g <- ggplot(repeats_sva_erv, aes(x = log10(width+1), fill = rep_family))
+g + geom_density(alpha = 0.4) + 
+  ggtitle("Width of selected repeat elements")
+
+# Okay, now let's actually make the SAF
+# We'll make the gene name the repeat name plus the repeat family plus an index
+# for uniquely identifying it. 
+repeats_sva_erv <- repeats_sva_erv %>%
+  group_by(rep_family, rep_name) %>%
+  mutate(index = 1:n())
+
+repeats_sva_erv <- repeats_sva_erv %>%
+  unite("gene_id", rep_family, rep_name, index,
+        sep = ";")
+ 
+# Now let's grab just the columns we need
+repeats_sva_erv <- repeats_sva_erv %>%
+  dplyr::select("gene_id", "seqnames", "start", "end", "strand") 
+names(repeats_sva_erv) <- c("GeneID", "Chr", "Start", "End", "Strand")
+
+write.table(repeats_sva_erv, "results/rmsk_sva_erv.SAF", 
+            sep = "\t",
+            quote = F, row.names = F)
+```
+
+```{r sva-rna-seq}
+counts <- featureCounts(c("../07_binding_versus_expression/data/ENCFF625ZBS.bam", 
+                          "../07_binding_versus_expression/data/ENCFF630HEX.bam"),
+                          annot.ext = "results/rmsk_sva_erv.SAF",
+                          isPairedEnd = TRUE,
+                          nthreads = 16)
+
+rpk <- counts$counts / (counts$annotation$Length/1000)
+expression <- data.frame("rpk" = rpk) %>%
+    rownames_to_column("gene_id") %>%
+    pivot_longer(2:3, names_to = "sample", values_to = "rpk")
+  
+expression_summary <- expression %>%
+    group_by(sample) %>%
+    summarize(total_rpk = sum(rpk, na.rm = T))
+expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+expression <- merge(expression, expression_summary)
+expression$tpm <- expression$rpk / expression$rpk_m
+tpm <- expression %>% group_by(gene_id) %>%
+    summarize(rnaseq_tpm = mean(tpm, na.rm = T))
+```
+
+
+```{r sva-nascent-seq}
+counts <- featureCounts(c("../10_reservoir_nascent_txn/data/516.sorted.bam", 
+                          "../10_reservoir_nascent_txn/data/829.sorted.bam"), 
+                          annot.ext = "results/rmsk_sva_erv.SAF", 
+                          isPairedEnd = TRUE, nthreads = 16)
+rpk <- counts$counts / (counts$annotation$Length/1000)
+expression <- data.frame("rpk" = rpk) %>%
+    rownames_to_column("gene_id") %>%
+    pivot_longer(2:3, names_to = "sample", values_to = "rpk")
+  
+expression_summary <- expression %>%
+    group_by(sample) %>%
+    summarize(total_rpk = sum(rpk, na.rm = T))
+expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+expression <- merge(expression, expression_summary)
+expression$tpm <- expression$rpk / expression$rpk_m
+nascent_tpm <- expression %>% group_by(gene_id) %>%
+    summarize(nascent_tpm = mean(tpm, na.rm = T))
+
+combined_tpm <- merge(tpm, nascent_tpm)
+
+# Split back out families
+combined_tpm <- combined_tpm %>%
+  separate(gene_id, into = c("rep_family", "rep_name", "rep_index"), 
+           remove = F, sep = ";")
+
+# Make a category for ERV vs. SVA
+combined_tpm$fam <- "ERV"
+combined_tpm[combined_tpm$rep_family == "SVA", "fam"] <- "SVA"
+table(combined_tpm$fam)
+```
+
+```{r rep-exp-plots}
+g <- ggplot(combined_tpm, aes(x = log10(rnaseq_tpm + 0.1), fill = rep_family))
+g + geom_density(alpha = 0.4) + 
+  ggtitle("RNA-seq expression by repeat family")
+
+g <- ggplot(combined_tpm, aes(x = rep_family, y = log10(rnaseq_tpm + 0.1)))
+g + geom_boxplot() + 
+  stat_compare_means() +
+  ggtitle("RNA-seq expression by repeat family")
+
+g <- ggplot(combined_tpm, aes(x = fam, y = log10(rnaseq_tpm + 0.1)))
+g + geom_boxplot() + 
+  stat_compare_means() +
+  ggtitle("RNA-seq expression by repeat")
+
+
+g <- ggplot(combined_tpm, aes(x = log10(nascent_tpm + 0.1), fill = rep_family))
+g + geom_density(alpha = 0.4) + 
+  ggtitle("Nascent-seq expression by repeat family")
+
+g <- ggplot(combined_tpm, aes(x = rep_family, y = log10(nascent_tpm + 0.1)))
+g + geom_boxplot() + 
+  stat_compare_means() +
+  ggtitle("Nascent-seq expression by repeat family")
+
+g <- ggplot(combined_tpm, aes(x = fam, y = log10(nascent_tpm + 0.1)))
+g + geom_boxplot() + 
+  stat_compare_means() +
+  ggtitle("Nascent-seq expression by repeat")
+```
+
+
+
+
+
+
+
 
 
