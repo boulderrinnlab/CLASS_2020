@@ -7,6 +7,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(stringsAsFactors = FALSE)
 library(tidyverse)
 library(GenomicRanges)
 library(GenomicFeatures)
@@ -232,37 +233,209 @@ table(combined_tpm$fam)
 g <- ggplot(combined_tpm, aes(x = log10(rnaseq_tpm + 0.1), fill = rep_family))
 g + geom_density(alpha = 0.4) + 
   ggtitle("RNA-seq expression by repeat family")
+ggsave("figures/rnaseq_sva_erv_density.pdf")
+ggsave("figures/rnaseq_sva_erv_density.png")
 
 g <- ggplot(combined_tpm, aes(x = rep_family, y = log10(rnaseq_tpm + 0.1)))
 g + geom_boxplot() + 
   stat_compare_means() +
   ggtitle("RNA-seq expression by repeat family")
+ggsave("figures/rnaseq_sva_erv_boxplot.pdf")
+ggsave("figures/rnaseq_sva_erv_boxplot.png")
 
 g <- ggplot(combined_tpm, aes(x = fam, y = log10(rnaseq_tpm + 0.1)))
 g + geom_boxplot() + 
   stat_compare_means() +
   ggtitle("RNA-seq expression by repeat")
-
+ggsave("figures/rnaseq_sva_erv_combined_boxplot.pdf")
+ggsave("figures/rnaseq_sva_erv_combined_boxplot.png")
 
 g <- ggplot(combined_tpm, aes(x = log10(nascent_tpm + 0.1), fill = rep_family))
 g + geom_density(alpha = 0.4) + 
   ggtitle("Nascent-seq expression by repeat family")
+ggsave("figures/nascent_sva_erv_density.pdf")
+ggsave("figures/nascent_sva_erv_density.png")
 
 g <- ggplot(combined_tpm, aes(x = rep_family, y = log10(nascent_tpm + 0.1)))
 g + geom_boxplot() + 
   stat_compare_means() +
   ggtitle("Nascent-seq expression by repeat family")
+ggsave("figures/nascent_sva_erv_boxplot.pdf")
+ggsave("figures/nascent_sva_erv_boxplot.png")
 
 g <- ggplot(combined_tpm, aes(x = fam, y = log10(nascent_tpm + 0.1)))
 g + geom_boxplot() + 
   stat_compare_means() +
   ggtitle("Nascent-seq expression by repeat")
+ggsave("figures/nascent_sva_erv_combined_boxplot.pdf")
+ggsave("figures/nascent_sva_erv_combined_boxplot.png")
+```
+
+# What is the chromatin environment of these SVAs?
+
+Let's grab some histone mark data from ENCODE.
+
+```{r}
+# Some of these files are for hg19 and some are p-vals, etc. 
+# We need to get the sample data so that we can remove the files we don't need
+library(ENCODExplorer)
+query_results <- queryEncode(organism = "Homo Sapiens",
+                             biosample_name = "K562",
+                             file_format = "bigWig",
+                             assay = "Histone ChIP-seq",
+                             fixed = T, fuzzy = T)
+query_results <- query_results %>%
+  filter(assembly == "GRCh38",
+         output_type == "fold change over control",
+         biological_replicates == "1; 2")
+downloadEncode(query_results, format = "bigWig",
+               dir = "data")
+
+# Label duplicated experiments
+query_results <- query_results %>%
+  group_by(target) %>%
+  mutate(index = 1:n()) %>%
+  unite("hmark_index", target, index, remove = F)
+
+files <- data.frame("path" = list.files("data", pattern = ".bigWig",
+                                        full.names = T))
+files$file_accession <- gsub(".bigWig", "", files$path)
+files$file_accession <- gsub("data/", "", files$file_accession)
+
+# Broad and narrow?
+qsummary <- query_results %>%
+  group_by(target, investigated_as) %>%
+  summarize(count = n())
+
+query_results <- merge(query_results, files)
+query_results <- query_results %>% 
+  dplyr::select(file_accession, target, hmark_index, path)
+
+# Read in files
+hmark_gr <- list()
+for(i in 1:nrow(query_results)) {
+  hmark_gr <- c(hmark_gr, 
+                rtracklayer::import(query_results$path[[i]]))
+  names(hmark_gr)[length(hmark_gr)] <- query_results$hmark_index[[i]]
+}
 ```
 
 
 
 
 
+```{r}
+# Let's grab just the SVAs
+repeats_sva <- rmsk[rmsk$rep_family == "SVA"]
+exp_df <- combined_tpm %>% filter(rep_family == "SVA")
+repeats_sva_df <- repeats_sva %>%
+  as.data.frame() %>%
+  group_by(rep_family, rep_name) %>%
+  mutate(index = 1:n())
+repeats_sva_df <- repeats_sva_df %>%
+  unite("gene_id", rep_family, rep_name, index,
+        sep = ";")
+names(repeats_sva) <- repeats_sva_df$gene_id
+# TODO: check that these are the same order in the
+# SAF / come up with a better way of doing this.
+nascent_tpm_vec <- exp_df$nascent_tpm
+names(nascent_tpm_vec) <- exp_df$gene_id
+rnaseq_tpm_vec <- exp_df$rnaseq_tpm
+names(rnaseq_tpm_vec) <- exp_df$gene_id
+
+
+
+# Let's make a list of matrices
+mat_list <- list()
+for(i in seq_along(hmark_gr)) {
+  mat_list[[i]] <- normalizeToMatrix(hmark_gr[[i]], 
+                                     repeats_sva, 
+                                     value_column = "score", 
+                                     extend = 5000, 
+                                     mean_mode = "w0", 
+                                     w = 50,
+                                     smooth = TRUE,
+                                     target_ratio = 0.3)
+  
+}
+names(mat_list) <- names(hmark_gr)
+
+names(mat_list)
+
+# mat_mean = getSignalsFromList(mat_list)
+EnrichedHeatmap(mat_list[["H3K27ac_1"]], 
+                name = "H3K27ac") + 
+  EnrichedHeatmap(mat_list[["H3K4me1_1"]], name = "H3K4me1") +
+  EnrichedHeatmap(mat_list[["H3K27me3_1"]], name = "H3K27me3") 
+rownames(mat_list[["H3K4me1_1"]])
+# Reorder vectors
+nascent_tpm_vec <- nascent_tpm_vec[rownames(mat_list[["H3K4me1_1"]])]
+rnaseq_tpm_vec <- rnaseq_tpm_vec[rownames(mat_list[["H3K4me1_1"]])]
+EnrichedHeatmap(mat_list[["H3K4me1_1"]], name = "H3K4me1",
+                column_title = "H3K4me1",
+                top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "darkgreen")))) + 
+  EnrichedHeatmap(mat_list[["H3K27ac_1"]], name = "H3K27ac",
+                  column_title = "H3K27ac") +
+  EnrichedHeatmap(mat_list[["H3K4me3_1"]], name = "H3K4me3",
+                  column_title = "H3K4me3") +
+  Heatmap(log2(nascent_tpm_vec + 1), col = c("white", "orange"), 
+          name = "log2(nascent_tpm+1)", 
+    show_row_names = FALSE, width = unit(5, "mm")) +
+    Heatmap(log2(rnaseq_tpm_vec + 1), col = c("white", "orange"), 
+          name = "log2(rnaseq_tpm+1)", 
+    show_row_names = FALSE, width = unit(5, "mm"))
+# In terminal
+
+# ulimit -s 16384 # enlarge stack limit to 16 megs
+# R --slave -e 'Cstack_info()["size"]'
+
+names(mat_list)
+EnrichedHeatmap(mat_list[["H3K4me1_1"]], name = "H3K4me1",
+                column_title = "H3K4me1",
+                cluster_rows = TRUE, 
+                top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "darkgreen")))) + 
+  EnrichedHeatmap(mat_list[["H3K27ac_1"]], name = "H3K27ac",
+                  column_title = "H3K27ac") +
+  EnrichedHeatmap(mat_list[["H3K4me3_1"]], name = "H3K4me3",
+                  column_title = "H3K4me3") +
+  EnrichedHeatmap(mat_list[["H3K9ac_2"]], name = "H3K9ac",
+                  column_title = "H3K9ac") +
+    EnrichedHeatmap(mat_list[["H3K9me3_1"]], name = "H3K9me3",
+                  column_title = "H3K9me3") +
+  Heatmap(log2(nascent_tpm_vec + 1), col = c("white", "orange"), 
+          name = "log2(nascent_tpm+1)", 
+    show_row_names = FALSE, width = unit(5, "mm")) +
+    Heatmap(log2(rnaseq_tpm_vec + 1), col = c("white", "orange"), 
+          name = "log2(rnaseq_tpm+1)", 
+    show_row_names = FALSE, width = unit(5, "mm"))
+
+```
+
+
+```{r}
+library(EnrichedHeatmap)
+set.seed(123)
+load(system.file("extdata", "chr21_test_data.RData", package = "EnrichedHeatmap"))
+ls()
+tss = promoters(genes, upstream = 0, downstream = 1)
+repeats_sva[1:5]
+tss[1:5]
+H3K4me3[1:5]
+
+mat1 = normalizeToMatrix(H3K4me3, tss, value_column = "coverage", 
+    extend = 5000, mean_mode = "w0", w = 50)
+
+mat1
+EnrichedHeatmap(mat1, name = "H3K4me3")
+EnrichedHeatmap(mat1, col = c("white", "red"), name = "H3K4me3")
+mat1_trim = normalizeToMatrix(H3K4me3, tss, value_column = "coverage", 
+    extend = 5000, mean_mode = "w0", w = 50, keep = c(0, 0.99))
+EnrichedHeatmap(mat1_trim, col = c("white", "red"), name = "H3K4me3")
+library(circlize)
+col_fun = colorRamp2(quantile(mat1, c(0, 0.99)), c("white", "red"))
+EnrichedHeatmap(mat1, col = col_fun, name = "H3K4me3")
+
+```
 
 
 
