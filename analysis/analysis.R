@@ -4,7 +4,7 @@
 
 #### SETUP
 library(rmarkdown)
-# TODO: potentiall make all of these into readme.md files
+# TODO: potentially make all of these into readme.md files
 # so that they render automatically in github when the file path is
 # clicked. Alternatively, render all the markdowns into a github.io site
 # according to these instructions:
@@ -41,6 +41,11 @@ rmarkdown::render(file.path("05_promoter_features_lncRNA-vs-mRNA",
                   md_document(variant = "markdown_github"))
 
 
+# 06_repeat_features
+rmarkdown::render(file.path("06_repeat_features",
+                            "06_repeat_features.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
 
 # 07_binding_vs_expression
 rmarkdown::render(file.path("07_binding_versus_expression",
@@ -53,3 +58,26 @@ rmarkdown::render(file.path("08_defining_reservoirs",
                             "08_defining_reservoirs.Rmd"), 
                   md_document(variant = "markdown_github"))
 
+
+# 09_reservoir_binding_properties
+rmarkdown::render(file.path("09_reservoir_binding_properties",
+                            "09_reservoir_binding_properties.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
+
+# 10_reservoir_nascent_txn
+rmarkdown::render(file.path("10_reservoir_nascent_txn",
+                            "10_reservoir_nascent_txt.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
+
+# 03_umap_with_metadata
+rmarkdown::render(file.path("03_global_clustering",
+                            "umap_with_metadata.Rmd"), 
+                  md_document(variant = "markdown_github"))
+
+
+## 11_reservoir_chromatin_properties
+rmarkdown::render(file.path("11_reservoir_chromatin_properties",
+                            "11_reservoir_chromatin_properties.Rmd"), 
+                  md_document(variant = "markdown_github"))

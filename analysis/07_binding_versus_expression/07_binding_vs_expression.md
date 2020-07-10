@@ -1,18 +1,3 @@
-``` r
-knitr::opts_chunk$set(echo = TRUE)
-options(stringsAsFactors = F)
-library(tidyverse)
-library(GenomicRanges)
-library(GenomicFeatures)
-library(rtracklayer)
-library(ggrepel)
-library(ggpubr)
-library(Rsubread)
-library(regioneR)
-source("../util/intersect_functions.R")
-source("../util/_setup.R")
-```
-
 Expression vs. DNA-binding at promoters
 =======================================
 
@@ -71,15 +56,13 @@ Let's add the expression data to our peak\_occurence\_df generated in 01\_consen
 base_path <- "../01_consensus_peaks/results/"
 peak_occurrence_df <- read.csv(file.path(base_path,
                                          "peak_occurence_dataframe.csv"))
+peak_occurrence_matrix <- read.table(file.path(base_path,
+                                         "lncrna_mrna_promoter_peak_occurence_matrix.tsv"))
 # TODO WHERE IS THIS FILE WRITTEN OUT??
 expression_occurrence_df <- read.csv("results/peak_tpm_occurence_df.csv")
 peak_occurrence_df <- merge(peak_occurrence_df, expression_occurrence_df)
 #filtering out an old column used to be called number_tfs is now number_of_dbp.
 peak_occurrence_df <- peak_occurrence_df %>% dplyr::select(-number_of_tfs)
-
-#Adding expression to the new peak occurence data frame nomenclature that will be used as a starting point in 08_defining_reservoirs.
-
-write_csv(peak_occurrence_df, "results/peak_occurrence_df_exp_added.csv")
 ```
 
 #### Plotting binding of lncRNAs and mRNAs versus expression
@@ -314,6 +297,12 @@ ggsave("figures/k562_expression_histogram.png")
 ggsave("figures/k562_expression_histogram.pdf")
 ```
 
+``` r
+# Adding expression to the new peak occurence data frame 
+# nomenclature that will be used as a starting point in 08_defining_reservoirs.
+write_csv(peak_occurrence_df, "results/peak_occurrence_df_exp_added.csv")
+```
+
 THIS IS FOR umap\_with\_metadata.
 ---------------------------------
 
@@ -321,27 +310,35 @@ Median expression of bound promoters per TF
 ===========================================
 
 ``` r
-# binding_df <- promoter_peak_occurence %>%
-#   as.data.frame() %>%
-#   rownames_to_column("tf") %>%
-#   pivot_longer(cols = 2:ncol(.), names_to = "gene_id", values_to = "bound") %>%
-#   filter(bound > 0)
-# binding_df <- merge(binding_df, rnaseq_exp, all.x = T)
-# 
-# 
-# binding_summary <- binding_df %>% group_by(tf) %>%
-#   summarize(mean_expression = mean(tpm, na.rm = T),
-#             median_expression = median(tpm, na.rm = T),
-#             sd_expression = sd(tpm, na.rm = T),
-#             cv_expression = (sd_expression/mean_expression)*100,
-#             num_promoters_bound = n(),
-#             promoters_bound = paste(gene_id, collapse = ";"))
-# 
-# binding_summary <- binding_summary %>% arrange(-cv_expression)
-# binding_summary$index <- 1:nrow(binding_summary)
-# 
-# g <- ggplot(binding_summary, aes(x = index, y = cv_expression, label = tf))
-# g + geom_point() + geom_text()
-# 
-# write_csv(binding_summary, "results/expression_summary_per_tf.csv")
+binding_df <- peak_occurrence_matrix %>%
+  as.data.frame() %>%
+  rownames_to_column("dbp") %>%
+  pivot_longer(cols = 2:ncol(.), names_to = "gene_id", values_to = "bound") %>%
+  filter(bound > 0)
+binding_df <- merge(binding_df, tpm, all.x = T)
+
+
+binding_summary <- binding_df %>% group_by(dbp) %>%
+  summarize(mean_expression = mean(tpm, na.rm = T),
+            median_expression = median(tpm, na.rm = T),
+            sd_expression = sd(tpm, na.rm = T),
+            cv_expression = (sd_expression/mean_expression)*100,
+            num_promoters_bound = n(),
+            promoters_bound = paste(gene_id, collapse = ";"))
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+``` r
+binding_summary <- binding_summary %>% arrange(-cv_expression)
+binding_summary$index <- 1:nrow(binding_summary)
+
+g <- ggplot(binding_summary, aes(x = index, y = cv_expression, label = dbp))
+g + geom_point() + geom_text()
+```
+
+![](07_binding_vs_expression_files/figure-markdown_github/unnamed-chunk-4-1.png)
+
+``` r
+write_csv(binding_summary, "results/expression_summary_per_tf.csv")
 ```

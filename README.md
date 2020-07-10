@@ -19,3 +19,5 @@ Class Git==your here
 NF-CORE Output documentation
 
 https://nf-co.re/chipseq/docs/output
+
+[01_consensus_peaks](01_consensus_peaks/01_consensus_peaks.html)
