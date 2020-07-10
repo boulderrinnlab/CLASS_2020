@@ -16,6 +16,7 @@ library(ggrepel)
 library(ggpubr)
 library(regioneR)
 library(Rsubread)
+library(EnrichedHeatmap)
 source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
@@ -129,6 +130,7 @@ rmsk_sva$CBFA2T2_ov[unique(rmsk_CBFA2T2_ov@from)] <- TRUE
 rmsk_sva_all_ov <- rmsk_sva[rmsk_sva$CBFA2T2_ov & 
                               rmsk_sva$ZBTB33_ov & 
                               rmsk_sva$CBFA2T3_ov]
+length(rmsk_sva_all_ov)
 rtracklayer::export(rmsk_sva_all_ov,
                     "results/sva_dbp_top3_overlaps.bed")
 
@@ -288,8 +290,8 @@ query_results <- query_results %>%
   filter(assembly == "GRCh38",
          output_type == "fold change over control",
          biological_replicates == "1; 2")
-downloadEncode(query_results, format = "bigWig",
-               dir = "data")
+# downloadEncode(query_results, format = "bigWig",
+#                dir = "data")
 
 # Label duplicated experiments
 query_results <- query_results %>%
@@ -327,6 +329,7 @@ for(i in 1:nrow(query_results)) {
 ```{r}
 # Let's grab just the SVAs
 repeats_sva <- rmsk[rmsk$rep_family == "SVA"]
+length(repeats_sva)
 exp_df <- combined_tpm %>% filter(rep_family == "SVA")
 repeats_sva_df <- repeats_sva %>%
   as.data.frame() %>%
@@ -389,27 +392,208 @@ EnrichedHeatmap(mat_list[["H3K4me1_1"]], name = "H3K4me1",
 # ulimit -s 16384 # enlarge stack limit to 16 megs
 # R --slave -e 'Cstack_info()["size"]'
 
-names(mat_list)
+library(circlize)
+col_fun = colorRamp2(c(-2,0,2), c("blue", "white", "red"))
+pdf("figures/all_sva_histone_marks.pdf", height = 15, width = 20)
 EnrichedHeatmap(mat_list[["H3K4me1_1"]], name = "H3K4me1",
                 column_title = "H3K4me1",
-                cluster_rows = TRUE, 
-                top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "darkgreen")))) + 
+                top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#a8404c"))),
+                col = col_fun) + 
+    EnrichedHeatmap(mat_list[["H3K4me3_1"]], name = "H3K4me3",
+                  column_title = "H3K4me3",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun) +
   EnrichedHeatmap(mat_list[["H3K27ac_1"]], name = "H3K27ac",
-                  column_title = "H3K27ac") +
-  EnrichedHeatmap(mat_list[["H3K4me3_1"]], name = "H3K4me3",
-                  column_title = "H3K4me3") +
+                  column_title = "H3K27ac",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun) +
   EnrichedHeatmap(mat_list[["H3K9ac_2"]], name = "H3K9ac",
-                  column_title = "H3K9ac") +
+                  column_title = "H3K9ac",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun) +
     EnrichedHeatmap(mat_list[["H3K9me3_1"]], name = "H3K9me3",
-                  column_title = "H3K9me3") +
+                  column_title = "H3K9me3",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun) +
   Heatmap(log2(nascent_tpm_vec + 1), col = c("white", "orange"), 
           name = "log2(nascent_tpm+1)", 
     show_row_names = FALSE, width = unit(5, "mm")) +
     Heatmap(log2(rnaseq_tpm_vec + 1), col = c("white", "orange"), 
           name = "log2(rnaseq_tpm+1)", 
     show_row_names = FALSE, width = unit(5, "mm"))
+dev.off()
+```
+
+Now let's make the same plot, but with just the SVAs that had peaks for all three DBPs. 
+
+```{r}
+# Let's only grab the one's we're interested in
+hmark_gr_subset <- hmark_gr[c("H3K4me1_1", "H3K4me3_1", "H3K27ac_1", "H3K9ac_2", "H3K9me3_1")]
+sva_dbp_mat_list <- list()
+for(i in seq_along(hmark_gr)) {
+  sva_dbp_mat_list[[i]] <- normalizeToMatrix(hmark_gr_subset[[i]], 
+                                     rmsk_sva_all_ov, 
+                                     value_column = "score", 
+                                     extend = 5000, 
+                                     mean_mode = "w0", 
+                                     w = 50,
+                                     smooth = TRUE,
+                                     target_ratio = 0.3)
+  
+}
+names(sva_dbp_mat_list) <- names(hmark_gr_subset)
+pdf("figures/sva_ov_histone_marks.pdf", height = 7, width = 20)
+EnrichedHeatmap(sva_dbp_mat_list[["H3K4me1_1"]], name = "H3K4me1",
+                column_title = "H3K4me1",
+                top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#a8404c"))),
+                col = col_fun) + 
+    EnrichedHeatmap(sva_dbp_mat_list[["H3K4me3_1"]], name = "H3K4me3",
+                  column_title = "H3K4me3",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun) +
+  EnrichedHeatmap(sva_dbp_mat_list[["H3K27ac_1"]], name = "H3K27ac",
+                  column_title = "H3K27ac",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun) +
+  EnrichedHeatmap(sva_dbp_mat_list[["H3K9ac_2"]], name = "H3K9ac",
+                  column_title = "H3K9ac",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun) +
+    EnrichedHeatmap(sva_dbp_mat_list[["H3K9me3_1"]], name = "H3K9me3",
+                  column_title = "H3K9me3",
+                  top_annotation = HeatmapAnnotation(enrich = anno_enriched(gp = gpar(col = "#424242"))),
+                  col = col_fun)
+dev.off()
 
 ```
+
+
+
+```{r}
+# Let's grab the bigwigs for the enriched factors on SVAs
+bigwigs <- c("/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/ZBTB33_R1.mLb.clN.bigWig",
+             "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/ZBTB33_R2.mLb.clN.bigWig",
+             "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/CBFA2T2_R1.mLb.clN.bigWig",
+             "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/CBFA2T2_R2.mLb.clN.bigWig",
+             "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/CBFA2T3_R1.mLb.clN.bigWig",
+             "/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/bigwig/CBFA2T3_R2.mLb.clN.bigWig")
+dbp_bw <- lapply(bigwigs, rtracklayer::import)
+
+# Let's remove the empty rows
+h3k4me1_mat <- mat_list[["H3K4me1_1"]]
+failed_rows <- attributes(h3k4me1_mat)$failed_rows
+failed_rows <- unique(c(failed_rows, 
+                 attributes(ZBTB33_mat)$failed_rows,
+                 attributes(CBFA2T2_mat)$failed_rows,
+                 attributes(CBFA2T3_mat)$failed_rows))
+# let's remove these from the repeats_sva
+length(repeats_sva)
+repeats_sva_failed_removed <- repeats_sva[-failed_rows]
+h3k4me1_mat <- normalizeToMatrix(hmark_gr[["H3K4me1_1"]], 
+                                   repeats_sva_failed_removed, 
+                                   value_column = "score", 
+                                   extend = 5000, 
+                                   mean_mode = "w0", 
+                                   w = 50,
+                                   smooth = TRUE,
+                                   target_ratio = 0.3)
+
+
+
+dbp_mat_list <- list()
+for(i in seq_along(dbp_bw)) {
+  dbp_mat_list[[i]] <- normalizeToMatrix(dbp_bw[[i]], 
+                                     repeats_sva_failed_removed, 
+                                     value_column = "score", 
+                                     extend = 5000, 
+                                     mean_mode = "w0", 
+                                     w = 50,
+                                     smooth = TRUE,
+                                     target_ratio = 0.3)
+  
+}
+names(dbp_mat_list) <- c("ZBTB33_R1",
+                         "ZBTB33_R2",
+                         "CBFA2T2_R1",
+                         "CBFA2T2_R2",
+                         "CBFA2T3_R1",
+                         "CBFA2T3_R2")
+
+ZBTB33_mat <- getSignalsFromList(dbp_mat_list[c("ZBTB33_R1", "ZBTB33_R2")])
+CBFA2T2_mat <- getSignalsFromList(dbp_mat_list[c("CBFA2T2_R1", "CBFA2T2_R2")])
+CBFA2T3_mat <- getSignalsFromList(dbp_mat_list[c("CBFA2T3_R1","CBFA2T3_R2")])
+library(circlize)
+col_fun_k4me1 = colorRamp2(c(-2,0,2), c("blue", "white", "red"))
+col_fun_ZBTB33 = colorRamp2(c(-0.5,0,0.5), c("blue", "white", "red"))
+col_fun_CBFA2T2 = colorRamp2(c(-0.5,0,0.5), c("blue", "white", "red"))
+col_fun_CBFA2T3 = colorRamp2(c(-0.5,0,0.5), c("blue", "white", "red"))
+EnrichedHeatmap(h3k4me1_mat, name = "H3K4me1",
+                column_title = "H3K4me1",
+                cluster_rows = TRUE,
+                col = col_fun_k4me1) +
+EnrichedHeatmap(ZBTB33_mat, name = "ZBTB33",
+                column_title = "ZBTB33",
+                col = col_fun_ZBTB33) +
+  EnrichedHeatmap(CBFA2T2_mat, name = "CBFA2T2",
+                  column_title = "CBFA2T2",
+                  col = col_fun_CBFA2T2) +
+ EnrichedHeatmap(CBFA2T3_mat, name = "CBFA2T3",
+                  column_title = "CBFA2T3",
+                 col = col_fun_CBFA2T3)
+```
+
+Now let's make the same, but for just those that overlapped all 3 dbp
+
+```{r}
+dbp_ov_mat_list <- list()
+for(i in seq_along(dbp_bw)) {
+  dbp_ov_mat_list[[i]] <- normalizeToMatrix(dbp_bw[[i]], 
+                                     rmsk_sva_all_ov, 
+                                     value_column = "score", 
+                                     extend = 5000, 
+                                     mean_mode = "w0", 
+                                     w = 50,
+                                     smooth = TRUE,
+                                     target_ratio = 0.3)
+  
+}
+names(dbp_ov_mat_list) <- c("ZBTB33_R1",
+                         "ZBTB33_R2",
+                         "CBFA2T2_R1",
+                         "CBFA2T2_R2",
+                         "CBFA2T3_R1",
+                         "CBFA2T3_R2")
+
+ZBTB33_mat <- getSignalsFromList(dbp_ov_mat_list[c("ZBTB33_R1", "ZBTB33_R2")])
+CBFA2T2_mat <- getSignalsFromList(dbp_ov_mat_list[c("CBFA2T2_R1", "CBFA2T2_R2")])
+CBFA2T3_mat <- getSignalsFromList(dbp_ov_mat_list[c("CBFA2T3_R1","CBFA2T3_R2")])
+
+h3k4me1_mat <- normalizeToMatrix(hmark_gr[["H3K4me1_1"]], 
+                                   rmsk_sva_all_ov, 
+                                   value_column = "score", 
+                                   extend = 5000, 
+                                   mean_mode = "w0", 
+                                   w = 50,
+                                   smooth = TRUE,
+                                   target_ratio = 0.3)
+
+col_fun = colorRamp2(c(-1,0,1), c("blue", "white", "red"))
+pdf("figures/sva_ov_dbp_binding.pdf", height = 7, width = 13)
+EnrichedHeatmap(h3k4me1_mat, name = "H3K4me1",
+                column_title = "H3K4me1",
+                col = col_fun) +
+EnrichedHeatmap(ZBTB33_mat, name = "ZBTB33",
+                column_title = "ZBTB33",
+                col = col_fun) +
+  EnrichedHeatmap(CBFA2T2_mat, name = "CBFA2T2",
+                  column_title = "CBFA2T2",
+                  col = col_fun) +
+ EnrichedHeatmap(CBFA2T3_mat, name = "CBFA2T3",
+                  column_title = "CBFA2T3",
+                 col = col_fun)
+dev.off()
+```
+
 
 
 ```{r}
