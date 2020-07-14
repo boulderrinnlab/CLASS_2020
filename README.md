@@ -14,7 +14,7 @@ Class lectures:
 
 https://www.lncrna.io/bchm-5631-lectures-info
 
-Class Git==your here
+Class Git==you're here
 
 NF-CORE Output documentation
 
