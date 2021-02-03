@@ -1,0 +1,97 @@
+---
+title: "Reservoir nascent transcription"
+date: "5/29/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Rsubread)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+# Reservoir nascent transcription
+
+Goal: To analyze nascent RNA-sequencing data by PRO-SEQ methods at 
+reservoir promoters. We are reasoning that althought there is not a 
+"mature transcript" produced from these promoters that 
+"nascent transcription = transcripts being produced by PolR2 but 
+may not finalize to a "mature transcript"
+
+First we will count the "nascent" reads in the promoter regions 
+defined across this study (note: nascent transcripts are often 
+found in promoters and in equal amounts on + and - strand of DNA)
+
+```{r}
+#Defining promoter transcriptional start sites from gencode_gr
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+# Organizing to get' 'all' promoters (lncRNA and mRNA) +/- 3Kb 
+# from start site (from get_promoter_regions function)
+promoters_df <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf") %>%
+  as.data.frame() %>%
+  dplyr::select("gene_id", "seqnames", "start", "end", "strand") 
+names(promoters_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
+promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
+write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
+            quote = F, row.names = F)
+```
+
+
+Using Rsubread to quantify the nascent epxression over promoter 
+windows (3kb +/- start) for analysis in 11_reservoir_chromatin_properties.
+
+```{r}
+# Rsubread to make counts on features.
+counts <- featureCounts(c("data/516.sorted.bam", "data/829.sorted.bam"), 
+                          annot.ext = "results/gencode_v32_promoters_6kb.SAF", 
+                          isPairedEnd = TRUE, nthreads = 16)
+
+# Converting to Reads Per Kilobase of gene length.
+rpk <- counts$counts / (counts$annotation$Length/1000)
+
+# Making an expression summary data frame 
+# rpk_m > first RPK is converted to rpk_M (rpk per millions of reads run)
+# TPM > second rpk_m is converted to TPM (Transcripts per millions of reads run )
+
+expression <- data.frame("rpk" = rpk) %>%
+  rownames_to_column("gene_id") %>%
+  pivot_longer(2:3, names_to = "sample", values_to = "rpk")
+expression_summary <- expression %>% 
+  group_by(sample) %>%
+  summarize(total_rpk = sum(rpk, na.rm = T))
+expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+expression <- merge(expression, expression_summary)
+expression$tpm <- expression$rpk / expression$rpk_m
+tpm <- expression %>% group_by(gene_id) %>%
+  summarize(tpm = mean(tpm, na.rm = T))
+genes <- gencode_gr[gencode_gr$type == "gene"] %>% as.data.frame() %>%
+  dplyr::select(gene_name, gene_id)
+tpm <- merge(tpm, genes)
+tpm <- tpm %>% dplyr::select(gene_id, gene_name, tpm)
+write_csv(tpm, "results/k562_nascent_tpm.csv")
+```
+
+
+```{r} 
+# Let's now add nascent_tpm to our 'peak_occurrence_df' saving as "peak_occurrence_df_nascent"
+# First loading the 'peak_occurence_df' data frame we created in 08_defining reservoirs
+
+peak_occurrence_df_08 <- read.csv("../08_defining_reservoirs/results/08_peak_occurrence_df_promoter_types.csv")
+peak_occurrence_nascent <- read.csv("results/k562_nascent_tpm.csv")
+
+# Adding in nascent by gene_id (and gene name) -- double checked k562_nascent_tpm vs output and is all good --
+peak_occurrence_df_08$nascentTpm <- peak_occurrence_nascent$tpm
+
+# Writting out .csv of peak_occurrence
+write_csv(peak_occurrence_df_08, "results/peak_occurrence_df_nascent_added.csv")
+
+# This .csv will be read into 11_reservoir_chromatin_properties.
+```
+
+
+

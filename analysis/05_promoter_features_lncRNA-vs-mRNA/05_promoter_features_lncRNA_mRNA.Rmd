@@ -1,0 +1,226 @@
+---
+title: "Promoter features: mRNA vs lncRNA"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
+library(GenomicRanges)
+library(tidyverse)
+library(effectsize)
+library(regioneR)
+source("../util/intersect_functions.R")
+source("../util/_setup.R")
+```
+
+
+# Promoter features: lncRNA vs mRNA
+
+Loading in our promoter features for lncRNA and mRNA to compare seperately
+
+```{r import-peaks}
+# Import peaks
+base_path <- "../01_consensus_peaks/results/"
+peak_list <- import_peaks(file.path(base_path,
+                                    "consensus_peaks/filtered_by_peaks/"))
+# Import gencode
+lncrna_promoters <- rtracklayer::import(file.path(base_path,
+                                                  "lncrna_promoters.gtf"))
+mrna_promoters <- rtracklayer::import(file.path(base_path,
+                                                "mrna_promoters.gtf"))
+
+lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, 
+                                         peak_list, type = "occurrence")
+mrna_matrix <- count_peaks_per_feature(mrna_promoters, 
+                                       peak_list, type = "occurrence")
+```
+
+#### Total peak count vs. Number of promoter overlaps -- mRNA vs lncRNA
+
+This plots the number of overlaps with lncRNA and mRNA promoter
+
+```{r promoter-overlaps-vs-peaks}
+# Check that the order is the same.
+stopifnot(all(names(peak_list) == rownames(lncrna_matrix)))
+num_peaks_df <- data.frame("dbp" = rownames(lncrna_matrix),
+                           "total_number_of_peaks" = sapply(peak_list, length),
+                           "lncrna" = rowSums(lncrna_matrix),
+                           "mrna" = rowSums(mrna_matrix))
+
+num_peaks_dfl <- num_peaks_df %>% 
+  pivot_longer(lncrna:mrna, 
+               names_to = "promoter_type",
+               values_to = "peaks_overlapping_promoters")
+
+
+#### FIGURE: Figure 2C
+ggplot(num_peaks_dfl, aes(x = total_number_of_peaks, 
+                          y = peaks_overlapping_promoters, 
+                          color = promoter_type)) +
+  scale_color_manual(values = c("#a8404c", "#424242")) +
+  xlab("Peaks per DBP") +
+  ylab("Peaks Overlapping Promoters") +
+  ggtitle("Relationship Between Number of DBP Peaks and Promoter Overlaps") +
+  geom_abline(slope = 1, linetype = "dashed") +
+  geom_smooth(method = "lm", se = TRUE, formula = y ~ x) + 
+  stat_regline_equation() +
+  stat_cor(label.y = c(1000, 2000), label.x = 30000)
+ggsave("figures/peaks_overlaps_relationship.png", height = 5, width = 8)
+ggsave("figures/peaks_overlaps_relationship.pdf", height = 5, width = 8)
+```
+
+# Permutation test of promoter overlaps -- mRNA vs lncRNA
+
+```{r import-permutation-results}
+base_path <- "../02_permutation_of_consensus_peaks/results/"
+perm_res_promoters <- read.csv(file.path(base_path,
+                                         "permutation_results_promoters.csv"))
+```
+
+#### Heatmap of lncRNA and mRNA enrichment
+
+```{r permutation-results-heatmap, fig.width=5, fig.height=20, message=FALSE}
+# Cluster
+perm_res_promoter_matrix <- perm_res_promoters %>%
+  dplyr::select(tf, region, zscore) %>%
+  pivot_wider(names_from = region, values_from = zscore) %>%
+  column_to_rownames("tf") %>%
+  as.matrix()
+
+dbp_clust <- hclust(dist(perm_res_promoter_matrix))
+
+perm_res_promoters$tf <- factor(perm_res_promoters$tf,
+                                levels = dbp_clust$labels[dbp_clust$order])
+g <- ggplot(perm_res_promoters, aes(x = tf, y = region, fill = zscore))
+g + geom_raster() + 
+  scale_fill_gradient2(limits = c(-30,100),
+                       oob = scales::squish) + 
+  coord_flip() + 
+  theme(axis.text.x = element_text(angle = 90L, hjust = 1L, vjust = 0.5))
+ggsave("figures/promoter_enrichment_lncrna_vs_mrna.png", height = 28, width = 5)
+ggsave("figures/promoter_enrichment_lncrna_vs_mrna.pdf", height = 28, width = 5)
+```
+
+Nearly all DBPs were enriched on both lncRNA and mRNA promoters. 
+A few however, were significantly depleted.
+eGFP-ZNF507: depleted on both mRNA and lncRNA promoters -- 
+BRCA1 was only depelted on mRNA promoters and was neither enriched or 
+depleted for lncRNA promoters over random chance.
+
+```{r promoter-depletion, fig.width=7, fig.height=10, message=FALSE}
+depleted_on_promoters <- perm_res_promoters %>% 
+  filter(alternative == "less", padj <= 0.01)
+
+plot_perm_test <- function(row, df) {
+  region <- df$region[row]
+  dbp <- df$tf[row]
+  observed <- df$observed[row]
+  permuted <- df$permuted[row]
+  padj <- round(df$padj[row],4)
+  nperm <- df$nperm[row]
+  df <- data.frame("region" = region, 
+                   "dbp" = dbp, 
+                   "permuted" = permuted) %>%
+    separate_rows(permuted, sep = ";", convert = T)
+  g <- ggplot(df, aes(x = permuted)) + 
+    geom_histogram(bins = 30) +
+    geom_vline(xintercept = observed, lty = 2) +
+    ggtitle(paste0(region, " -- ", dbp),
+            subtitle = paste0("padj = ", padj, " nperms = ", nperm))
+  return(g)
+}
+
+#Plotting DBPs that are depleted for promoters relative to permutations
+pl <- lapply(1:nrow(depleted_on_promoters), 
+             plot_perm_test, df = depleted_on_promoters)
+# Show plot
+gridExtra::grid.arrange(grobs = pl, ncol = 1)
+
+# Save plot
+pdf("figures/dbps_depleted_on_promoters.pdf", height = 10, width = 7)
+gridExtra::grid.arrange(grobs = pl, ncol = 1)
+dev.off()
+```
+
+
+`r paste(paste(depleted_on_promoters$region, depleted_on_promoters$tf, sep = "-"), collapse = " ")`
+
+
+```{r, fig.width=7, fig.height=13}
+#Plotting examples of genes that are neither enriched nor depleted on promoters
+ns_promoters <- perm_res_promoters %>% filter(padj > 0.01)
+pl <- lapply(1:nrow(ns_promoters), plot_perm_test, df = ns_promoters)
+gridExtra::grid.arrange(grobs = pl, ncol = 1)
+ggsave("figures/dbps_no_pref_promoter_non_promoter.pdf")
+```
+
+Not significant:
+
+`r paste(paste(ns_promoters$region, ns_promoters$tf, sep = "-"), collapse = " ")`
+
+### lncRNA vs mRNA binding bias
+
+```{r lncrna-vs-mrna-bias, message=FALSE}
+lncrna_num_overlaps <- rowSums(lncrna_matrix)
+mrna_num_overlaps <- rowSums(mrna_matrix)
+num_peaks <- sapply(peak_list, length)
+total_lncrna <- length(lncrna_promoters)
+total_mrna <- length(mrna_promoters)
+total_genes <- total_lncrna + total_mrna
+chisq_res <- data.frame("dbp" = character(),
+                        "lncrna_peaks_observed" = numeric(),
+                        "chisq_stat" = numeric(),
+                        "chisq_pval" = numeric(),
+                        "lncrna_peaks_expected" = numeric())
+for (i in 1:length(num_peaks)) {
+  total_peaks <- num_peaks[[i]]
+  df1 <- data.frame("gene_type" = c("lncRNA","lncRNA", "mRNA", "mRNA"),
+                    "promoter_bound" = c("bound", "not_bound", "bound", "not_bound"),
+                    "count" = c(lncrna_num_overlaps[[i]],
+                                total_lncrna - lncrna_num_overlaps[[i]],
+                                mrna_num_overlaps[[i]],
+                                total_mrna - mrna_num_overlaps[[i]])) %>%
+    pivot_wider(names_from = gene_type, values_from = count) %>%
+    column_to_rownames("promoter_bound") %>%
+    as.matrix()
+  
+  csres <- chisq.test(df1)
+  
+  phi_coef <- phi(df1)
+  
+  tdf <- data.frame("dbp" = names(num_peaks[i]),
+                    "lncrna_peaks_observed" = lncrna_num_overlaps[[i]],
+                    "chisq_stat" = csres$statistic,
+                    "chisq_pval" = csres$p.value,
+                    "lncrna_peaks_expected" = csres$expected[1,1],
+                    "phi_coefficient" = phi_coef$phi)
+  chisq_res <- bind_rows(chisq_res, tdf)
+}
+
+chisq_res$padj <- p.adjust(chisq_res$chisq_pval, method = "BH")
+chisq_res$diff <- chisq_res$lncrna_peaks_observed - chisq_res$lncrna_peaks_expected
+write_csv(chisq_res, "results/lncrna_vs_mrna_chisq_results.csv")
+
+# Full lncRNA promoter occupancy plot
+g <- ggplot(chisq_res, aes(x = diff, y = -log10(chisq_pval) ))
+g + geom_point()  
+
+# Zoom in plot
+g2 <- ggplot(chisq_res, 
+             aes(x = log2(lncrna_peaks_observed / lncrna_peaks_expected), 
+                 y = -log10(chisq_pval),
+                 label = dbp))
+g2 + geom_point() + 
+  ylim(0, 5)  + 
+  xlim(-1, 1) +
+  geom_text_repel(data = subset(chisq_res, diff > 0)) +
+  ggtitle("lncRNA vs mRNA binding enrichment") +
+  xlab("log2(Obs/Exp)") +
+  geom_hline(yintercept = -log10(0.05), lty = 2)
+ggsave("figures/lncrna_vs_mrna_binding.pdf")
+ggsave("figures/lncrna_vs_mrna_binding.png")
+```
+
