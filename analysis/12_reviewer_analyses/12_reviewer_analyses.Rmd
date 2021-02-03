@@ -158,11 +158,68 @@ Hommer genome locations
 
 base_path <- paste0("/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/consensus/")
 
+dbps <- unique(gsub("eGFP-", "", names(consensus_peaks)))
+
+annotation_df <- data.frame(annotation = character(),
+                            count = numeric(),
+                            dbp = character())
+
+for(i in 1:length(dbps)) {
+  pks_annotated <- read.table(paste0(base_path, dbps[i], "/", dbps[i], ".consensus_peaks.boolean.annotatePeaks.txt"),
+                              sep = "\t", header = T)
+  pks_annotated$annot <- sapply(pks_annotated$Annotation, function(x) {
+    unlist(strsplit(x, " "))[[1]]
+  })
+  annotation_df <- bind_rows(annotation_df, 
+                             data.frame(annotation = names(table(pks_annotated$annot)),
+                                        count = table(pks_annotated$annot),
+                                        dbp = dbps[i]))
+  
+}
 
 
+annotation_df <- annotation_df %>%
+  distinct() %>%
+  group_by(dbp) %>%
+  mutate(fraction = count.Freq / sum(count.Freq))
 
 
+write_csv(annotation_df, "results/dbp_genome_location_annotation.csv")
 ```
+
+```{r}
+
+annotation_df <- read_csv("results/dbp_genome_location_annotation.csv")
+# Cluster this
+annotation_matrix <- annotation_df %>% 
+  dplyr::select(dbp, annotation, fraction) %>%
+  pivot_wider(names_from = annotation, values_from = fraction, values_fill = 0) %>%
+  column_to_rownames("dbp") %>%
+  as.matrix()
+
+annotation_clust <- hclust(dist(annotation_matrix))
+
+# row_clusters <- cutree(annotation_clust, k = 6)
+
+row_ordering <- annotation_clust$labels[annotation_clust$order]
+annotation_clust <- hclust(dist(t(annotation_matrix)))
+col_ordering <- annotation_clust$labels[annotation_clust$order]
+
+# annotation_df <- merge(annotation_df, data.frame(dbp = names(row_clusters),
+#                                                 cluster = row_clusters))
+
+
+# Set factor orders
+annotation_df$dbp <- factor(annotation_df$dbp, levels = row_ordering)
+annotation_df$count.Var1 <- factor(annotation_df$count.Var1, levels = col_ordering)
+ggplot(annotation_df, aes(x = dbp, y = fraction, fill = count.Var1)) + 
+  geom_bar(stat = "identity", position = "stack") + 
+  coord_flip() + 
+  ggtitle("HOMER peak annotation") 
+  # facet_grid(cluster~., scales = "free", space = "free") 
+ggsave("figures/peak_annotation_fraction.pdf", height = 15, width = 7)
+```
+
 
 
 
