@@ -21,3 +21,13 @@
 *.txt
 *.csv
 *archive*
+*.as
+.DS_store
+GEO_submission/
+*.bb
+*.broadPeak
+*.bigWig
+*.json
+*.sh
+*.gappedPeak
+
