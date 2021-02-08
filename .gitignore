@@ -21,6 +21,8 @@
 *.txt
 *.csv
 *archive*
+*bigWig*
+*.gtf
 *.as
 .DS_store
 GEO_submission/
@@ -30,4 +32,3 @@ GEO_submission/
 *.json
 *.sh
 *.gappedPeak
-

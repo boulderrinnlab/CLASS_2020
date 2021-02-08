@@ -16,7 +16,7 @@ source("/Shares/rinn_class/data/CLASS_2020/analysis/util/intersect_functions.R")
 
 
 
-# source("util/plotting_functions.R")
+source("../util/plotting_functions.R")
 # source("util/intersect_functions.R")
 # source("util/_setup.R")
 ```
@@ -28,9 +28,16 @@ consensus_peaks <- create_consensus_peaks(broadpeakfilepath = "/Shares/rinn_clas
 consensus_peaks <- consensus_peaks[sapply(consensus_peaks, length) > 250]
 
 
-res_df <- read_csv("../08_defining_reservoirs/results/08_peak_occurence_df_resvoirs.csv")
-all_promoters <-  rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+res_df <- read_csv("/Shares/rinn_class/data/CLASS_2020/analysis/08_defining_reservoirs/results/08_peak_occurence_df_resvoirs.csv")
+all_promoters <-  rtracklayer::import("/Shares/rinn_class/data/CLASS_2020/analysis/01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
+all_promoters$score <- 0
+rtracklayer::export(all_promoters, "gencodev32_lncRNA_mRNA_promoters_6kb.bed")
+tmp <- read.table("gencodev32_lncRNA_mRNA_promoters_6kb.bed") %>% dplyr::select(V1, V2, V3)
+write.table(tmp, "gencodev32_lncRNA_mRNA_promoters_6kb.bed", quote = F, col.names = F, row.names = F, sep = "\t")
+?rtracklayer::export
 
+# write out which targets met the 250 peak criterion.
+write_csv(data.frame("target", names(consensus_peaks)), "targets_to_include.csv")
 ```
 
 
@@ -104,9 +111,14 @@ profile_df <- data.frame("x" = integer(),
                          "reservoir" = character(),
                          "dbp" = character())
 
+num_peaks_in_res <- sapply(consensus_peaks, function(x) length(subsetByOverlaps(x, reservoir_prom)))
+dbps_to_include <- names(num_peaks_in_res)[which(num_peaks_in_res > 100)]
+consensus_peaks <- consensus_peaks[dbps_to_include]
+
 for(i in 1:length(consensus_peaks)) {
   pks <- consensus_peaks[[i]]
   
+  # suppressWarnings(length(subsetByOverlaps(pks, reservoir_prom))
   length(pks)
   reservoir_prof <- profile_tss(pks, reservoir_prom)
   nonres_prof <- profile_tss(pks, nonres_prom)
@@ -124,36 +136,249 @@ for(i in 1:length(consensus_peaks)) {
 
 write_csv(profile_df, "results/reservoir_tss_metaplot_profile.csv")
 
-
+profile_df <- read_csv("/Shares/rinn_class/data/CLASS_2020/analysis/12_reviewer_analyses/results/reservoir_tss_metaplot_profile.csv")
 ```
 
 ```{r}
 dbps <- unique(profile_df$dbp)
-
-
-ggplot(profile_df, 
+num_peaks_res <- sapply(consensus_peaks, function(x) suppressWarnings(length(subsetByOverlaps(x, reservoir_prom))))
+pfig <- profile_df %>% filter(dbp %in% dbps_to_include)
+ggplot(pfig, 
        aes(x = x, y = dens, color = reservoir)) + 
     geom_vline(xintercept = 0, lty = 2) + 
   geom_line(size = 1.5, alpha = 0.7) + 
-  facet_wrap(~dbp) +
+  facet_wrap(~dbp, scales = "free_y") +
   ggtitle("Reservoir vs non-reservoir TSS profiles") + 
   scale_x_continuous(breaks = c(-3000, 0, 3000),
                      labels = c("-3kb", "TSS", "+3kb"),
                      name = "") + 
   ylab("Peak frequency") + 
   theme_paperwhite() + 
-  scale_color_manual(values = c("#424242","#A8404C"))
+  scale_color_manual(values = c("#424242","#A8404C")) + 
+   theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
 ggsave("figures/tss_profile_reservoir_vs_nonres.pdf", height = 20, width = 20)
 
 ```
 
 
+```{r}
+# Differences in peak width
+res_peaks <- sapply(consensus_peaks, function(x) suppressWarnings(subsetByOverlaps(x, reservoir_prom)))
+nonres_peaks <- sapply(consensus_peaks, function(x) suppressWarnings(subsetByOverlaps(x, nonres_prom)))
+
+res_widths <- lapply(res_peaks, function(x) width(x))
+nonres_widths <- lapply(nonres_peaks, function(x) width(x))
 
 
 
+rw_df <- data.frame(dbp = rep(names(res_widths), sapply(res_widths, length)), 
+    width=do.call('c', res_widths)) %>%
+  mutate(reservoir = "reservoir")
+nrw_df <- data.frame(dbp = rep(names(nonres_widths), sapply(nonres_widths, length)), 
+    width=do.call('c', nonres_widths)) %>%
+  mutate(reservoir = "non-reservoir")
+w_df <- bind_rows(rw_df, nrw_df)
+
+ggplot(w_df, aes(x = log10(width), color = reservoir)) + 
+  geom_density() + facet_wrap(~dbp) + 
+  scale_color_manual(values = c("#424242","#A8404C")) + 
+  ggtitle("Peak widths")
+ggsave("figures/peak_widths_in_reservoirs_vs_nonreservoirs.pdf", height =12, width = 12)
+all_res_widths <- unlist(res_widths)
+all_nonres_widths <- unlist(nonres_widths)
+
+widths <- data.frame("type" = c(rep("reservoir", times = length(all_res_widths)), rep("non-reservoir", times = length(all_nonres_widths))),
+                     "width" = c(all_res_widths, all_nonres_widths))
+table(widths$type)
+ggplot(widths, aes(x = log10(width), color = type)) + 
+  geom_density() + 
+  geom_vline(xintercept = 2.74) + 
+  geom_vline(xintercept = 3.1)
 
 
-Hommer genome locations
+10^2.74
+10^3.1
+
+
+?rep
+hist(log10(all_res_widths))
+hist(log10(all_nonres_widths))
+width(res_peaks[[1]])
+
+```
+
+
+
+# Conservation
+```{r}
+# This is too big to import into R due to the max rows in a data.frame
+# Instead using https://slowkow.com/notes/bigwigregions/
+# To pare down based on the promoter regions.
+# phylop <- rtracklayer::import("data/hg38.phyloP100way.bw")
+
+# Just going to take the average across each region.
+tmp_chr_cons <- rtracklayer::import("hg38_phylop_promoters_chr1.bedGraph")
+tmp_chr_cons <- as.data.frame(tmp_chr_cons) %>% distinct()
+tmp_chr_cons_gr <- GRanges(seqnames = tmp_chr_cons$seqnames,
+                           IRanges(start = tmp_chr_cons$start,
+                                   end = tmp_chr_cons$end),
+                           strand = tmp_chr_cons$strand)
+tmp_chr_cons_gr$score <- tmp_chr_cons$score
+
+# Res cons 
+res_cons_df <- data.frame("gene_id" = character(),
+                          "mean_conservation" = numeric(),
+                          "sd_conservation" = numeric(),
+                          "reservoir" = character())
+tmp_ov <- findOverlaps(tmp_chr_cons_gr, reservoir_prom)
+
+res_ov <- split(tmp_ov@from, tmp_ov@to)
+sapply(res_ov, length)
+
+res_mean_cons <- sapply(res_ov, function(x) mean(tmp_chr_cons_gr$score[x]))
+
+
+nonres_tmp_ov <- findOverlaps(tmp_chr_cons_gr, nonres_prom)
+nonres_ov <- split(nonres_tmp_ov@from, nonres_tmp_ov@to)
+# sapply(nonres_ov, length)
+nonres_mean_cons <- sapply(nonres_ov, function(x) mean(tmp_chr_cons_gr$score[x]))
+hist(nonres_mean_cons)
+hist(res_mean_cons)
+pl <- c(rep("reservoir", length(res_mean_cons)), rep("non-reservoir", length(nonres_mean_cons)))
+pl <- factor(pl)
+
+# t.test(res_mean_cons, nonres_mean_cons)
+plot(pl, c(res_mean_cons, nonres_mean_cons))
+title("Chr1 PhyloP mean conservation in 6kb promoter windows")
+for(i in 1:length(hits)) {
+  if(i %% 10 == 0) print(i)
+  matches <- tmp_ov@from[tmp_ov@to == hits[[i]]]
+  tmp_cons_df <- data.frame("gene_id" = reservoir_prom$gene_id[hits[[i]]],
+                            "mean_conservation" = mean(tmp_chr_cons_gr$score[matches]),
+                            "sd_conservation" = sd(tmp_chr_cons_gr$score[matches]),
+                            "reservoir" = "reservoir")
+  res_cons_df <- bind_rows(res_cons_df, tmp_cons_df)
+}
+
+nonres_cons_df <- data.frame("gene_id" = character(),
+                          "mean_conservation" = numeric(),
+                          "sd_conservation" = numeric(),
+                          "reservoir" = character())
+tmp_ov <- findOverlaps(tmp_chr_cons_gr, nonres_prom)
+hits <- unique(tmp_ov@to)
+for(i in 1:length(hits)) {
+  if(i %% 100 == 0) print(i)
+  matches <- tmp_ov@from[tmp_ov@to == hits[[i]]]
+  tmp_cons_df <- data.frame("gene_id" = nonres_prom$gene_id[hits[[i]]],
+                            "mean_conservation" = mean(tmp_chr_cons_gr$score[matches]),
+                            "sd_conservation" = sd(tmp_chr_cons_gr$score[matches]),
+                            "reservoir" = "non-reservoir")
+  res_cons_df <- bind_rows(res_cons_df, tmp_cons_df)
+}
+
+
+write_csv(res_cons_df, "conservation_of_promoters.csv")
+
+
+
+head(tmp_ov@from)
+head(tmp_ov@to)
+table(tmp_ov@to)
+width(reservoir_prom[2])
+hmm <- subsetByOverlaps(tmp_chr_cons, reservoir_prom[2])
+huh <- hmm %>% as.data.frame()
+```
+# Overlap with refseq
+
+```{r}
+rs_chr_names <- read.table("refseq_chrnames.txt")
+refseq <- rtracklayer::import("GCF_000001405.39_GRCh38.p13_genomic.gtf")
+unique(as.character(seqnames(reservoir_prom)))
+refseq_genes <- refseq[refseq$type == "gene" & as.character(seqnames(refseq)) %in% rs_chr_names$V1]
+length(all_promoters)
+refseq_genes_chr <- GRanges(seqnames = rs_chr_names[as.character(seqnames(refseq_genes)),"V2"],
+                            IRanges(start = start(refseq_genes), end = end(refseq_genes)), strand = strand(refseq_genes))
+refseq_genes_chr$gene_id <- refseq_genes$gene_id
+refseq_genes_chr$gene_biotype <- refseq_genes$gene_biotype
+refseq_genes_chr$gene <- refseq_genes$gene
+refseq_genes_chr <- refseq_genes_chr[refseq_genes_chr$gene_biotype == "protein_coding" | refseq_genes_chr$gene_biotype == "lncRNA"]
+unique(refseq_genes_chr$gene_biotype)
+
+seqnames(refseq_genes) <- rs_chr_names[as.character(seqnames(refseq_genes)),"V2"]
+rs_chr_names <- rs_chr_names %>%
+  column_to_rownames("V1")
+table(seqnames(refseq_genes))
+seqnames(refseq_genes)
+unique(as.character(seqnames(refseq_genes)))
+refseq_genes$
+seqnames(reservoir_prom)
+rf_ov <- findOverlaps(reservoir_prom, refseq_genes_chr)
+res_ov <- table(countOverlaps(reservoir_prom, refseq_genes_chr)) %>% as.data.frame() %>%
+  mutate(refseq_overlap = ifelse(Var1 == "0", "No overlaps", "1 or more"),
+         reservoir = "reservoir") %>%
+  group_by(refseq_overlap, reservoir) %>%
+  summarize(count = sum(Freq)) %>%
+  mutate(fraction = count / length(reservoir_prom))
+nonres_ov <- table(countOverlaps(nonres_prom, refseq_genes_chr)) %>% as.data.frame() %>%
+    mutate(refseq_overlap = ifelse(Var1 == "0", "No overlaps", "1 or more"),
+         reservoir = "non-reservoir") %>%
+  group_by(refseq_overlap, reservoir) %>%
+  summarize(count = sum(Freq)) %>%
+  mutate(fraction = count / length(nonres_prom))
+
+num_ov <- bind_rows(res_ov, nonres_ov)
+
+ggplot(num_ov, aes(x = reservoir, y = fraction, fill = refseq_overlap)) +
+  geom_bar(position = position_stack(), stat = "identity") + 
+  geom_text(aes(label = paste0(round(fraction*100), "%")), position = position_stack(vjust = 0.5), size = 3, color = "#FFFFFF") +
+  scale_fill_manual(values = c("#424242","#A8404C")) + 
+  coord_flip() + 
+  ggtitle("Overlap with RefSeq")
+ggsave("figures/overlap_with_refseq.pdf", height = 2, width = 6)
+
+
+nonres_level <- table(nonres_prom$level) %>%
+  as.data.frame() %>%
+  dplyr::rename(level = Var1,
+                count = Freq) %>%
+  mutate(fraction = count / length(nonres_prom),
+         reservoir = "non-reservoir")
+
+reservoir_level <- table(reservoir_prom$level) %>%
+  as.data.frame() %>%
+  dplyr::rename(level = Var1,
+                count = Freq) %>%
+  mutate(fraction = count / length(reservoir_prom),
+         reservoir = "reservoir")
+
+gene_levels <- bind_rows(nonres_level, reservoir_level)
+gene_levels$level <- factor(gene_levels$level, levels = c("1", "2", "3"),
+                            labels = c("verified loci", "manually annotated loci", "automatically annotated loci"))
+gene_levels$fraction*100
+ggplot(gene_levels, aes(x = reservoir, y = fraction, fill = level)) +
+  geom_bar(position = position_stack(), stat = "identity") + 
+  scale_fill_manual(values = c("#424242","#A8404C", "#71969F")) + 
+  geom_text(aes(label = paste0(round(fraction*100), "%")), position = position_stack(vjust = 0.5), size = 3, color = "#FFFFFF") +
+  coord_flip() + 
+  ggtitle("Gencode gene levels")
+ggsave("figures/gencode_gene_levels.pdf", height = 2, width = 6)
+
+# 1 (verified loci),
+# 2 (manually annotated loci),
+# 3 (automatically annotated loci)
+subsetByOverlaps(reservoir_prom, nonres_prom)
+res_ov[res_ov$Var1 == 0,"Freq"] / length(reservoir_prom)
+nonres_ov[nonres_ov$Var1 == 0,"Freq"] / length(nonres_prom)
+sum(nonres_ov$Freq)== length(nonres_prom)
+table(refseq$type)
+table(all_promoters$level)
+table(all_promoters$source)
+```
+
+
+Homer genome locations
 ```{r}
 
 base_path <- paste0("/Shares/rinn_class/data/k562_chip/results/bwa/mergedLibrary/macs/broadPeak/consensus/")
@@ -185,11 +410,12 @@ annotation_df <- annotation_df %>%
 
 
 write_csv(annotation_df, "results/dbp_genome_location_annotation.csv")
+annotation_df
 ```
 
 ```{r}
 
-annotation_df <- read_csv("results/dbp_genome_location_annotation.csv")
+annotation_df <- read_csv("/Shares/rinn_class/data/CLASS_2020/analysis/12_reviewer_analyses/results/dbp_genome_location_annotation.csv")
 # Cluster this
 annotation_matrix <- annotation_df %>% 
   dplyr::select(dbp, annotation, fraction) %>%
