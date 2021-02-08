@@ -1,0 +1,25 @@
+#!/bin/bash
+rm /dev/shm/bigWigRegions_mism6893_8223_chr1* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr2* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr3* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr4* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr5* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr6* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr7* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr8* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr9* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr10* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr11* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr12* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr13* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr14* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr15* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr16* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr17* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr18* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr19* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr20* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr21* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chr22* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chrX* 
+rm /dev/shm/bigWigRegions_mism6893_8223_chrY* 
