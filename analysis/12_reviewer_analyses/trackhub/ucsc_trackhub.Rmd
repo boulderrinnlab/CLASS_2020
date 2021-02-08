@@ -14,7 +14,7 @@ library(jsonlite)
 
 ```{bash, eval=FALSE}
 # Let's first grab the existing files in the AWS bucket.
-aws s3api list-objects --bucket bchm563classbucket > bchm5631_s3_bucket_contents.json
+aws s3api list-objects --bucket bchm5631sp2020 > bchm5631_s3_bucket_contents.json
 
 # Also retrieve bedToBigBed from here
 # http://hgdownload.soe.ucsc.edu/admin/exe/macOSX.x86_64/
@@ -79,6 +79,15 @@ data_completeness_targets <- data.frame(target = unique(c(bigwigs$target,
   mutate(bigwigs = target %in% bigwigs$target,
          consensus = target %in% consensus$target,
          peaks = target %in% peaks$target)
+
+tti <- read_csv("targets_to_include.csv") %>%
+  dplyr::rename(target = "names.consensus_peaks.") %>%
+  dplyr::select(target) %>%
+  mutate(include = TRUE)
+data_completeness_targets <- merge(data_completeness_targets, tti, all.x = TRUE)
+data_completeness_targets <- data_completeness_targets %>%
+  filter(include == TRUE)
+names(tti)
 # data_completeness_targets <- data.frame(target = unique(c(bigwigs$target, 
 #                                                           broadpeak$target, 
 #                                                           gappedpeak$target, 
@@ -301,12 +310,6 @@ priority ", pri ,"
 }
 
 
-color <- colors[[1]]
-cat(bw_header)
-target <- targets[[i]]
-bws <- bigwigs %>% filter(target == targets[[i]])
-cons <- consensus %>% filter(target == targets[[i]])
-pks<- peaks %>% filter(target == targets[[i]])
 
 supertracks <- c()
 set.seed(987)
@@ -327,5 +330,6 @@ write_lines(supertracks, "th.txt")
 
 ```{r}
 # http://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&hubUrl=https://bchm563classbucket.s3.amazonaws.com/trackhub/hub.txt
+# http://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&hubUrl=https://bchm5631sp2020.s3.amazonaws.com/trackhub/hub.txt
 ```
 
