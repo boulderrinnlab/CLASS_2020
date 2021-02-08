@@ -1,0 +1,331 @@
+---
+title: "UCSC Trackhub setup"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(janitor)
+library(jsonlite)
+```
+
+```{bash, eval=FALSE}
+# Let's first grab the existing files in the AWS bucket.
+aws s3api list-objects --bucket bchm563classbucket > bchm5631_s3_bucket_contents.json
+
+# Also retrieve bedToBigBed from here
+# http://hgdownload.soe.ucsc.edu/admin/exe/macOSX.x86_64/
+```
+
+```{r}
+
+
+s3buck <- fromJSON("bchm5631_s3_bucket_contents.json") %>%
+  as.data.frame() %>%
+  janitor::clean_names() %>%
+  dplyr::select(contents_key) %>%
+  dplyr::rename(filename = contents_key) %>%
+  mutate(filetype = str_extract(filename, "[a-zA-Z]*$"))
+
+bigwigs <- s3buck %>%
+  filter(filetype == "bigWig",
+         !grepl("control", filename)) %>%
+  mutate(replicate = gsub("bigwig/", "", filename),
+         replicate = str_remove(replicate, "\\..*"),
+         target = str_remove(replicate, "_.*"),
+         dbp = gsub("eGFP-", "", target))
+
+# broadpeak <- s3buck %>%
+#   filter(filetype == "broadPeak") %>%
+#   mutate(replicate = str_extract(filename, "peaks/.*_peaks"),
+#          replicate = gsub("peaks/", "", replicate),
+#          replicate = gsub("_peaks", "", replicate),
+#          target = str_remove(replicate, "_.*"),
+#          dbp = gsub("eGFP-", "", target))
+
+
+consensus <- s3buck %>%
+  filter(filetype == "bb",
+         grepl("consensus", filename)) %>%
+  mutate(target = gsub("consensus/|.bb", "", filename))
+
+peaks <- s3buck %>%
+  filter(filetype == "bb",
+         grepl("peaks/", filename)) %>%
+  mutate(replicate = gsub("peaks/|.bb", "", filename),
+         target = str_extract(replicate, ".*_"),
+         target = gsub("_", "", target))
+# gappedpeak<- s3buck %>%
+#   filter(filetype == "gappedPeak") %>%
+#   mutate(replicate = str_extract(filename, "peaks/.*_peaks"),
+#          replicate = gsub("peaks/", "", replicate),
+#          replicate = gsub("_peaks", "", replicate),
+#          target = str_remove(replicate, "_.*"),
+#          dbp = gsub("eGFP-", "", target))
+# 
+# bed <- s3buck %>%
+#   filter(filetype == "bed") %>%
+#   mutate(target = str_extract(filename, "peaks/.*_con"),
+#          target = gsub("peaks/", "", target),
+#          target = gsub("_con", "", target),
+#          dbp = gsub("eGFP-", "", target))
+
+data_completeness_targets <- data.frame(target = unique(c(bigwigs$target,
+                                                          consensus$target,
+                                                          peaks$target))) %>%
+  mutate(bigwigs = target %in% bigwigs$target,
+         consensus = target %in% consensus$target,
+         peaks = target %in% peaks$target)
+# data_completeness_targets <- data.frame(target = unique(c(bigwigs$target, 
+#                                                           broadpeak$target, 
+#                                                           gappedpeak$target, 
+#                                                           bed$target))) %>%
+#   mutate(bigwigs = target %in% bigwigs$target,
+#          broadpeak = target %in% broadpeak$target,
+#          gappedpeak = target %in% gappedpeak$target,
+#          bed = target %in% bed$target)
+
+# Missing bigwig 
+data_completeness_targets$target[data_completeness_targets$bigwigs == FALSE]
+data_completeness_targets$target[data_completeness_targets$consensus == FALSE]
+data_completeness_targets$target[data_completeness_targets$peaks == FALSE]
+# 
+# data_completeness_targets$target[data_completeness_targets$broadpeak == FALSE]
+# data_completeness_targets$target[data_completeness_targets$gappedpeak == FALSE]
+# data_completeness_targets$target[data_completeness_targets$bed == FALSE]
+
+
+
+```
+
+Okay, we should have all the data now, we just need to group everything by the DBP and decide on a format to represent the data, then we should be good to go.
+
+# Convert consensus bed to bigBed
+
+```{r}
+# let's write out a script that will do this.
+f <- data.frame(file = list.files("consensus_bed", full.names = T, pattern = ".bed")) %>%
+  mutate(target = gsub("consensus_bed/", "", file),
+         target = str_extract(target, ".*_con"),
+         target = gsub("_con", "", target),
+         command = paste0("bedToBigBed ",
+                          file, " chrom_sizes.txt consensus_bb/",
+                          target, ".bb")) %>%
+  dplyr::select(command) %>%
+  write_tsv("bed2bb.sh", col_names = FALSE)
+
+```
+
+```{bash}
+chmod u+x bed2bb.sh
+./bed2bb.sh
+```
+
+# Convert broadPeak files into bigBed
+
+-   [ ] First we need to write out .as files for each target
+
+```{r}
+write_as <- function(rep_name) {
+  paste0('table ', rep_name, '_peaks
+"ENCODE ', gsub("_R", " rep ", rep_name),' ChIP-seq peaks in K562 called with nf-core/chipseq v1.1.0 pipeline"
+(
+string  chrom;		"Reference sequence chromosome or scaffold"
+uint    chromStart;	"Start position of feature on chromosome"
+uint    chromEnd;	"End position of feature on chromosome"
+string  name;		"Name of gene"
+uint    score;		"Score"
+char[1] strand;		"+ or - for strand"
+string    signalValue;	"Measurement of overall (usually, average) enrichment for the region."
+string    pValue;	"Measurement of statistical significance (-log10). Use -1 if no pValue is assigned."
+string  	qValue;	"Measurement of statistical significance using false discovery rate (-log10). Use -1 if no qValue is assigned."
+)
+')
+}
+
+f <- data.frame(files = list.files("broadpeak/", full.names = T, pattern = "broadPeak")) %>%
+  mutate(rep_name = gsub("broadpeak//", "", files),
+         rep_name = gsub("_peaks.broadPeak", "", rep_name),
+         rep_name = gsub("-", "_", rep_name)) %>%
+  rowwise() %>%
+  mutate(as_file = write_as(rep_name),
+         as_filename = paste0("as_files/", rep_name, ".as"))
+lapply(1:nrow(f), function(x) write.table(f[x,"as_file"], f$as_filename[[x]], col.names = F, row.names = F, quote = F))
+```
+
+-   [ ] Then we need to remove each comment line from each broadPeak file. We'll do that just by reading the file in and skipping the first line and writing it back out. Probably faster with sed.
+
+```{r}
+f <- data.frame(files = list.files("broadpeak/", full.names = T, pattern = "broadPeak")) %>%
+  rowwise() %>%
+  mutate(bpfile = map(files, ~ read.table(.x, skip = 1)))
+# Also get rid of the score column -- could also normalize it to 1000
+# But since it's suppose to be the score from 0 to 1000 and it's not -- we'll delete
+# It changes the peak shading basedon that and we don't want that anyway.
+# Also there seems to be a problem with an underscore in the name column
+for(i in 1:nrow(f)) {
+  f$bpfile[[i]]$V5 <- 0
+  f$bpfile[[i]]$V4 <- gsub("-", "_", f$bpfile[[i]]$V4)
+}
+lapply(1:nrow(f), function(x) write.table(f$bpfile[[x]], gsub(".broadPeak", ".bed", gsub("broadpeak/", 
+                                                                                         "peaks_bed/", f$files[[x]])), quote = F, row.names = F, col.names = F))
+```
+
+
+
+-   [ ] Then we'll write the script to run each conversion
+
+```{r}
+f <- data.frame(files = list.files("broadpeak/", full.names = T, pattern = "broadPeak")) %>%
+  mutate(rep_name = gsub("broadpeak//", "", files),
+         rep_name = gsub("_peaks.broadPeak", "", rep_name),
+         command = paste0(">&2 echo '", gsub("-", "_", rep_name), "\n'; bedToBigBed -as=as_files/", gsub("-", "_", rep_name),
+                          ".as -type=bed6+3 -extraIndex=signalValue,pValue,qValue peaks_bed/", rep_name, "_peaks.bed chrom_sizes.txt peaks_bb/", rep_name, ".bb")) %>%
+  dplyr::select(command) %>%
+  write.table("broadpeak2bb.sh", quote = F, col.names = F, row.names = F)
+```
+
+```{bash}
+chmod u+x broadpeak2bb.sh
+./broadpeak2bb.sh 2> out.txt
+```
+
+# Write a function to write a supertrack
+
+```{r}
+colors <- c("color 2,192,199",
+            "color 82,68,211",
+            "color 232,135,26",
+            "color 218,52,145",
+            "color 145,136,250",
+            "color 43,128,235",
+            "color 72,226,111",
+            "color 43,128,235",
+            "color 112,56,177",
+            "color 223,191,3",
+            "color 203,112,15",
+            "color 38,141,108",
+            "color 155,236,84")
+targets <- data_completeness_targets$target
+
+
+
+make_supertrack <- function(target, color, pri_start, bws, pks, cons) {
+  pri <- pri_start + 1
+  st_stanza <- paste0("#########################################################
+track ", target, "
+superTrack on
+shortLabel ", target, "
+longLabel ENCODE ChIP-seq for ", target, " in K562 cells processed using nf-core/chipseq v1.1.0
+html BCHM5631_info
+
+")
+  default_width <- 16 * nrow(bws)
+  bw_header <- paste0("track ", target, "_bigWig
+parent ", target, "
+container multiWig
+shortLabel ", target, "
+longLabel ", target, " ChIP-seq read depth normalized signal in K562
+type bigWig
+visibility full
+autoScale on
+aggregate none
+showSubtrackColorOnUi on
+maxHeightPixels 500:", default_width,":8
+priority ", pri ,"
+
+")
+  
+  bw_stanzas <- c()
+  for(j in 1:nrow(bws)) {
+    rep <- bws$replicate[[j]]
+    fn <- bws$filename[[j]]
+    bw_stanza <- paste0("track ", rep, "
+bigDataUrl https://bchm563classbucket.s3.us-east-2.amazonaws.com/", fn, "
+shortLabel ", rep, "
+longLabel ", gsub("_R", " rep ", rep), " ChIP-seq read depth normalized signal in K562
+type bigWig
+parent ", target, "_bigWig
+alwaysZero on
+", color, "
+
+")
+    bw_stanzas <- c(bw_stanzas, bw_stanza)
+  }
+  
+  pk_stanzas <- c()
+  for(k in 1:nrow(pks)) {
+    rep <- pks$replicate[[k]]
+    fn <- pks$filename[[k]]
+    pri <- pri + 1
+    pk_stanza <- paste0("track ", rep, "_peaks
+parent ", target, "
+bigDataUrl https://bchm563classbucket.s3.amazonaws.com/", fn, "
+shortLabel ", rep, " peaks
+longLabel ", gsub("_R", " rep ", rep), " peaks
+visibility dense
+type bigBed
+priority ",  pri, "
+", color, "
+
+")
+    pk_stanzas <- c(pk_stanzas, pk_stanza)
+  }
+  if(nrow(cons) == 1) {
+     pri <- pri + 1
+      fn <- cons$filename[[1]]
+  con_stanza <- paste0("track ", target, "_consensus_peaks
+parent ", target, "
+bigDataUrl https://bchm563classbucket.s3.amazonaws.com/", fn, "
+shortLabel ", target, " consensus
+longLabel ", target, " consensus -- merge of peaks present in all replicates
+visibility dense
+type bigBed
+priority ", pri ,"
+", color, "
+
+")
+  
+  st <- unlist(c(st_stanza, bw_header, bw_stanzas, pk_stanzas, con_stanza))
+  st <- paste(st, collapse = "")
+  return(st)
+  } else {
+     st <- unlist(c(st_stanza, bw_header, bw_stanzas, pk_stanzas))
+  st <- paste(st, collapse = "")
+  return(st)
+  }
+
+}
+
+
+color <- colors[[1]]
+cat(bw_header)
+target <- targets[[i]]
+bws <- bigwigs %>% filter(target == targets[[i]])
+cons <- consensus %>% filter(target == targets[[i]])
+pks<- peaks %>% filter(target == targets[[i]])
+
+supertracks <- c()
+set.seed(987)
+for(i in 1:length(targets)) {
+
+  st <- make_supertrack(target = targets[[i]], 
+                        color = sample(colors, 1),
+                        pri_start = i * 10,
+                        bws = bigwigs %>% filter(target == targets[[i]]),
+                        pks = peaks %>% filter(target == targets[[i]]),
+                        cons = consensus %>% filter(target == targets[[i]]))  
+  
+  supertracks <- c(supertracks, st)
+}
+
+write_lines(supertracks, "th.txt")
+```
+
+```{r}
+# http://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&hubUrl=https://bchm563classbucket.s3.amazonaws.com/trackhub/hub.txt
+```
+
