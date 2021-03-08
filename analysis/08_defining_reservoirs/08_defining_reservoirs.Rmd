@@ -58,6 +58,8 @@ promoter_counts <- featureCounts(c("../07_binding_versus_expression/data/ENCFF62
                                    "../07_binding_versus_expression/data/ENCFF630HEX.bam"), 
                           annot.ext = "results/gencode_v32_promoters_6kb.SAF", 
                           isPairedEnd = TRUE, nthreads = 16)
+
+write_rds(promoter_counts, "promoter_counts.rds")
 ```
 
 
