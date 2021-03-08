@@ -36,6 +36,31 @@ peak_occurrence_df <- read.csv(file.path(base_path,
                                          "peak_occurrence_df_exp_added.csv"))
 ```
 
+```{r}
+# We're going to quantify RNA-seq data 
+# at each promoter window 3kb upstream and downstream of the
+# TSS for each gene.
+
+#Defining promoter transcriptional start sites from gencode_gr
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+# Organizing to get' 'all' promoters (lncRNA and mRNA) +/- 3Kb 
+# from start site (from get_promoter_regions function
+promoters_df <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf") %>%
+  as.data.frame() %>%
+  dplyr::select("gene_id", "seqnames", "start", "end", "strand") 
+names(promoters_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
+promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
+write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
+            quote = F, row.names = F)
+library(Rsubread)
+promoter_counts <- featureCounts(c("../07_binding_versus_expression/data/ENCFF625ZBS.bam",
+                                   "../07_binding_versus_expression/data/ENCFF630HEX.bam"), 
+                          annot.ext = "results/gencode_v32_promoters_6kb.SAF", 
+                          isPairedEnd = TRUE, nthreads = 16)
+```
+
+
 Density plots of binding events for lncRNAs and mRNAs expressed above 0.001 TPM
 We see similar distributions with a slight shift of lncRNA promoters having 
 more promoters with > 60 DBPs bound
@@ -222,21 +247,49 @@ Where the gene has to be on the opposite strand within 1000bp.
 gencode_gr <- rtracklayer::import(
   "../../../genomes/human/gencode/v32/gencode.v32.annotation.gtf")
 
+# genes <- gencode_gr[gencode_gr$type == "gene"]
+# proms <- GenomicRanges::promoters(genes, upstream = 1000, downstream = 0)
+# 
+# reduced_proms <- GenomicRanges::reduce(proms, ignore.strand = T)
+#   
+# reduced_widths <- data.frame(width = width(reduced_proms),
+#                                index = 1:length(reduced_proms))
+# ov_proms <- GenomicRanges::findOverlaps(proms, reduced_proms, ignore.strand=TRUE)
+# ov_proms <- data.frame("gene_promoters_from" = ov_proms@from,
+#                        "reduced_promoters_to" = ov_proms@to)
 # Define that the potential "bidirectional promoter is on the 
 # opposite strand and less than 1000bp in distance"
 # Note this is a newly defined function in 'overlapping_promoters' 
 # ../util/intersect_functions.R 
 shared_promoters <- overlapping_promoters(gencode_gr, 
-                                          upstream = 1000,
-                                          downstream = 0)
-
+                                          upstream = 3000,
+                                          downstream = 3000)
+names(shared_promoters)[2:8] <- paste0(names(shared_promoters)[2:8], "_3kb")
 # Merge in shared promoters to the peak_occurrence_df
 peak_occurrence_df <- merge(peak_occurrence_df, shared_promoters, all.x = TRUE)
+peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type_3kb), 
+                   "shared_promoter_type_3kb"] <- "none"
 # Annotate non overlapping promoters
-peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type), 
-                   "shared_promoter_type"] <- "none"
+# peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type), 
+#                    "shared_promoter_type"] <- "none"
 
 
+
+
+
+mrpl53 <- "ENSG00000204822.7"
+cacng3 <- "ENSG00000006116.3"
+consensus_peaks <- import_peaks(paste0("../01_consensus_peaks/results/",
+                                       "consensus_peaks/filtered_by_peaks"))
+hmm <- counts$annotation
+huh <- counts$counts
+huh["ENSG00000204822.7",]
+mrpl53_promoter <- promoters[promoters$gene_id == mrpl53]
+cacng3_promoter <- promoters[promoters$gene_id == cacng3]
+ov_peaks <- sapply(consensus_peaks, function(x) countOverlaps(mrpl53_promoter, x))
+ov_peaks <- sapply(consensus_peaks, function(x) countOverlaps(cacng3_promoter, x))
+
+ov_peaks[ov_peaks == 1]
 # Plotting percentage of promoters that are "bidirectional", 
 # "mutliple_nearby_promoters", "nearby and on same strand"
 reservoir_status_by_shared_promoters <- peak_occurrence_df %>%
