@@ -20,6 +20,11 @@ source("../util/intersect_functions.R")
 source("../util/_setup.R")
 ```
 
+# Let's retrieve some K562 RNA-seq
+
+We'll include both Poly A selected and total RNA-seq to 
+
+
 # Expression vs. DNA-binding at promoters
 
 #### Purpose: Compare expression of genes to binding in promoter regions

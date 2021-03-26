@@ -37,6 +37,8 @@ peak_occurrence_df <- read.csv(file.path(base_path,
                                          "peak_occurrence_df_exp_added.csv"))
 ```
 
+## Making conservative set of reservoirs by expanding windows around reservoir to 6kb
+## This will further eliminate reservoirs that have a gene within 6Kb that is expressed
 ```{r}
 # We're going to quantify RNA-seq data 
 # at each promoter window 3kb upstream and downstream of the
