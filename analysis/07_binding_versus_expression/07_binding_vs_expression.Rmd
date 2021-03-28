@@ -18,11 +18,47 @@ library(Rsubread)
 library(regioneR)
 source("../util/intersect_functions.R")
 source("../util/_setup.R")
+
+
 ```
 
 # Let's retrieve some K562 RNA-seq
 
 We'll include both Poly A selected and total RNA-seq to 
+
+```{r}
+samples <- read_csv("data/k562_rnaseq_bam_files.csv")
+
+
+fl <- list.files("data", pattern = ".bam", full.names = T)
+counts <- featureCounts(fl,
+                          annot.ext = "../../../genomes/human/gencode/v32/gencode.v32.annotation.gtf",
+                          isGTFAnnotationFile = T,
+                          isPairedEnd = TRUE,
+                          nthreads = 16)
+rpk <- counts$counts / (counts$annotation$Length/1000)
+expression <- data.frame("rpk" = rpk) %>%
+  rownames_to_column("gene_id") %>%
+  pivot_longer(2:ncol(.), names_to = "sample", values_to = "rpk")
+
+expression_summary <- expression %>%
+  group_by(sample) %>%
+  summarize(total_rpk = sum(rpk, na.rm = T))
+expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+expression <- merge(expression, expression_summary)
+expression$tpm <- expression$rpk / expression$rpk_m
+
+
+
+
+
+# Merge in the sample info
+expression$file_accession <- gsub("rpk.|.bam", "", expression$sample)
+exp <- merge(expression, samples)
+
+write_csv(exp, "results/K562_expression.csv")
+
+```
 
 
 # Expression vs. DNA-binding at promoters
@@ -129,7 +165,7 @@ ggsave("figures/k562_expression_vs_lncRNA_mRNA_promoter_binding.pdf")
 ```{r dbp-vs-expression-combined, message=FALSE, warning=FALSE}
 #### FIGURE: Supplemental 4A
 # TODO: These correlation values are with log(TPM) consider linear correlation.
-g <- ggplot(peak_occurrence_df, aes(y = log2(tpm + 0.001), x = number_of_dbp))
+g <- ggplot(peak_occurrence_df, aes(y = log2(tpm +s), x = number_of_dbp))
 g + geom_point(data = peak_occurrence_df %>% filter(tpm < 0.001), 
                shape = 17, alpha = 0.7) +
   geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs"),
