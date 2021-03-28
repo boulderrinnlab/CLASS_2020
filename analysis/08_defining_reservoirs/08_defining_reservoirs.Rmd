@@ -37,43 +37,6 @@ peak_occurrence_df <- read.csv(file.path(base_path,
                                          "peak_occurrence_df_exp_added.csv"))
 ```
 
-## Making conservative set of reservoirs by expanding windows around reservoir to 6kb
-## This will further eliminate reservoirs that have a gene within 6Kb that is expressed
-```{r}
-# We're going to quantify RNA-seq data 
-# at each promoter window 3kb upstream and downstream of the
-# TSS for each gene.
-
-#Defining promoter transcriptional start sites from gencode_gr
-gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
-
-# Organizing to get' 'all' promoters (lncRNA and mRNA) +/- 3Kb 
-# from start site (from get_promoter_regions function
-promoters_df <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf") %>%
-  as.data.frame() %>%
-  dplyr::select("gene_id", "seqnames", "start", "end", "strand") 
-names(promoters_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
-promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
-write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
-            quote = F, row.names = F)
-
-promoter_counts <- featureCounts(c("../07_binding_versus_expression/data/ENCFF625ZBS.bam",
-                                   "../07_binding_versus_expression/data/ENCFF630HEX.bam"), 
-                          annot.ext = "results/gencode_v32_promoters_6kb.SAF", 
-                          isPairedEnd = TRUE, nthreads = 16,
-                          allowMultiOverlap = TRUE)
-
-# write_rds(promoter_counts, "promoter_counts.rds")
-counts <- promoter_counts$counts %>%
-  as.data.frame() %>%
-  rownames_to_column("gene_id")
-
-pkdf <- peak_occurrence_df %>% merge(counts)
-
-res <- pkdf %>% filter(reservoir == 1)
-
-really_zero <- pkdf %>% filter(ENCFF625ZBS.bam == 0, ENCFF630HEX.bam == 0)
-```
 
 
 Density plots of binding events for lncRNAs and mRNAs expressed above 0.001 TPM
@@ -138,8 +101,65 @@ as having 7 binding events and expression less than 0.001 TPM
 peak_occurrence_df$reservoir <- 
   as.numeric(peak_occurrence_df$number_of_dbp > 7 & 
                peak_occurrence_df$tpm < 0.001)
+
+```
+
+## Making conservative set of reservoirs by expanding windows around reservoir to 6kb
+## This will further eliminate reservoirs that have a gene within 6Kb that is expressed
+```{r}
+# We're going to quantify RNA-seq data 
+# at each promoter window 3kb upstream and downstream of the
+# TSS for each gene.
+
+#Defining promoter transcriptional start sites from gencode_gr
+gencode_gr <- rtracklayer::import("/Shares/rinn_class/data/genomes/human/gencode/v32/gencode.v32.annotation.gtf")
+
+# Organizing to get' 'all' promoters (lncRNA and mRNA) +/- 3Kb 
+# from start site (from get_promoter_regions function
+promoters_df <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf") %>%
+  as.data.frame() %>%
+  dplyr::select("gene_id", "seqnames", "start", "end", "strand") 
+names(promoters_df) <- c("GeneID", "Chr", "Start", "End", "Strand")
+promoters_df[which(promoters_df$Start < 0), "Start"] <- 0
+write.table(promoters_df, "results/gencode_v32_promoters_6kb.SAF", sep = "\t",
+            quote = F, row.names = F)
+
+fl <- list.files("../07_binding_versus_expression/data", pattern = "\\.bam", full.names = T)
+fl
+promoter_counts <- featureCounts(fl, 
+                          annot.ext = "results/gencode_v32_promoters_6kb.SAF", 
+                          isPairedEnd = TRUE, nthreads = 16,
+                          allowMultiOverlap = TRUE)
+
+# write_rds(promoter_counts, "promoter_counts.rds")
+promoter_counts <- read_rds("promoter_counts.rds")
+
+rpk <- promoter_counts$counts / (promoter_counts$annotation$Length/1000)
+expression <- data.frame("rpk" = rpk) %>%
+  rownames_to_column("gene_id") %>%
+  pivot_longer(2:ncol(.), names_to = "sample", values_to = "rpk")
+
+expression_summary <- expression %>%
+  group_by(sample) %>%
+  summarize(total_rpk = sum(rpk, na.rm = T))
+expression_summary$rpk_m <- expression_summary$total_rpk / 1e6
+expression <- merge(expression, expression_summary)
+expression$tpm <- expression$rpk / expression$rpk_m
+
+
+promoter_expression <- expression %>% group_by(gene_id) %>%
+  summarize(promoter_median_tpm = median(tpm),
+            promoter_max_tpm = max(tpm))
+peak_occurrence_df <- merge(peak_occurrence_df, promoter_expression)
+
+
+peak_occurrence_df <- peak_occurrence_df %>% mutate(conservative_reservoir = ifelse(promoter_median_tpm < 0.01 & reservoir == 1, 1, 0))
+
+table(peak_occurrence_df$conservative_reservoir)
+
 write_csv(peak_occurrence_df, "results/08_peak_occurence_df_resvoirs.csv")
 ```
+
 
 ```{r percent-lncrna, message=FALSE}
 #### FIGURE: Supplemental 4C
@@ -277,13 +297,12 @@ gencode_gr <- rtracklayer::import(
 # Note this is a newly defined function in 'overlapping_promoters' 
 # ../util/intersect_functions.R 
 shared_promoters <- overlapping_promoters(gencode_gr, 
-                                          upstream = 3000,
-                                          downstream = 3000)
-names(shared_promoters)[2:8] <- paste0(names(shared_promoters)[2:8], "_3kb")
+                                          upstream = 1000,
+                                          downstream = 0)
 # Merge in shared promoters to the peak_occurrence_df
 peak_occurrence_df <- merge(peak_occurrence_df, shared_promoters, all.x = TRUE)
-peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type_3kb), 
-                   "shared_promoter_type_3kb"] <- "none"
+peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type), 
+                   "shared_promoter_type"] <- "none"
 # Annotate non overlapping promoters
 # peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type), 
 #                    "shared_promoter_type"] <- "none"
@@ -292,19 +311,9 @@ peak_occurrence_df[is.na(peak_occurrence_df$shared_promoter_type_3kb),
 
 
 
-mrpl53 <- "ENSG00000204822.7"
-cacng3 <- "ENSG00000006116.3"
 consensus_peaks <- import_peaks(paste0("../01_consensus_peaks/results/",
                                        "consensus_peaks/filtered_by_peaks"))
-hmm <- counts$annotation
-huh <- counts$counts
-huh["ENSG00000204822.7",]
-mrpl53_promoter <- promoters[promoters$gene_id == mrpl53]
-cacng3_promoter <- promoters[promoters$gene_id == cacng3]
-ov_peaks <- sapply(consensus_peaks, function(x) countOverlaps(mrpl53_promoter, x))
-ov_peaks <- sapply(consensus_peaks, function(x) countOverlaps(cacng3_promoter, x))
 
-ov_peaks[ov_peaks == 1]
 # Plotting percentage of promoters that are "bidirectional", 
 # "mutliple_nearby_promoters", "nearby and on same strand"
 reservoir_status_by_shared_promoters <- peak_occurrence_df %>%
@@ -341,6 +350,7 @@ chisq.test(peak_occurrence_df$shared_promoter_type,
 # Per usual we are going to now add the promoter_properties variable(s) 
 # bidirectional, closeby etc . Importantly this is what will be read 
 # into 09_reservoir_binding_properties 
+
 write_csv(peak_occurrence_df, 
           "results/08_peak_occurrence_df_promoter_types.csv")
 ```
