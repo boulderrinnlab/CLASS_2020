@@ -13,9 +13,11 @@ peak_list <- import_peaks("../01_consensus_peaks/results/consensus_peaks/filtere
 
 lncrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_promoters.gtf")
 mrna_promoters <- rtracklayer::import("../01_consensus_peaks/results/mrna_promoters.gtf")
+all_promoters <- rtracklayer::import("../01_consensus_peaks/results/lncrna_mrna_promoters.gtf")
 
 lncrna_matrix <- count_peaks_per_feature(lncrna_promoters, peak_list, type = "occurrence")
 mrna_matrix <- count_peaks_per_feature(mrna_promoters, peak_list, type = "occurrence")
+all_matrix <- read.table("../01_consensus_peaks/results/lncrna_mrna_promoter_peak_occurence_matrix.tsv")
 
 rmsk <- import_repeatmasker()
 rmsk_family <- subset_rmsk(rmsk, rep_level = "family")
@@ -25,8 +27,9 @@ names(rmsk_class) <- paste(names(rmsk_class), "class", sep = "_")
 
 hg38 <- getGenome("hg38")
 
-region_list <- c("lncrna_promoters" = list(lncrna_promoters), 
-                 "mrna_promoters" = list(mrna_promoters), 
+region_list <- c("lncrna_promoters" = list(lncrna_promoters),
+                 "mrna_promoters" = list(mrna_promoters),
+                 "all_promoters" = list(all_promoters),
                  rmsk_family, rmsk_class)
 
 
