@@ -242,7 +242,7 @@ g <- ggplot(combined_tpm, aes(x = rep_family, y = log10(rnaseq_tpm + 0.1)))
 g + geom_boxplot() + 
   stat_compare_means() +
   ggtitle("RNA-seq expression by repeat family")
-ggsave("figures/rnaseq_sva_erv_boxplot.pdf")
+ggsave("figures/rnaseq_sva_erv_boxplot.pdf", useDingbats = FALSE)
 ggsave("figures/rnaseq_sva_erv_boxplot.png")
 
 g <- ggplot(combined_tpm, aes(x = fam, y = log10(rnaseq_tpm + 0.1)))
@@ -527,6 +527,7 @@ col_fun_k4me1 = colorRamp2(c(-2,0,2), c("blue", "white", "red"))
 col_fun_ZBTB33 = colorRamp2(c(-0.5,0,0.5), c("blue", "white", "red"))
 col_fun_CBFA2T2 = colorRamp2(c(-0.5,0,0.5), c("blue", "white", "red"))
 col_fun_CBFA2T3 = colorRamp2(c(-0.5,0,0.5), c("blue", "white", "red"))
+pdf("figures/sva_all_dbps.pdf", height = 7, width = 13)
 EnrichedHeatmap(h3k4me1_mat, name = "H3K4me1",
                 column_title = "H3K4me1",
                 cluster_rows = TRUE,
@@ -540,6 +541,7 @@ EnrichedHeatmap(ZBTB33_mat, name = "ZBTB33",
  EnrichedHeatmap(CBFA2T3_mat, name = "CBFA2T3",
                   column_title = "CBFA2T3",
                  col = col_fun_CBFA2T3)
+dev.off()
 ```
 
 Now let's make the same, but for just those that overlapped all 3 dbp
