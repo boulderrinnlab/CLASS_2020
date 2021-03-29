@@ -381,7 +381,7 @@ g <- ggplot(shared_promoter_expression, aes(x = at_least_one_expressed,
 g + geom_bar(stat = "identity") + facet_grid(~shared_promoter_type) +
    geom_text(aes(label = count, y = count + 5),
             size = 3)
-
+ggsave("figures/shared_promoters_at_least_one_expressed.pdf")
 ```
 
 
