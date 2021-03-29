@@ -87,6 +87,7 @@ genes <- gencode_gr[gencode_gr$type == "gene"] %>% as.data.frame() %>%
 tpm <- merge(tpm, genes)
 tpm <- tpm %>% dplyr::select(gene_id, gene_name, tpm)
 write_csv(tpm, "results/k562_nascent_tpm.csv")
+tpm <- read_csv("results/k562_nascent_tpm.csv")
 ```
 
 
